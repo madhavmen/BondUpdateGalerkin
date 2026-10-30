@@ -173,4 +173,3 @@ end
         @test abs(root_stability(m, -lh)) < 1
     end
 end
-end
