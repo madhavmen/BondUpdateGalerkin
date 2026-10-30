@@ -1,7 +1,8 @@
-# BondUpdateGalerkin: Public Repository Architecture and Implementation Plan
+# BondUpdateGalerkin: Repository Architecture and Implementation Plan
 
 **Status:** Proposed migration plan (not yet applied to the source repository)  
 **Date:** 30 October 2026  
+**Distribution:** internal sharing only; no public release is planned (decided 30 October 2026). The repository stays private. Telum ships as our fork (BUG-Julia's `deps/Telum`, MIT, with the no-symmetry SVD fix applied in the source); the fixes go upstream later as a pull request to Telum. "External user" below means a colleague with repository access who does not know the code.  
 **Source repository:** `BUG-Julia` (`github.com/madhavmen/BUG-Julia`), branch `main` at `b155550`. `Revival/` and `Experiments/` exist only on its older `scar-plan` branch.  
 **Primary goal:** Turn the existing BUG-Julia research codebase into a reliable, readable, reproducible Julia package for **quantum many-body MPS** and **PDE/QTT** time integration, with one common rank-adaptive BUG engine.  
 **Guiding principle:** Scientific correctness and a pleasant external-user experience take priority over superficial rearrangement of files.
@@ -384,14 +385,14 @@ For CBE-BUG, retain the existing policy where appropriate, but separate `select_
 
 ## 4. Detailed implementation work packages
 
-### WP0 — Inventory, scientific baseline, and public-release audit (PR 0)
+### WP0 — Inventory, scientific baseline, and dependency audit (PR 0)
 
 **Tasks**
 
 - Build a machine-readable index of BUG-Julia `main@b155550`: `src/` (73), `tests/` (77) + `test/` (3), `examples/` (8), `benchmarks/` (237), `scripts/` (30) and `notebooks/` (11), plus `Revival/`/`Experiments/` from `scar-plan`. Index each file by ownership, imports, dependencies and purpose. Mark it as **core**, **domain**, **baseline**, **study**, **obsolete** or **unknown**; do not drop unknowns without review.
 - Confirm Section 8's move map against call sites, with dependencies and intended API stability. Identify duplicated implementation paths between `BondUpdateBUG/`, `RSVDCBEBondUpdate/bug/` and `RSVDCBEBondUpdate/qtt/qtt_flows.jl`.
 - Run and preserve the existing full test suite, or document environmental blockers. Freeze **numerical fixtures** (small-state trajectories, errors, ranks, discarded weights, representative plots/data, runtime baselines) at a known commit, recording Julia, Telum, and LurCGT versions.
-- Audit Telum/LurCGT availability, licenses, public access, unregistered dependencies, commit pins, credentials, data provenance, model implementations, figure assets, and third-party code. Confirm permission to release; if necessary, design an optional adapter/extension or distribution strategy rather than publishing an install path that cannot work for outsiders.
+- Audit Telum/LurCGT availability, licenses, unregistered dependencies, commit pins, credentials, data provenance, model implementations, figure assets, and third-party code. Every dependency must install for a colleague with repository access; Telum is vendored as our fork (see the header).
 - Tag an archival pre-refactor commit. Separate scientific behavior changes from restructuring commits.
 
 **Deliverables:** `docs/dev/migration-map.md` (temporary until completed), fixture directory, dependency risk register, release checklist.  
@@ -492,9 +493,11 @@ Create the `agents/`, `.claude/`, and root instruction files specified in Sectio
 
 **Exit gate:** a test prompt run from repository root finds the correct rules, a QMB/QTTS edit loads the proper scoped rule/skill, and CI rejects a deliberately malformed formatting/test PR.
 
-### WP9 — Release engineering, compatibility, and independent user trial (PR 13)
+### WP9 — Sharing readiness, compatibility, and independent user trial (PR 13)
 
-- Verify chosen license, dependency redistributability, installation without private credentials, repo history, secrets, authorship, and availability of published artifacts.
+Internal sharing only (see the header): public-release items (open-source license choice, registration, DOI, `CODE_OF_CONDUCT.md`, `SECURITY.md`) are out of scope unless that decision changes.
+
+- Verify installation with repository access only (vendored Telum fork included), repo history, secrets, authorship, and availability of referenced artifacts.
 - Define `[compat]` for all direct dependencies and a supported Julia version matrix based on actual upstream support. Keep exact research pins in committed **study/benchmark manifests** (or archival release tags) rather than relying only on a root `Manifest.toml` for library consumer compatibility; document the deliberate policy.
 - Test from a **clean clone/new Julia depot** and from a fresh environment using only README commands. Include a CPU-only path and separate optional HPC instructions.
 - Build docs with no broken links or failing doctests. Establish tagged releases, changelog, semantic versioning, DOI/citation policy, and changelog of numerical behavior.
