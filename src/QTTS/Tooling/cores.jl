@@ -34,8 +34,7 @@ The full tensor `(d, ..., d)` of a TT, site 1 first (fastest). Small sizes only.
 function tt_dense(C::AbstractVector)
     L = length(C)
     d = size(C[1], 2)
-    size(C[1], 1) == 1 ||
-        throw(ArgumentError("tt_dense: left boundary rank is $(size(C[1], 1))"))
+    size(C[1], 1) == 1 || throw(ArgumentError("tt_dense: left boundary rank is $(size(C[1], 1))"))
     M = reshape(C[1], d, size(C[1], 3))
     for k = 2:L
         chi, dk, chr = size(C[k])
@@ -119,8 +118,12 @@ function tt_compress(
         disc += sqrt(sum(abs2, @view(F.S[(rr+1):end]); init = 0.0))
         C[k] = reshape(F.Vt[1:rr, :], rr, d, r)
         c1, d1, _ = size(C[k-1])
-        C[k-1] =
-            reshape(reshape(C[k-1], c1 * d1, chi) * (F.U[:, 1:rr] * Diagonal(F.S[1:rr])), c1, d1, rr)
+        C[k-1] = reshape(
+            reshape(C[k-1], c1 * d1, chi) * (F.U[:, 1:rr] * Diagonal(F.S[1:rr])),
+            c1,
+            d1,
+            rr,
+        )
     end
     return C, (nrm > 0 ? disc / nrm : 0.0)
 end
@@ -198,8 +201,7 @@ function qtt_embed(o::QTTOrdering{N}; chains...) where {N}
     T = promote_type((c === nothing ? Float64 : eltype(c[1]) for c in given)...)
     one_core = isop ? reshape(Matrix{T}(I, 2, 2), 1, 2, 2, 1) : ones(T, 1, 2, 1)
     placed = [
-        _site_chain(o, a, given[a] === nothing ? [copy(one_core) for _ = 1:o.bits[a]] : given[a])
-        for a = 1:N
+        _site_chain(o, a, given[a] === nothing ? [copy(one_core) for _ = 1:o.bits[a]] : given[a]) for a = 1:N
     ]
     owner = zeros(Int, qtt_length(o))
     for a = 1:N, s in o.sites[a]

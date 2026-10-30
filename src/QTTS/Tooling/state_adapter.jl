@@ -101,9 +101,7 @@ function qtt_to_mpo(W::AbstractVector)
     tmpl = onsite_mpo(L, [q.I for _ = 1:L]; Iloc = q.I)
     T = mapreduce(eltype, promote_type, W; init = ComplexF64)
     return MPO(
-        Any[
-            _none_tensor(Array{T,4}(permutedims(W[i], (1, 3, 2, 4))), tmpl[i].inds) for i = 1:L
-        ],
+        Any[_none_tensor(Array{T,4}(permutedims(W[i], (1, 3, 2, 4))), tmpl[i].inds) for i = 1:L],
     )
 end
 

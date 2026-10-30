@@ -119,8 +119,7 @@ fuses into the state's own, so the result carries the shifted total charge.
 """
 function mpo_product(mpo::MPO, psi::SymMPS)
     L = length(psi)
-    length(mpo) == L ||
-        throw(DimensionMismatch("MPO has $(length(mpo)) sites, state has $L"))
+    length(mpo) == L || throw(DimensionMismatch("MPO has $(length(mpo)) sites, state has $L"))
     out = Vector{Any}(undef, L)
     F = nothing
     for i = 1:L

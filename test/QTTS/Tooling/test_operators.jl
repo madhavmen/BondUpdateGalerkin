@@ -12,8 +12,12 @@ include(joinpath(@__DIR__, "..", "..", "common", "qtt_fixtures.jl"))
 set_symmetry!(:none)
 clear_fusion_cache!()
 
-const LAYOUTS = ((:grouped, :lsb_first), (:grouped, :msb_first), (:interleaved, :lsb_first),
-    (:interleaved, :msb_first))
+const LAYOUTS = (
+    (:grouped, :lsb_first),
+    (:grouped, :msb_first),
+    (:interleaved, :lsb_first),
+    (:interleaved, :msb_first),
+)
 
 "The periodic forward shift `(S v)[i] = v[i + 1 mod N]`, written row by row."
 function ref_shift(N)
@@ -30,7 +34,10 @@ shift_chain(n) = op_lincomb([(1.0, op_ket_bra(n, r, mod(r + 1, 2^n))) for r = 0:
 "`Ax (x) Ay` on the grid index `ix + 1 + Nx iy` (`nothing` = identity)."
 function ref2(g, Ax, Ay)
     Nx, Ny = 2^g.nx, 2^g.ny
-    return kron(Ay === nothing ? Matrix(1.0I, Ny, Ny) : Ay, Ax === nothing ? Matrix(1.0I, Nx, Nx) : Ax)
+    return kron(
+        Ay === nothing ? Matrix(1.0I, Ny, Ny) : Ay,
+        Ax === nothing ? Matrix(1.0I, Nx, Nx) : Ax,
+    )
 end
 
 @testset "1D: shift and diagonal against dense ($o, $e)" for (o, e) in LAYOUTS
@@ -65,10 +72,14 @@ end
         # boundary wrap of the periodic shift on grid values
         C = qtt_function(g, (x, y) -> x + 10y + 0.5x * y)
         V = qtt_values(C, g)
-        @test _relerr(qtt_values(first(tt_compress(op_apply(cases[1][1], C))), g), circshift(V, (-1, 0))) <
-              1e-12
-        @test _relerr(qtt_values(first(tt_compress(op_apply(cases[2][1], C))), g), circshift(V, (0, -1))) <
-              1e-12
+        @test _relerr(
+            qtt_values(first(tt_compress(op_apply(cases[1][1], C))), g),
+            circshift(V, (-1, 0)),
+        ) < 1e-12
+        @test _relerr(
+            qtt_values(first(tt_compress(op_apply(cases[2][1], C))), g),
+            circshift(V, (0, -1)),
+        ) < 1e-12
         # multiplication by the coordinate field is the diagonal operator
         Xf = op_diag(qtt_separable(g, identity, nothing))
         @test _relerr(_grid_matrix(g, op_dense(Xf)), ref2(g, Diagonal(xs), nothing)) < 1e-12

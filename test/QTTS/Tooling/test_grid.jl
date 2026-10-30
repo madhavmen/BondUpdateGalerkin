@@ -4,8 +4,12 @@
 using Test
 using BondUpdateGalerkin.QTTS
 
-const LAYOUTS = ((:grouped, :lsb_first), (:grouped, :msb_first), (:interleaved, :lsb_first),
-    (:interleaved, :msb_first))
+const LAYOUTS = (
+    (:grouped, :lsb_first),
+    (:grouped, :msb_first),
+    (:interleaved, :lsb_first),
+    (:interleaved, :msb_first),
+)
 
 @testset "QTTOrdering round trips ($o, $e)" for (o, e) in LAYOUTS
     for bits in ((3,), (5,), (2, 2), (3, 2), (2, 4), (4, 4), (1, 2, 1), (2, 1, 3))

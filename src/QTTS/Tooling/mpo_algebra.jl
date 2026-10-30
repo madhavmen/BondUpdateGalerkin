@@ -92,8 +92,7 @@ The `2^L x 2^L` matrix, rows and columns in the order of `tt_dense` (site 1 fast
 only -- tests.
 """
 function op_dense(W::AbstractVector)
-    size(W[1], 1) == 1 ||
-        throw(ArgumentError("op_dense: left boundary dimension $(size(W[1], 1))"))
+    size(W[1], 1) == 1 || throw(ArgumentError("op_dense: left boundary dimension $(size(W[1], 1))"))
     M = reshape(W[1], 2, 2, size(W[1], 4))
     P = 2
     for k = 2:length(W)
