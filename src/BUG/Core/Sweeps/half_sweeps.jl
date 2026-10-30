@@ -43,16 +43,18 @@ end
     _HalfSweepCtx
 
 What both half-sweeps of one step READ and never write: the operator, `tau`, the generator shift,
-the root bond `c`, the step's allocation and DD-QR expansion settings (`exkw`), the work ceiling,
+the root bond `c`, the step's allocation, its basis-selection strategy (`expansion`) and that
+strategy's settings (`exkw`), the work ceiling,
 the `krylov_reuse` and `krylov_depth` ablations, the states the trial space must contain (`keep_states`) and the
 `krylov_recycle` cache (`nothing` when off), which round 1 fills.
 """
-struct _HalfSweepCtx{M, E, A, K, S, R}
+struct _HalfSweepCtx{M, E, A, X <: BasisExpansion, K, S, R}
     mpo::M
     tau::ComplexF64
     eshift::E
     c::Int
     alloc::A
+    expansion::X
     exkw::K
     wcap::Int
     krylov_reuse::Bool
@@ -62,14 +64,15 @@ struct _HalfSweepCtx{M, E, A, K, S, R}
 end
 
 """
-Time one bond expansion into the half-sweep's own accumulator: `side`'s frame grows by DD-QR CBE
-(`dd_cbe_expand`, plan T2.4) into the bond's own `ledger`; `nn[i]` records what it admitted.
+Time one bond expansion into the half-sweep's own accumulator: `side`'s frame grows by the step's
+strategy (`expand_frame`; DD-QR CBE by default, plan T2.4) into the bond's own `ledger`; `nn[i]`
+records what it admitted.
 """
 function _expand_bond!(acc::_HalfAcc, cx::_HalfSweepCtx, nn, f, i, lch, rch, side::Symbol,
                        ledger, rng)
     t0 = time_ns()
-    ex = dd_cbe_expand(f, cx.mpo, i, lch, rch, side; cx.exkw..., ledger = ledger, rng = rng,
-                       kc = acc.kc, version = i)
+    ex = expand_frame(cx.expansion, f, cx.mpo, i, lch, rch, side; cx.exkw..., ledger = ledger,
+                      rng = rng, kc = acc.kc, version = i)
     acc.tcbe += (time_ns() - t0) / 1e9
     acc.epre = max(acc.epre, ex.err_pre)
     acc.efnl = max(acc.efnl, ex.err_fnl)

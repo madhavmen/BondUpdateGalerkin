@@ -1,5 +1,128 @@
 # Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/expansion/cbe_options.jl, src/RSVDCBEBondUpdate/bug/cbe_bug_info.jl.
 
+# ── from BUG/Randomised/dd_cbe.jl: deterministic, used by the Core sweeps ──
+
+"""
+    KernelCounters
+
+Operator applications, QR ranks, sector additions, seconds and allocated bytes per kernel.
+Plain mutable fields so the hot loop records with no allocation. One instance per half-sweep
+(they may run concurrently) and one for the root, merged after the join.
+
+⚠ Bytes are `Base.gc_bytes()` differences: process-wide, so under `parallel = :half_sweeps`
+each half-sweep's counts include the other thread's allocations in the same interval.
+"""
+mutable struct KernelCounters
+    n_stream::Int          # MPO-streamed two-site actions (one per sketch call, all channels)
+    n_stream_cols::Int     # probe columns those actions carried
+    n_one_site::Int        # one-site H applications (local Krylov)
+    n_root::Int            # zero-site H applications (root solve)
+    n_qr::Int              # DD-QR selections
+    qr_rank::Int           # directions those QRs kept (numerical rank, summed)
+    n_sector_new::Int      # charge sectors a frame gained that it did not hold before
+    t_input_dd::Float64    # P^D on the thin input probe
+    t_stream::Float64
+    t_output_dd::Float64   # P^D on the thin streamed output
+    t_qr::Float64
+    t_one_site::Float64
+    t_root::Float64
+    b_input_dd::Int
+    b_stream::Int
+    b_output_dd::Int
+    b_qr::Int
+    # dissipative plan U17: every phase measured in bytes as well as seconds. The environment
+    # and compression times are the step's `t_env` / `t_trunc`.
+    b_one_site::Int
+    b_root::Int
+    b_env::Int             # environment stacks and channel pushes of the half-sweeps
+    b_compress::Int        # the closing compression
+end
+
+KernelCounters() = KernelCounters(0, 0, 0, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0, 0, 0,
+                                  0, 0, 0, 0)
+
+function merge_counters!(a::KernelCounters, b::KernelCounters)
+    for f in fieldnames(KernelCounters)
+        setfield!(a, f, getfield(a, f) + getfield(b, f))
+    end
+    return a
+end
+
+"Run `f()` and return `(result, seconds, bytes)`."
+@inline function _measure(f)
+    b0 = Base.gc_bytes()
+    t0 = time_ns()
+    r = f()
+    return r, (time_ns() - t0) / 1e9, Base.gc_bytes() - b0
+end
+
+"""
+    OneSiteOp(h, version, counters)
+
+A one-site effective Hamiltonian (`MPOOneSiteH`, possibly `shift_h`-ed) that counts its
+applications. `apply_one_site(op, A)` forwards, so every existing caller works unchanged.
+"""
+struct OneSiteOp{H}
+    h::H
+    version::Int
+    counters::KernelCounters
+end
+
+function apply_one_site(op::OneSiteOp, A)
+    y, dt, db = _measure(() -> apply_one_site(op.h, A))
+    op.counters.n_one_site += 1
+    op.counters.t_one_site += dt
+    op.counters.b_one_site += db
+    return y
+end
+
+"""
+    StepRecord
+
+One `cbe_bug_step!`'s account, typed and allocation-light (plan T1.4): which algorithm ran
+(`policy`, `qr_backend`, `closure_policy` for the order > 1 frontier sweeps, `order`,
+`parallel`), the kernel counters, the ranks `D_old` (largest bond before), `D_stage` (largest
+trial-space frame, untruncated), `D_final` (after compression) and the two limits they are held
+to, `D_max` (`maxdim`, the final rank) and `D_work` (the working-rank ceiling `work_ceiling`
+puts on the frames), root iterations, total seconds and bytes,
+the process `peak_rss` (`Sys.maxrss()`, a high-water mark, not per step), and `limits`: which
+of `:basis_limited`, `:root_limited`, `:truncation_limited`, `:work_limited`, `:rank_limited`
+held the step back (empty when the budget held), and `budget_rule`, how `tol_basis` was
+aggregated over the shares (`:linear`; plan T3.2).
+"""
+struct StepRecord
+    policy::Symbol
+    qr_backend::Symbol
+    closure_policy::Symbol
+    order::Int
+    parallel::Symbol
+    counters::KernelCounters
+    D_old::Int
+    D_stage::Int
+    D_final::Int
+    D_max::Int
+    D_work::Int
+    root_iters::Int
+    t_step::Float64
+    bytes_step::Int
+    peak_rss::Int
+    limits::Vector{Symbol}
+    budget_rule::Symbol
+end
+
+"Plan invariant 4: the separate limit statuses, read off the ledger's failed checks."
+function _step_limits(ledger::AdaptiveLedger)
+    lim = Symbol[]
+    any(u -> u in (:sample, :tail, :krylov, :closure, :projection), ledger.unmet) &&
+        push!(lim, :basis_limited)
+    :expv in ledger.unmet && push!(lim, :root_limited)
+    :trunc in ledger.unmet && push!(lim, :truncation_limited)
+    ledger.maxdim_reached && push!(lim, :rank_limited)
+    ledger.workcap_reached && push!(lim, :work_limited)
+    return lim
+end
+
+
 # ── from src/RSVDCBEBondUpdate/expansion/cbe_options.jl ──
 
 """

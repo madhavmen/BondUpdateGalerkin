@@ -55,7 +55,8 @@ function _frontier_left(Fm::SymMPS, mpo, fr::KLFrames, tau::ComplexF64,
         E[k] = env
     end
     rstack = MPORightEnvStack(E)
-    pre = bonds && !enrich ? _bond_measurements(Fm, mpo, fr, chain, rstack, :left; fold = fold,
+    pre = bonds && !enrich ? _bond_measurements(Fm, mpo, fr, chain, rstack, :left;
+                                                expansion = ckw.expansion, fold = fold,
                                                 nsample = nsample, rng = rng) : nothing
     lch = boundary_channels(mpo)
     lenv = lch
@@ -78,9 +79,10 @@ function _frontier_left(Fm::SymMPS, mpo, fr::KLFrames, tau::ComplexF64,
             K = C === nothing ? Fm[i] : to_concrete!(contract(C, (2,), Fm[i], (1,)))
             f = _frame_onto_left(U0, K, Fm[i + 1])
             rch = right_channels(rstack, i + 2)
-            skl, skr, leak[i], k2 = _bond_action(f, mpo, i, lch, rch, U0, nothing, :left, fold,
-                                                 rng)
-            nsample > 0 && (sleak[i] = _sampled_leak(f, skl, skr, :left, nsample, rng))
+            skl, skr, leak[i], k2 = _bond_action(ckw.expansion, f, mpo, i, lch, rch, U0, nothing,
+                                                 :left, fold, rng)
+            nsample > 0 &&
+                (sleak[i] = sampled_leak(ckw.expansion, f, skl, skr, :left, nsample, rng))
         else
             K, leak[i], k2, sleak[i] = pre[i]
         end
@@ -149,7 +151,8 @@ function _frontier_right(Fm::SymMPS, mpo, fr::KLFrames, tau::ComplexF64,
         E[i + 1] = env
     end
     lstack = MPOLeftEnvStack(E)
-    pre = bonds && !enrich ? _bond_measurements(Fm, mpo, fr, chain, lstack, :right; fold = fold,
+    pre = bonds && !enrich ? _bond_measurements(Fm, mpo, fr, chain, lstack, :right;
+                                                expansion = ckw.expansion, fold = fold,
                                                 nsample = nsample, rng = rng) : nothing
     rch = boundary_channels(mpo)
     renv = rch
@@ -172,9 +175,10 @@ function _frontier_right(Fm::SymMPS, mpo, fr::KLFrames, tau::ComplexF64,
             B = D === nothing ? Fm[j + 1] : to_concrete!(contract(Fm[j + 1], (3,), D, (1,)))
             f = _frame_onto_right(Fm[j], B, V0)
             lch = left_channels(lstack, j)
-            skl, skr, leak[j], k2 = _bond_action(f, mpo, j, lch, rch, nothing, V0, :right, fold,
-                                                 rng)
-            nsample > 0 && (sleak[j] = _sampled_leak(f, skl, skr, :right, nsample, rng))
+            skl, skr, leak[j], k2 = _bond_action(ckw.expansion, f, mpo, j, lch, rch, nothing, V0,
+                                                 :right, fold, rng)
+            nsample > 0 &&
+                (sleak[j] = sampled_leak(ckw.expansion, f, skl, skr, :right, nsample, rng))
         else
             B, leak[j], k2, sleak[j] = pre[j]
         end

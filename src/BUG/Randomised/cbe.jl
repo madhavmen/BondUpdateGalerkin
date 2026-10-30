@@ -2,51 +2,6 @@
 
 # ── from src/RSVDCBEBondUpdate/expansion/cbe_core.jl ──
 
-"""
-    _unprime(t, leg) -> TLArray
-
-Drop one prime level from `leg`. An environment's bra leg is primed to keep it distinct
-from the ket while both are open (`henv.jl`); once it has replaced a link leg it must
-carry that link's original prime level again.
-"""
-#
-# `to_concrete!`, not `to_concrete`: `prime` already returns a deep copy the caller owns, so a second
-# copy is pure waste.
-_unprime(t, leg::Int) = to_concrete!(prime(t, leg; inc = -1))
-
-"""
-    _env_on_link(T, E, leg) -> TLArray
-
-Contract environment `E` onto `leg` of `T`, leaving the bra leg in `leg`'s place,
-unprimed. If both carry an op-leg -- `T`'s last, `E`'s third -- they are contracted too
-(the channel closes).
-
-`T` is `K0`-shaped `(link_l, site_l, bond [, op])` with `leg = 1`, or `V0`-shaped
-`(bond, site_r, link_r [, op])` with `leg = 3`. In both cases the contracted link leg is
-at an END of the tensor, so the bra comes back out in exactly the position it vacated
-and no permutation is needed beyond the two written below.
-"""
-function _env_on_link(T, E, leg::Int)
-    nT, nE = length(T.inds), length(E.inds)
-    out = if nE == 3 && nT == 4
-        contract(T, (leg, nT), E, (2, 3))
-    elseif nE == 2 && nT == 3
-        contract(T, (leg,), E, (2,))
-    else
-        error("_env_on_link: rank-$nT tensor against a rank-$nE environment leaves an " *
-              "operator channel dangling")
-    end
-    # `out` = T's remaining legs in order, then E's bra leg.
-    #   leg == 1 (K0): (site_l, bond, bra) -> bra first
-    #   leg == 3 (V0): (bond, site_r, bra) -> already in place
-    if leg == 1
-        return _unprime(to_concrete(permutedims(out, (3, 1, 2))), 1)
-    elseif leg == 3
-        return _unprime(to_concrete(out), 3)
-    end
-    throw(ArgumentError("_env_on_link: leg must be 1 or 3, got $leg"))
-end
-
 # ── project-first sketches: `Y = (P_perp (H Theta)) Om'` ──
 # `P_perp` and `Om` act on disjoint legs, so the order is exact; `_preselect_*` projects again
 # (idempotent) because it also orthonormalises and returns the residual.
@@ -164,13 +119,6 @@ function _boost!(cols::Dict, boost, cap::Dict)
     return left
 end
 
-"Keep `counts[q]` columns of sector `q` on `leg`, dropping sectors allotted none."
-function _trim_per_sector(Q, leg::Int, counts::Dict)
-    keep = s -> (n = get(counts, s, 0); n <= 0 ? nothing : 1:n)
-    any(v > 0 for v in values(counts)) || return nothing
-    return to_concrete(getsub(Q, leg, keep))
-end
-
 """
     full_local_basis(frame, side; tag="cbeF") -> TLArray
 
@@ -183,73 +131,6 @@ function full_local_basis(frame, side::Symbol; tag::AbstractString = "cbeF")
     F = fusion_basis(frame, a, b; tag = tag)
     # `fusion_basis` returns (a, b, fused); a right frame carries its bond leg first.
     return side === :left ? F : to_concrete(permutedims(F, (3, 1, 2)))
-end
-
-"""
-    _frame_sector_dims(frame, side, F, where) -> (dfull, dT)
-
-Per charge sector of `F`'s fused leg: the local dimension and the frame's width in it. Throws if
-the frame is wider than its local space or holds a sector the space lacks. Labels are aligned to
-the fused leg's arrow (`align_charge`).
-"""
-function _frame_sector_dims(frame, side::Symbol, F, where::AbstractString)
-    fl = side === :left ? 3 : 1
-    dfull = Dict(q => d for (q, d) in F.spaces[3])
-    syms_ = symm(frame)
-    fdir, bdir = F.inds[3].dir, frame.inds[fl].dir
-    dT = Dict(q => sector_dim(frame, fl, align_charge(syms_, q, fdir, bdir)) for q in keys(dfull))
-    for (q, d) in dT
-        d <= dfull[q] || throw(ErrorException(
-            "$where: the frame holds $d directions in sector $q but the fused local space has " *
-            "only $(dfull[q]) -- a frame cannot exceed its local space (frame width " *
-            "$(leg_dim(frame, fl)), local $(sum(values(dfull))))"))
-    end
-    sum(values(dT); init = 0) == leg_dim(frame, fl) || throw(ErrorException(
-        "$where: the frame holds $(leg_dim(frame, fl)) directions but only " *
-        "$(sum(values(dT); init = 0)) lie in sectors its local space has"))
-    return dfull, dT
-end
-
-"""
-    _cap_to_local_room(Q, U, side) -> U, a trimmed U, or nothing
-
-At most `dim_local(q) - width_Q(q)` leading columns of `U` per sector, so `[Q | U]` cannot exceed
-its local space (Telum's cutoff is relative to the global sigma_max, so roundoff in a saturated
-sector can otherwise survive). Returns `U` itself when it fits.
-"""
-function _cap_to_local_room(Q, U, side::Symbol)
-    U === nothing && return nothing
-    fl = side === :left ? 3 : 1
-    a, b = side === :left ? (1, 2) : (2, 3)
-    F = fusion_basis(Q, a, b; tag = "cbeRoom")
-    dfull, dT = _frame_sector_dims(Q, side, F, "_cap_to_local_room")
-    syms_ = symm(Q)
-    counts = Dict{Any, Int}()
-    over = false
-    for (q, d) in dfull
-        uq = align_charge(syms_, q, F.inds[3].dir, U.inds[fl].dir)
-        du = sector_dim(U, fl, uq)
-        du == 0 && continue
-        counts[uq] = min(du, d - dT[q])
-        over |= counts[uq] < du
-    end
-    over || return U
-    return _trim_per_sector(U, fl, counts)
-end
-
-"""
-Debug switch, off by default: [`_check_frame`](@ref) asserts at every frame-growth site that the
-grown frame still fits its local space. It builds a fusion basis per call, so it is for
-localising a non-isometric frame (IT-1 L=16 tol_basis 1e-7, s37test 17341472), not production.
-"""
-const _FRAME_CHECKS = Ref(false)
-
-"`frame` unchanged; with `_FRAME_CHECKS[]`, first [`_frame_sector_dims`](@ref) at site `where`."
-function _check_frame(frame, side::Symbol, where::AbstractString)
-    (_FRAME_CHECKS[] && frame !== nothing) || return frame
-    a, b = side === :left ? (1, 2) : (2, 3)
-    _frame_sector_dims(frame, side, fusion_basis(frame, a, b; tag = "cbeChk"), where)
-    return frame
 end
 
 # ── from src/RSVDCBEBondUpdate/expansion/cbe_expand.jl ──
@@ -500,24 +381,6 @@ function cbe_expand(f::BondFrame, skl, skr;
                         _check_frame(V_ex, :right, "cbe_expand V_ex"), n_l, n_r, err_pre, err_fnl)
 end
 
-# ── orthonormality guard on the appended blocks ──
-# Project the frame out, then orthonormalise (Telum has no QR, so `svd(...).U`); cutoff 1e-14
-# drops columns that collapse, and a dropped column shows in `n_new_*`.
-_reortho_left(U0, C) = _reortho(C, X -> perp_component(U0, X),
-                                R -> svd(R, (1, 2), _TAG_OL, _TAG_OLR; cutoff = 1e-14).U)
-
-_reortho_right(V0, C) = _reortho(C, X -> perp_component_right(V0, X),
-                                 R -> permutedims(
-                                     svd(R, (2, 3), _TAG_OR, _TAG_ORR; cutoff = 1e-14).U,
-                                     (3, 1, 2)))
-
-function _reortho(C, perp, orth)
-    C === nothing && return nothing
-    R = to_concrete(perp(C))
-    norm(R) <= _CBE_EPS * max(norm(C), 1.0) && return nothing
-    return to_concrete(orth(R))
-end
-
 """
     _guarded_block(frame, C, side) -> the block `C` cleared for `[frame | C]`, or nothing
 
@@ -533,7 +396,6 @@ then refused the frame and the runs crashed (it1r 17345037, 17345039).
 _guarded_block(frame, C, side::Symbol) =
     _cap_to_local_room(frame, side === :left ? _reortho_left(frame, C) :
                                                _reortho_right(frame, C), side)
-
 
 "Keep at most `n` columns of `Q` on `leg`, walking sectors in Telum's order."
 function _trim_total(Q, leg::Int, n::Int)
@@ -1125,4 +987,43 @@ function lanczos_lowest(apply, x; maxiter::Int = 30, tol::Float64 = 1e-13,
     n = norm(out)
     n > 0 && (out = to_concrete((1.0 / n) * out))
     return out, real(value), length(alpha)
+end
+
+# ── the strategy the Core sweeps call (Core/RankAdaptation/basis_expansion.jl) ──
+
+"""
+    DDQRExpansion()
+
+The default [`BasisExpansion`](@ref) of `cbe_bug_step!`: each frame grows by the DD-projected,
+MPO-streamed, QR-only CBE ([`dd_cbe_expand`](@ref)), and the frontier sweeps sketch and estimate
+their outside-space action with the sector-graded Gaussian probes of this file.
+"""
+struct DDQRExpansion <: BasisExpansion end
+
+expand_frame(::DDQRExpansion, f::BondFrame, mpo, i::Int, lch, rch, side::Symbol; kwargs...) =
+    dd_cbe_expand(f, mpo, i, lch, rch, side; kwargs...)
+
+sketch_closures(::DDQRExpansion, f::BondFrame, build_action) = _sketch_closures(f, build_action)
+
+folded_sketch_closures(::DDQRExpansion, f::BondFrame, mpo, i::Int, lch, rch) =
+    _fold_sketch_closures(f, mpo, i, lch, rch)
+
+"""
+    sampled_leak(::DDQRExpansion, f, skl, skr, side, n, rng) -> Float64
+
+The randomised estimate of the frame's miss: `n` sector-graded Gaussian columns on the FULL opposite
+local space (no projector in the probe), through the production sketch closures `(skl, skr)` --
+shared or folded -- and Test B's per-sector unbiased normalisation (`_sample_residual`). An
+estimate, not a bound.
+"""
+function sampled_leak(::DDQRExpansion, f::BondFrame, skl, skr, side::Symbol, n::Int,
+                      rng::AbstractRNG)
+    if side === :left
+        draw = w -> sector_graded_sketch(f.V0, :right, w; comp_ratio = nothing, rng = rng)
+        return first(_sample_residual(nothing, Y -> perp_component(f.U0, Y), skl, draw, n,
+                                      1, :left))
+    end
+    draw = w -> sector_graded_sketch(f.U0, :left, w; comp_ratio = nothing, rng = rng)
+    return first(_sample_residual(nothing, Y -> perp_component_right(f.V0, Y), skr, draw, n,
+                                  3, :right))
 end

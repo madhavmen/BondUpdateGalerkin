@@ -101,79 +101,6 @@ end
 # Preselect: sketch, project off the frame (twice, the reference's `RepairOrtho`), orthonormalise.
 # Final: rank the candidates by their weight in the small `U0L' (H Theta) V0R'`.
 
-"Degeneracy-weighted squared singular weight of a Telum SVD list, `Σ σ² · deg`."
-_sq_weight(list) = sum(Float64(s)^2 * Float64(deg) for (s, deg, _, _) in list; init = 0.0)
-
-"Relative weight discarded by an SVD, `sqrt(Σcut σ² / Σall σ²)`."
-function _trunc_weight(res)
-    kept, cut = _sq_weight(res.kept_list), _sq_weight(res.trunc_list)
-    tot = kept + cut
-    return tot == 0.0 ? 0.0 : sqrt(cut / tot)
-end
-
-const _CBE_EPS = 100 * eps(Float64)
-
-# Distinct bond tags for the two preselections: the final-selection matrix carries both bond legs,
-# and a TLArray may not hold two identical indices.
-const _TAG_L, _TAG_LR = "cbeL,L", "cbeL,R"
-const _TAG_R, _TAG_RR = "cbeR,L", "cbeR,R"
-# Distinct again for the final orthonormality guard, for the same reason: its output is a
-# fresh bond leg, and reusing a preselection tag risks the duplicate-index error above.
-const _TAG_OL, _TAG_OLR = "cbeO,L", "cbeO,R"
-const _TAG_OR, _TAG_ORR = "cbeP,L", "cbeP,R"
-
-"""
-    _rank_cut(stol, Y, n) -> Float64
-
-The preselection SVD's relative cutoff: `stol > 0` cuts at `stol`; `stol <= 0` is the numerical
-rank test, with the floor `_CBE_EPS` measured against `||Y||` (not `||P_perp Y||`, which cancels).
-"""
-_rank_cut(stol::Float64, Y, n::Real) =
-    stol > 0 ? stol : _CBE_EPS * max(norm(Y), n) / n
-
-"""
-    _preselect_left(U0, Y, stol) -> (Q, err) or (nothing, 0.0)
-
-Orthonormal basis of the part of the sketched action `Y` lying outside `U0`, with the
-`RepairOrtho` second pass. `Y` and `Q` carry `(link_l, site_l, bond)`.
-
-`Y` is normalised before the SVD because `cutoff` is relative to the largest singular
-value: the new directions are O(tau)-small in absolute terms, and thresholding relative to
-their own scale is what keeps a meaningful tolerance (the trap recorded in `augment.jl`).
-"""
-function _preselect_left(U0, Y, stol::Float64)
-    R = perp_component(U0, Y)
-    n = norm(R)
-    n <= _CBE_EPS * max(norm(Y), 1.0) && return (nothing, 0.0)
-    res = svd(to_concrete((1.0 / n) * R), (1, 2), _TAG_L, _TAG_LR;
-              cutoff = _rank_cut(stol, Y, n), get_lists = true)
-    Q = to_concrete(res.U)
-    R2 = perp_component(U0, Q)            # RepairOrtho
-    norm(R2) <= _CBE_EPS * norm(Q) && return (nothing, 0.0)
-    Q = to_concrete(svd(R2, (1, 2), _TAG_L, _TAG_LR; cutoff = 1e-13).U)
-    return (Q, _trunc_weight(res))
-end
-
-"""
-    _preselect_right(V0, Y, stol) -> (Q, err) or (nothing, 0.0)
-
-Row mirror: `Y` and `Q` carry `(bond, site_r, link_r)`, the frame leg is 1 and the
-orthonormalisation is over `(site_r, link_r)`.
-"""
-function _preselect_right(V0, Y, stol::Float64)
-    R = perp_component_right(V0, Y)
-    n = norm(R)
-    n <= _CBE_EPS * max(norm(Y), 1.0) && return (nothing, 0.0)
-    res = svd(to_concrete((1.0 / n) * R), (2, 3), _TAG_R, _TAG_RR;
-              cutoff = _rank_cut(stol, Y, n), get_lists = true)
-    Q = to_concrete(permutedims(res.U, (3, 1, 2)))
-    R2 = perp_component_right(V0, Q)      # RepairOrtho
-    norm(R2) <= _CBE_EPS * norm(Q) && return (nothing, 0.0)
-    Q = to_concrete(permutedims(svd(R2, (2, 3), _TAG_R, _TAG_RR; cutoff = 1e-13).U,
-                                (3, 1, 2)))
-    return (Q, _trunc_weight(res))
-end
-
 """
     _range_find(draw, wleg, select, qleg, w0, wcap, ncap) -> (Q, err, n)
 
@@ -193,31 +120,6 @@ function _range_find(draw, wleg::Int, select, qleg::Int, w0::Int, wcap::Int, nca
         (n < wd || n >= ncap || wd < w || w >= wcap) && return (Q, err, n)
         w = min(2 * w, wcap)
     end
-end
-
-"""
-    _tail_rank(list, scale, allowance, kmax; base = 0.0) -> (k, tail)
-
-Test A: the smallest `k <= kmax` whose discarded tail
-`scale * sqrt(base + sum_{j>k} sigma_j^2 * deg_j)` fits inside `allowance`, and that tail.
-Degeneracies count (SU(2)); `base` is weight the SVD already dropped. Returns `kmax` when nothing
-fits, and the caller records the budget as unmet.
-"""
-function _tail_rank(list, scale::Float64, allowance::Float64, kmax::Int; base::Float64 = 0.0)
-    n = length(list)
-    kmax = min(kmax, n)
-    kmax <= 0 && return (0, scale * sqrt(base + _sq_weight(list)))
-    w = [Float64(s)^2 * Float64(deg) for (s, deg, _, _) in list]
-    # Weight below `kmax` is discarded whatever `k` we choose, so it belongs to the floor.
-    tail = base + sum(w[(kmax + 1):n]; init = 0.0)
-    k = kmax
-    while k > 0
-        t = tail + w[k]
-        scale * sqrt(t) <= allowance || break
-        tail = t
-        k -= 1
-    end
-    return (k, scale * sqrt(tail))
 end
 
 """

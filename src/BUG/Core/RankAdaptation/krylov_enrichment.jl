@@ -701,48 +701,30 @@ function _right_leak(V0, X)
 end
 
 """
-    _sampled_leak(f, skl, skr, side, n, rng) -> Float64
-
-The randomised estimate of the same miss: `n` sector-graded Gaussian columns on the FULL opposite
-local space (no projector in the probe), through the production sketch closures `(skl, skr)` --
-shared or folded -- and Test B's per-sector unbiased normalisation (`_sample_residual`). An
-estimate, not a bound.
-"""
-function _sampled_leak(f::BondFrame, skl, skr, side::Symbol, n::Int, rng::AbstractRNG)
-    if side === :left
-        draw = w -> sector_graded_sketch(f.V0, :right, w; comp_ratio = nothing, rng = rng)
-        return first(_sample_residual(nothing, Y -> perp_component(f.U0, Y), skl, draw, n,
-                                      1, :left))
-    end
-    draw = w -> sector_graded_sketch(f.U0, :left, w; comp_ratio = nothing, rng = rng)
-    return first(_sample_residual(nothing, Y -> perp_component_right(f.V0, Y), skr, draw, n,
-                                  3, :right))
-end
-
-"""
-    _bond_action(f, mpo, i, lch, rch, U0, V0, side, fold, rng) -> (skl, skr, leak, nh2)
+    _bond_action(expansion, f, mpo, i, lch, rch, U0, V0, side, fold, rng) -> (skl, skr, leak, nh2)
 
 One frontier bond's sketch closures and outside-space action on `side`. With `fold = false` the
 exact two-site action `X = H Theta_F` is formed once, the leak is exact, and the closures share `X`
 (`nh2 = 1`). With `fold = true` (`fold_omega = true` in `cbe_bug_step!`) `X` is never formed: the
 probe is folded into the environment contractions, and the leak is Test B's holdout estimate at a
 quarter of the frame width. This is the large-chi path, since `X` lives on the frame width (~2chi)
-and the exact action costs far more than the folded probe.
+and the exact action costs far more than the folded probe. The closures and the estimate come from
+the basis-selection strategy `expansion`.
 """
-function _bond_action(f::BondFrame, mpo, i::Int, lch, rch, U0, V0, side::Symbol, fold::Bool,
-                      rng::AbstractRNG)
+function _bond_action(expansion::BasisExpansion, f::BondFrame, mpo, i::Int, lch, rch, U0, V0,
+                      side::Symbol, fold::Bool, rng::AbstractRNG)
     if fold
-        skl, skr = _fold_sketch_closures(f, mpo, i, lch, rch)
+        skl, skr = folded_sketch_closures(expansion, f, mpo, i, lch, rch)
         n = max(8, cld(leg_dim(side === :left ? U0 : V0, side === :left ? 3 : 1), 4))
-        return (skl, skr, _sampled_leak(f, skl, skr, side, n, rng), 0)
+        return (skl, skr, sampled_leak(expansion, f, skl, skr, side, n, rng), 0)
     end
     X = apply_h_two_site(frame_theta(f), mpo, i, lch, rch)
-    skl, skr = _sketch_closures(f, () -> X)
+    skl, skr = sketch_closures(expansion, f, () -> X)
     return (skl, skr, side === :left ? _left_leak(U0, X) : _right_leak(V0, X), 1)
 end
 
 """
-    _bond_measurements(Fm, mpo, fr, chain, stack, side; fold, nsample, rng) -> Vector
+    _bond_measurements(Fm, mpo, fr, chain, stack, side; expansion, fold, nsample, rng) -> Vector
 
 A MEASURING half-sweep's bonds, CONCURRENTLY (parallel plan (b)). With the frames fixed, the only
 bond-to-bond dependency is the carry (`C = W[i]' K` on the left, `D = B Z[j]'` on the right): a
@@ -752,7 +734,8 @@ drawn in bond order from `rng`. Entry `i` (a bond of `side`) is `(K, leak, nh2, 
 carry the sequential loop would have built there; `sleak = 0` unless `nsample > 0`.
 """
 function _bond_measurements(Fm::SymMPS, mpo, fr::KLFrames, chain, stack, side::Symbol;
-                            fold::Bool, nsample::Int, rng::AbstractRNG)
+                            expansion::BasisExpansion, fold::Bool, nsample::Int,
+                            rng::AbstractRNG)
     L, c = length(Fm), fr.c
     bonds = side === :left ? (1:c) : ((L - 1):-1:c)
     carry = Vector{Any}(undef, L - 1)
@@ -774,15 +757,15 @@ function _bond_measurements(Fm::SymMPS, mpo, fr::KLFrames, chain, stack, side::S
     function one(i)
         f, a = if side === :left
             f = _frame_onto_left(fr.W[i], carry[i], Fm[i + 1])
-            (f, _bond_action(f, mpo, i, chain[i], right_channels(stack, i + 2), fr.W[i],
-                             nothing, :left, fold, rngs[i]))
+            (f, _bond_action(expansion, f, mpo, i, chain[i], right_channels(stack, i + 2),
+                             fr.W[i], nothing, :left, fold, rngs[i]))
         else
             f = _frame_onto_right(Fm[i], carry[i], fr.Z[i])
-            (f, _bond_action(f, mpo, i, left_channels(stack, i), chain[i], nothing, fr.Z[i],
-                             :right, fold, rngs[i]))
+            (f, _bond_action(expansion, f, mpo, i, left_channels(stack, i), chain[i], nothing,
+                             fr.Z[i], :right, fold, rngs[i]))
         end
         skl, skr, leak, nh2 = a
-        sl = nsample > 0 ? _sampled_leak(f, skl, skr, side, nsample, rngs[i]) : 0.0
+        sl = nsample > 0 ? sampled_leak(expansion, f, skl, skr, side, nsample, rngs[i]) : 0.0
         return (K = carry[i], leak = leak, nh2 = nh2, sleak = sl)
     end
     tasks = Dict(i => Threads.@spawn(one(i)) for i in bonds)
@@ -802,13 +785,13 @@ end
 """
     _frontier_expand(f, mpo, i, lch, rch, side, ckw, ledger, rng) -> CBEExpansion
 
-A frontier bond's CBE (plan T4.1): `side`'s frame grows by [`dd_cbe_expand`](@ref), exactly as
-in the half-sweeps, so the Krylov stage after it starts from those directions. `ckw` carries
-`cbe_bug_step!`'s expansion settings.
+A frontier bond's CBE (plan T4.1): `side`'s frame grows by [`expand_frame`](@ref) with the
+step's strategy `ckw.expansion`, exactly as in the half-sweeps, so the Krylov stage after it
+starts from those directions. `ckw` carries `cbe_bug_step!`'s expansion settings.
 """
 function _frontier_expand(f::BondFrame, mpo, i::Int, lch, rch, side::Symbol,
                           ckw::NamedTuple, ledger::AdaptiveLedger, rng::AbstractRNG)
-    return dd_cbe_expand(f, mpo, i, lch, rch, side; ledger = ledger, rng = rng,
+    return expand_frame(ckw.expansion, f, mpo, i, lch, rch, side; ledger = ledger, rng = rng,
                          alloc = get(ckw, :alloc, nothing), workcap = get(ckw, :workcap, 0),
                          growth = get(ckw, :growth, ADAPTIVE_GROWTH),
                          exact = get(ckw, :exact, false), version = i,

@@ -123,17 +123,3 @@ function _parallel_kls(psi::SymMPS, mpo, fr::KLFrames, S0, tau::ComplexF64, stag
     return _kls_finish(st, mpo, fr.W, fr.Z, c, fr.lenv, fr.renv, S0, Sh, tau, root;
                        nrm = nrm, tol_missing = tol_missing)
 end
-
-"""
-    parallel_kls_step!(psi, mpo, tau; schedule = :concurrent, kwargs...) -> CBEBugSweepInfo
-
-ONE step of the fully parallel K/L/S integrator (plan Task 6): the preliminary half-sweeps (and,
-for `order = p > 1`, the frontier closure) of [`cbe_bug_step!`](@ref), then the K, L and root S
-equations from `psi` in those frames, the four-block reconstruction and the one compression.
-Takes `cbe_bug_step!`'s normal-API keywords. `schedule` is `:sequential` (K, L, then S),
-`:kl_then_s` (K and L concurrently, then S) or `:concurrent` (all three); the three give the
-same state up to the order of floating-point reductions. `ledger.kls` reports the new directions,
-the omitted block `missing` and whether the step fell back to the standard augmented root solve.
-"""
-parallel_kls_step!(psi::SymMPS, mpo, tau; schedule::Symbol = :concurrent, kwargs...) =
-    cbe_bug_step!(psi, mpo, tau; kwargs..., kls = schedule)

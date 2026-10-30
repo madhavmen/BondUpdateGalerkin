@@ -298,3 +298,99 @@ end
 apply_h_two_site(Theta, mpo::MPO, i::Int,
                  lenv::MPOLeftEnvStack, renv::MPORightEnvStack) =
     apply_h_two_site(Theta, mpo, i, left_channels(lenv, i), right_channels(renv, i + 2))
+
+# ── from BUG/Randomised/cbe.jl: deterministic, used by the Core sweeps ──
+
+"""
+    _unprime(t, leg) -> TLArray
+
+Drop one prime level from `leg`. An environment's bra leg is primed to keep it distinct
+from the ket while both are open (`henv.jl`); once it has replaced a link leg it must
+carry that link's original prime level again.
+"""
+#
+# `to_concrete!`, not `to_concrete`: `prime` already returns a deep copy the caller owns, so a second
+# copy is pure waste.
+_unprime(t, leg::Int) = to_concrete!(prime(t, leg; inc = -1))
+
+"""
+    _env_on_link(T, E, leg) -> TLArray
+
+Contract environment `E` onto `leg` of `T`, leaving the bra leg in `leg`'s place,
+unprimed. If both carry an op-leg -- `T`'s last, `E`'s third -- they are contracted too
+(the channel closes).
+
+`T` is `K0`-shaped `(link_l, site_l, bond [, op])` with `leg = 1`, or `V0`-shaped
+`(bond, site_r, link_r [, op])` with `leg = 3`. In both cases the contracted link leg is
+at an END of the tensor, so the bra comes back out in exactly the position it vacated
+and no permutation is needed beyond the two written below.
+"""
+function _env_on_link(T, E, leg::Int)
+    nT, nE = length(T.inds), length(E.inds)
+    out = if nE == 3 && nT == 4
+        contract(T, (leg, nT), E, (2, 3))
+    elseif nE == 2 && nT == 3
+        contract(T, (leg,), E, (2,))
+    else
+        error("_env_on_link: rank-$nT tensor against a rank-$nE environment leaves an " *
+              "operator channel dangling")
+    end
+    # `out` = T's remaining legs in order, then E's bra leg.
+    #   leg == 1 (K0): (site_l, bond, bra) -> bra first
+    #   leg == 3 (V0): (bond, site_r, bra) -> already in place
+    if leg == 1
+        return _unprime(to_concrete(permutedims(out, (3, 1, 2))), 1)
+    elseif leg == 3
+        return _unprime(to_concrete(out), 3)
+    end
+    throw(ArgumentError("_env_on_link: leg must be 1 or 3, got $leg"))
+end
+
+# ── from BUG/Randomised/dd_cbe.jl: deterministic, used by the Core sweeps ──
+# The streamed two-site contractions: as `_fold_sketch_closures` (Randomised/cbe.jl), but with no
+# final projection and Theta never formed, so every intermediate is thin in g.
+
+"`X Om` for `Om` in `V0`'s layout; `K0 = U0 S0`. Legs `(link_l, site_l, g)`."
+function _stream_left(K0, V0, mpo::MPO, i::Int, lenv::MPOLink, renv::MPOLink, Om)
+    W1, W2 = mpo[i], mpo[i + 1]
+    Omd = Om'                                                 # (g, s_bra_r, bra_r)
+    C = if renv.E === nothing
+        X = to_concrete!(contract(Omd, (2,), W2, (3,)))       # (g, bra_r, w_mid, s_ket_r, w_r)
+        to_concrete(deleteSingleton(X, 5))                   # (g, bra_r, w_mid, s_ket_r)
+    else
+        X = to_concrete!(contract(Omd, (3,), renv.E, (1,)))   # (g, s_bra_r, w, ket_r)
+        to_concrete!(contract(X, (2, 3), W2, (3, 4)))         # (g, ket_r, w_mid, s_ket_r)
+    end
+    D1 = to_concrete!(contract(V0, (2, 3), C, (4, 2)))        # (bond, g, w_mid)
+    D = to_concrete!(contract(K0, (3,), D1, (1,)))            # (ℓ_l, s_l, g, w_mid)
+    E = to_concrete!(contract(D, (2, 4), W1, (2, 4)))         # (ℓ_l, g, w_l, s_bra_l)
+    if lenv.E === nothing
+        X = to_concrete(deleteSingleton(E, 3))               # (ℓ_l, g, s_bra_l)
+        return to_concrete(permutedims(X, (1, 3, 2)))        # (ℓ_l, s_bra_l, g)
+    end
+    X = to_concrete!(contract(E, (1, 3), lenv.E, (3, 2)))     # (g, s_bra_l, bra)
+    return _unprime(to_concrete(permutedims(X, (3, 2, 1))), 1)
+end
+
+"`X' Om` for `Om` in `U0`'s layout, as rows; `M0 = S0 V0`. Legs `(g, site_r, link_r)`."
+function _stream_right(U0, M0, mpo::MPO, i::Int, lenv::MPOLink, renv::MPOLink, Om)
+    W1, W2 = mpo[i], mpo[i + 1]
+    Omd = Om'                                                 # (bra_l, s_bra_l, g)
+    C = if lenv.E === nothing
+        X = to_concrete!(contract(Omd, (2,), W1, (3,)))       # (bra_l, g, w_l, s_ket_l, w_mid)
+        to_concrete(deleteSingleton(X, 3))                   # (bra_l, g, s_ket_l, w_mid)
+    else
+        X = to_concrete!(contract(Omd, (1,), lenv.E, (1,)))   # (s_bra_l, g, w, ket_l)
+        Z = to_concrete!(contract(X, (1, 3), W1, (3, 1)))     # (g, ket_l, s_ket_l, w_mid)
+        to_concrete(permutedims(Z, (2, 1, 3, 4)))            # (ket_l, g, s_ket_l, w_mid)
+    end
+    D1 = to_concrete!(contract(U0, (1, 2), C, (1, 3)))        # (bond, g, w_mid)
+    D = to_concrete!(contract(M0, (1,), D1, (1,)))            # (s_r, ℓ_r, g, w_mid)
+    E = to_concrete!(contract(D, (1, 4), W2, (2, 1)))         # (ℓ_r, g, s_bra_r, w_r)
+    if renv.E === nothing
+        X = to_concrete(deleteSingleton(E, 4))               # (ℓ_r, g, s_bra_r)
+        return to_concrete(permutedims(X, (2, 3, 1)))        # (g, s_bra_r, ℓ_r)
+    end
+    X = to_concrete!(contract(E, (1, 4), renv.E, (3, 2)))     # (g, s_bra_r, bra_r)
+    return _unprime(X, 3)
+end

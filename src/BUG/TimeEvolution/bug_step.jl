@@ -8,7 +8,9 @@ caller renormalises. Only the root bond evolves; both half-sweeps just generate 
 
 Keywords: `tol_basis` (its local Krylov share separately: `tol_krylov`), `tol_trunc`, `tol_expv` (alias `tol_root`) and `maxdim` (the resource limit,
 `adaptive_budget.jl`); `order` (temporal order `p`, see `krylov_closure.jl`); `root` (the Galerkin
-bond, default `L/2`); `reorth` (re-orthogonalisation in the root solve).
+bond, default `L/2`); `reorth` (re-orthogonalisation in the root solve); `expansion` (the
+basis-selection strategy of both half-sweeps and the frontier sweeps, a `BasisExpansion`;
+default `DDQRExpansion()`, the DD-projected, MPO-streamed, QR-only CBE).
 """
 function cbe_bug_step!(psi::SymMPS, mpo::MPO, tau::ComplexF64;
                        # ── THE API: three tolerances and one resource limit ──────────────
@@ -136,6 +138,8 @@ function cbe_bug_step!(psi::SymMPS, mpo::MPO, tau::ComplexF64;
                        # `DDMemory`, which also traces every call). `:adaptive` is the existing D1.
                        dd_policy::Symbol = :adaptive,
                        dd_memory = nothing,
+                       # The sweeps' basis-selection strategy (Core/RankAdaptation/basis_expansion.jl).
+                       expansion::BasisExpansion = DDQRExpansion(),
                        rng::AbstractRNG = MersenneTwister(0x5EED))
     L = length(psi)
     length(mpo) == L || throw(DimensionMismatch(
@@ -210,8 +214,8 @@ function cbe_bug_step!(psi::SymMPS, mpo::MPO, tau::ComplexF64;
     ledgerL, ledgerR = AdaptiveLedger(), AdaptiveLedger()
     rngR = parallel ? MersenneTwister(rand(rng, UInt64)) : rng
     rec = krylov_recycle && order > 1 ? KrylovRecycle(recycle_mode) : nothing
-    cx = _HalfSweepCtx(mpo, tau, eshift, c, alloc, exkw, wcap_step, krylov_reuse, krylov_depth,
-                       keep_states, rec)
+    cx = _HalfSweepCtx(mpo, tau, eshift, c, alloc, expansion, exkw, wcap_step, krylov_reuse,
+                       krylov_depth, keep_states, rec)
 
     troot = Ref(0.0); ttrunc = Ref(0.0)
     _t0step = time_ns()
@@ -271,7 +275,8 @@ function cbe_bug_step!(psi::SymMPS, mpo::MPO, tau::ComplexF64;
     if order > 1
         fr = KLFrames(W, Z, c, lenv_root, renv_root, 0, nothing, nothing, Float64(eshift))
         # Plan T4.1: the frontier sweeps expand by the same DD-QR CBE as the half-sweeps.
-        ckw = merge(exkw, (krylov_reuse = krylov_reuse, recycle = rec, krylov_depth = krylov_depth))
+        ckw = merge(exkw, (expansion = expansion, krylov_reuse = krylov_reuse, recycle = rec,
+                           krylov_depth = krylov_depth))
         cl = _krylov_closure!(fr, psi, mpo, S0, tau, alloc, ckw; order = order,
                               workcap = wcap_step, nrm = _nrm, parallel = parallel, rng = rng,
                               ledger = ledger, fold = fold_omega, checks = closure_checks)
@@ -454,3 +459,19 @@ end
 
 cbe_bug_step!(psi::SymMPS, mpo::MPO, tau::Number; kwargs...) =
     cbe_bug_step!(psi, mpo, ComplexF64(tau); kwargs...)
+
+# ── from BUG/Core/Sweeps/parallel_kls.jl: the step entry point of the K/L/S kernel there ──
+
+"""
+    parallel_kls_step!(psi, mpo, tau; schedule = :concurrent, kwargs...) -> CBEBugSweepInfo
+
+ONE step of the fully parallel K/L/S integrator (plan Task 6): the preliminary half-sweeps (and,
+for `order = p > 1`, the frontier closure) of [`cbe_bug_step!`](@ref), then the K, L and root S
+equations from `psi` in those frames, the four-block reconstruction and the one compression.
+Takes `cbe_bug_step!`'s normal-API keywords. `schedule` is `:sequential` (K, L, then S),
+`:kl_then_s` (K and L concurrently, then S) or `:concurrent` (all three); the three give the
+same state up to the order of floating-point reductions. `ledger.kls` reports the new directions,
+the omitted block `missing` and whether the step fell back to the standard augmented root solve.
+"""
+parallel_kls_step!(psi::SymMPS, mpo, tau; schedule::Symbol = :concurrent, kwargs...) =
+    cbe_bug_step!(psi, mpo, tau; kwargs..., kls = schedule)
