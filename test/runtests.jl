@@ -33,6 +33,10 @@ end
     run_testfile("BUG/TimeEvolution/test_fixtures_b155550.jl")
     # QMB
     run_testfile("QMB/Observables/test_local_observables.jl")
+    run_testfile("QMB/ClosedSystem/test_xx.jl")
+    run_testfile("QMB/ClosedSystem/test_z2_ising.jl")
+    run_testfile("QMB/ClosedSystem/test_tfim.jl")
+    run_testfile("QMB/ClosedSystem/test_oat.jl")
     # QTTS
     run_testfile("QTTS/Tooling/test_grid.jl")
     run_testfile("QTTS/Tooling/test_cores.jl")
