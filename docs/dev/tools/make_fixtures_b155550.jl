@@ -14,8 +14,13 @@ using BUGJulia, BUGJulia.BondUpdateBUG, BUGJulia.RSVDCBEBondUpdate
 const RC = BUGJulia.RSVDCBEBondUpdate
 const OUT = get(ENV, "FX_OUT", "fixtures_b155550")
 const COMMON = joinpath(pwd(), "tests", "common")
-for f in ("adaptive_fixtures", "dense_reference", "free_fermion", "dissipative_fixtures",
-          "liouville_fixtures")
+for f in (
+    "adaptive_fixtures",
+    "dense_reference",
+    "free_fermion",
+    "dissipative_fixtures",
+    "liouville_fixtures",
+)
     include(joinpath(COMMON, f * ".jl"))
 end
 
@@ -31,18 +36,35 @@ function case_xx_u1(; order = 1, midpoint = false)
     W = xxz_mpo(L; J = 1.0, delta = 0.0)
     psi = neel_state(L)
     rows = Any[]
-    for k in 1:n
-        info = midpoint ? cbe_bug_midpoint_step!(psi, W, ComplexF64(-im * dt)) :
-               cbe_bug_step!(psi, W, ComplexF64(-im * dt); order = order)
+    for k = 1:n
+        info =
+            midpoint ? cbe_bug_midpoint_step!(psi, W, ComplexF64(-im * dt)) :
+            cbe_bug_step!(psi, W, ComplexF64(-im * dt); order = order)
         ex = xx_free_fermion_sz(L, k * dt; J = 1.0, occupied = 1:2:L)
         sz = sz_profile(psi)
-        push!(rows, Dict("t" => k * dt, "sz" => sz, "err_exact" => maximum(abs.(sz .- ex)),
-                         "bond_dims" => bond_dims(psi), "status" => status(info),
-                         "discarded" => infofield(info, :discarded)))
+        push!(
+            rows,
+            Dict(
+                "t" => k * dt,
+                "sz" => sz,
+                "err_exact" => maximum(abs.(sz .- ex)),
+                "bond_dims" => bond_dims(psi),
+                "status" => status(info),
+                "discarded" => infofield(info, :discarded),
+            ),
+        )
     end
-    return Dict("model" => "XX chain, J=1, U(1)", "L" => L, "dt" => dt, "steps" => n,
-                "start" => "neel", "order" => order, "midpoint" => midpoint,
-                "options" => "defaults", "trajectory" => rows)
+    return Dict(
+        "model" => "XX chain, J=1, U(1)",
+        "L" => L,
+        "dt" => dt,
+        "steps" => n,
+        "start" => "neel",
+        "order" => order,
+        "midpoint" => midpoint,
+        "options" => "defaults",
+        "trajectory" => rows,
+    )
 end
 
 "The same flow without symmetry (the storage QTT states use), final state kept densely."
@@ -53,17 +75,33 @@ function case_xx_none()
     W = xxz_mpo(L; J = 1.0, delta = 0.0)
     psi = neel_state(L)
     rows = Any[]
-    for k in 1:n
+    for k = 1:n
         info = cbe_bug_step!(psi, W, ComplexF64(-im * dt); order = 2)
-        push!(rows, Dict("t" => k * dt, "bond_dims" => bond_dims(psi), "status" => status(info),
-                         "norm" => sqrt(real(overlap(psi, psi)))))
+        push!(
+            rows,
+            Dict(
+                "t" => k * dt,
+                "bond_dims" => bond_dims(psi),
+                "status" => status(info),
+                "norm" => sqrt(real(overlap(psi, psi))),
+            ),
+        )
     end
     v = dense_state(psi)
-    ref = exp(-im * n * dt * Matrix(dense_heisenberg(L; J = 1.0, delta = 0.0))) *
-          dense_state(neel_state(L))
-    out = Dict("model" => "XX chain, J=1, no symmetry", "L" => L, "dt" => dt, "steps" => n,
-               "start" => "neel", "order" => 2, "trajectory" => rows,
-               "final_state" => cplx(v), "err_dense" => norm(v - ref) / norm(ref))
+    ref =
+        exp(-im * n * dt * Matrix(dense_heisenberg(L; J = 1.0, delta = 0.0))) *
+        dense_state(neel_state(L))
+    out = Dict(
+        "model" => "XX chain, J=1, no symmetry",
+        "L" => L,
+        "dt" => dt,
+        "steps" => n,
+        "start" => "neel",
+        "order" => 2,
+        "trajectory" => rows,
+        "final_state" => cplx(v),
+        "err_dense" => norm(v - ref) / norm(ref),
+    )
     set_symmetry!(:U1)
     return out
 end
@@ -77,16 +115,29 @@ function case_heisenberg_ite()
     e0 = minimum(eigvals(Hermitian(Matrix(dense_heisenberg(L; J = 1.0, delta = 1.0)))))
     rows = Any[]
     beta = 0.0
-    for _ in 1:8
+    for _ = 1:8
         hist = ite_evolve!(psi, W, uniform_beta_steps(0.25, 2); order = 2)
         beta += 0.25
         e = real(mpo_energy(psi, W)) / real(overlap(psi, psi))
-        push!(rows, Dict("beta" => beta, "energy" => e, "bond_dims" => bond_dims(psi),
-                         "status" => [String(r.status) for r in hist]))
+        push!(
+            rows,
+            Dict(
+                "beta" => beta,
+                "energy" => e,
+                "bond_dims" => bond_dims(psi),
+                "status" => [String(r.status) for r in hist],
+            ),
+        )
     end
-    return Dict("model" => "Heisenberg chain, J=1, Delta=1, U(1)", "L" => L,
-                "start" => "neel", "order" => 2, "dbeta" => 0.125, "e_exact_ground" => e0,
-                "trajectory" => rows)
+    return Dict(
+        "model" => "Heisenberg chain, J=1, Delta=1, U(1)",
+        "L" => L,
+        "start" => "neel",
+        "order" => 2,
+        "dbeta" => 0.125,
+        "e_exact_ground" => e0,
+        "trajectory" => rows,
+    )
 end
 
 "MPDO: driven-dissipative XX chain in Liouville space (weak U(1)); trace and positivity checks."
@@ -96,19 +147,41 @@ function case_mpdo()
     pairs, hs, jumps = _xx_model(L)
     ls = liouville_space([1, -1]; sym = :weak)
     W = lindblad_mpo(ls, L; pairs = pairs, onsite_h = hs, jumps = jumps)
-    rho = mpdo_product_state(ls, [isodd(i) ? _NUP : I - _NUP for i in 1:L])
+    rho = mpdo_product_state(ls, [isodd(i) ? _NUP : I - _NUP for i = 1:L])
     rows = Any[]
-    for k in 1:10
-        cbe_bug_step!(rho, W, ComplexF64(0.1); order = 2, hermitian = false, tol_basis = 1e-6,
-                      tol_trunc = 1e-6, tol_expv = 1e-8, maxdim = 64)
+    for k = 1:10
+        cbe_bug_step!(
+            rho,
+            W,
+            ComplexF64(0.1);
+            order = 2,
+            hermitian = false,
+            tol_basis = 1e-6,
+            tol_trunc = 1e-6,
+            tol_expv = 1e-8,
+            maxdim = 64,
+        )
         c = mpdo_checks(rho, ls)
-        push!(rows, Dict("t" => 0.1k, "trace" => real(c.trace), "herm" => c.herm,
-                         "min_eig" => c.min_eig, "bond_dims" => bond_dims(rho)))
+        push!(
+            rows,
+            Dict(
+                "t" => 0.1k,
+                "trace" => real(c.trace),
+                "herm" => c.herm,
+                "min_eig" => c.min_eig,
+                "bond_dims" => bond_dims(rho),
+            ),
+        )
     end
-    return Dict("model" => "XX + dephasing 0.3 + gain 0.5 at site 1 + loss 0.7 at site L, field 0.2 i",
-                "L" => L, "dt" => 0.1, "order" => 2, "start" => "Neel product (up on odd sites)",
-                "options" => "tol_basis 1e-6, tol_trunc 1e-6, tol_expv 1e-8, maxdim 64",
-                "trajectory" => rows)
+    return Dict(
+        "model" => "XX + dephasing 0.3 + gain 0.5 at site 1 + loss 0.7 at site L, field 0.2 i",
+        "L" => L,
+        "dt" => 0.1,
+        "order" => 2,
+        "start" => "Neel product (up on odd sites)",
+        "options" => "tol_basis 1e-6, tol_trunc 1e-6, tol_expv 1e-8, maxdim 64",
+        "trajectory" => rows,
+    )
 end
 
 "MCWF: one seeded quantum-jump trajectory of the lossy XX chain from the domain wall."
@@ -121,12 +194,27 @@ function case_mcwf()
     obs(p) = vcat(real(overlap(p, p)), sz_profile(p))
     tg = collect(0.0:0.25:2.0)
     step_kw = (closure_checks = true, tol_basis = 1e-10, tol_root = 1e-12)
-    tr = jump_trajectory(domain_wall_state(L), G, ch, tg; dt = 0.05, seed = 7, observe = obs,
-                         step_kw = step_kw)
-    return Dict("model" => "XX, site loss gamma_j = 1 (odd j) / 0.2 (even j)", "L" => L,
-                "dt" => 0.05, "seed" => 7, "times" => tr.times,
-                "events" => [Dict("t" => e.t, "channel" => e.channel) for e in tr.events],
-                "njumps" => tr.njumps, "obs" => tr.obs, "nsteps" => tr.nsteps)
+    tr = jump_trajectory(
+        domain_wall_state(L),
+        G,
+        ch,
+        tg;
+        dt = 0.05,
+        seed = 7,
+        observe = obs,
+        step_kw = step_kw,
+    )
+    return Dict(
+        "model" => "XX, site loss gamma_j = 1 (odd j) / 0.2 (even j)",
+        "L" => L,
+        "dt" => 0.05,
+        "seed" => 7,
+        "times" => tr.times,
+        "events" => [Dict("t" => e.t, "channel" => e.channel) for e in tr.events],
+        "njumps" => tr.njumps,
+        "obs" => tr.obs,
+        "nsteps" => tr.nsteps,
+    )
 end
 
 "Two-site TDVP baseline on the XX chain (U(1), Neel)."
@@ -136,15 +224,28 @@ function case_tdvp2()
     W = xxz_mpo(L; J = 1.0, delta = 0.0)
     psi = neel_state(L)
     rows = Any[]
-    for k in 1:n
+    for k = 1:n
         tdvp2_step!(psi, W, ComplexF64(-im * dt); maxdim = 64, trunc_thresh = 1e-12)
         ex = xx_free_fermion_sz(L, k * dt; J = 1.0, occupied = 1:2:L)
         sz = sz_profile(psi)
-        push!(rows, Dict("t" => k * dt, "sz" => sz, "err_exact" => maximum(abs.(sz .- ex)),
-                         "bond_dims" => bond_dims(psi)))
+        push!(
+            rows,
+            Dict(
+                "t" => k * dt,
+                "sz" => sz,
+                "err_exact" => maximum(abs.(sz .- ex)),
+                "bond_dims" => bond_dims(psi),
+            ),
+        )
     end
-    return Dict("model" => "XX chain, J=1, U(1)", "L" => L, "dt" => dt, "steps" => n,
-                "options" => "maxdim 64, trunc_thresh 1e-12", "trajectory" => rows)
+    return Dict(
+        "model" => "XX chain, J=1, U(1)",
+        "L" => L,
+        "dt" => dt,
+        "steps" => n,
+        "options" => "maxdim 64, trunc_thresh 1e-12",
+        "trajectory" => rows,
+    )
 end
 
 "QTT Heston: backward pricing of a softened call, N = 5 bits per axis, BUG order 3."
@@ -160,14 +261,20 @@ function case_heston()
     psi = qtt_mps(u0)
     h, n = 0.02, 10
     rows = Any[]
-    for k in 0:(n - 1)
+    for k = 0:(n-1)
         r = qtt_bug_step!(psi, fl, k * h, h; order = 3, maxdim = 64, tol_trunc = 1e-10)
         push!(rows, Dict("t" => (k + 1) * h, "chi" => r.chi, "bond_dims" => bond_dims(psi)))
     end
     v = vec(tt_dense(qtt_cores(psi)))
-    out = Dict("model" => "Heston backward, r 0.03 q 0 kappa 1.5 theta 0.09 sigma 0.5 rho -0.7",
-               "N" => N, "h" => h, "steps" => n, "order" => 3, "trajectory" => rows,
-               "final_state" => cplx(v))
+    out = Dict(
+        "model" => "Heston backward, r 0.03 q 0 kappa 1.5 theta 0.09 sigma 0.5 rho -0.7",
+        "N" => N,
+        "h" => h,
+        "steps" => n,
+        "order" => 3,
+        "trajectory" => rows,
+        "final_state" => cplx(v),
+    )
     set_symmetry!(:U1)
     return out
 end
@@ -180,20 +287,37 @@ function case_gp()
     m = gp_model(g; gnl = 1.0, gamma = 0.1, mu = 0.0, omega = 1.0, rho_tol = 1e-13)
     phi0(x) = pi^(-0.25) * exp(-x^2 / 2)
     phi1(x) = sqrt(2) * x * phi0(x)
-    A0 = tt_lincomb([(1.0, qtt_separable(g, phi0, phi0)), (0.25, qtt_separable(g, phi1, phi0)),
-                     (0.15im, qtt_separable(g, phi0, phi1))])
+    A0 = tt_lincomb([
+        (1.0, qtt_separable(g, phi0, phi0)),
+        (0.25, qtt_separable(g, phi1, phi0)),
+        (0.15im, qtt_separable(g, phi0, phi1)),
+    ])
     rows = Any[]
     psi = qtt_mps(A0)
-    for k in 0:3
-        r = qtt_bug_step!(psi, GPFlow(m), k * 0.1, 0.1; order = 2, maxdim = 64,
-                          tol_basis = 1e-10, tol_trunc = 1e-12)
+    for k = 0:3
+        r = qtt_bug_step!(
+            psi,
+            GPFlow(m),
+            k * 0.1,
+            0.1;
+            order = 2,
+            maxdim = 64,
+            tol_basis = 1e-10,
+            tol_trunc = 1e-12,
+        )
         push!(rows, Dict("t" => (k + 1) * 0.1, "chi" => r.chi, "bond_dims" => bond_dims(psi)))
     end
     v = vec(tt_dense(qtt_cores(psi)))
     lg = gp_ground_state!(qtt_mps(A0), m, uniform_schedule(0.5, 10); order = 2, maxdim = 64)
-    out = Dict("model" => "GP, gnl 1, gamma 0.1, mu 0, omega 1, box [-5,5]^2", "N" => 3,
-               "h" => 0.1, "order" => 2, "trajectory" => rows, "final_state" => cplx(v),
-               "ground_state_energies" => [e.E for e in lg if e.accepted])
+    out = Dict(
+        "model" => "GP, gnl 1, gamma 0.1, mu 0, omega 1, box [-5,5]^2",
+        "N" => 3,
+        "h" => 0.1,
+        "order" => 2,
+        "trajectory" => rows,
+        "final_state" => cplx(v),
+        "ground_state_energies" => [e.E for e in lg if e.accepted],
+    )
     set_symmetry!(:U1)
     return out
 end
@@ -212,12 +336,20 @@ const CASES = [
 ]
 
 mkpath(OUT)
-deps = Dict(d.name => string(d.version) for d in values(Pkg.dependencies()) if d.version !== nothing)
+deps =
+    Dict(d.name => string(d.version) for d in values(Pkg.dependencies()) if d.version !== nothing)
 open(joinpath(OUT, "versions.json"), "w") do io
-    JSON.print(io, Dict("bug_julia_commit" => get(ENV, "FX_COMMIT", "unknown"),
-                        "julia" => string(VERSION), "threads" => Threads.nthreads(),
-                        "Telum" => get(deps, "Telum", "?"), "LurCGT" => get(deps, "LurCGT", "?"),
-                        "cpu" => Sys.CPU_NAME))
+    JSON.print(
+        io,
+        Dict(
+            "bug_julia_commit" => get(ENV, "FX_COMMIT", "unknown"),
+            "julia" => string(VERSION),
+            "threads" => Threads.nthreads(),
+            "Telum" => get(deps, "Telum", "?"),
+            "LurCGT" => get(deps, "LurCGT", "?"),
+            "cpu" => Sys.CPU_NAME,
+        ),
+    )
 end
 want = isempty(ARGS) ? first.(CASES) : ARGS
 bad = false
