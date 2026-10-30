@@ -3,6 +3,7 @@
 # must pass unchanged. QTT states join here in PR 3.
 
 using Test, LinearAlgebra, LurCGT, Telum
+import BondUpdateGalerkin
 using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
 
 include(joinpath(@__DIR__, "..", "..", "..", "common", "dense_reference.jl"))

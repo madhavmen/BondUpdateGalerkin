@@ -3,6 +3,7 @@
 # moves with them.
 
 using Test, LinearAlgebra, LurCGT, Telum
+import BondUpdateGalerkin
 using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
 const BUGCORE = BondUpdateGalerkin.BUG
 
