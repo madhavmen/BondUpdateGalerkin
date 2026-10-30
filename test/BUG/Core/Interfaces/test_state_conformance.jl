@@ -1,12 +1,13 @@
 # State-contract conformance (implementation plan WP2; docs/dev/interfaces.md). The same checks run
 # against every state type and symmetry; a new state type is added to `conformance_states` and
-# must pass unchanged. QTT states join here in PR 3.
+# must pass unchanged. A QTT field state is a no-symmetry `SymMPS`, so it runs under `:none`.
 
 using Test, LinearAlgebra, LurCGT, Telum
 import BondUpdateGalerkin
-using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
+using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB, BondUpdateGalerkin.QTTS
 
 include(joinpath(@__DIR__, "..", "..", "..", "common", "dense_reference.jl"))
+include(joinpath(@__DIR__, "..", "..", "..", "common", "qtt_fixtures.jl"))
 
 "Direct sum of two states along the links: an entangled state with multi-sector bonds."
 function mps_sum(a::SymMPS, b::SymMPS)
@@ -20,14 +21,19 @@ function mps_sum(a::SymMPS, b::SymMPS)
 end
 
 "Named states of the current symmetry mode: product, and entangled with bond dimension > 1."
-conformance_states() = [
-    "neel" => neel_state(6),
-    "odd-length product" => product_state([:up, :up, :down, :up, :down]),
-    "sum of two products" => mps_sum(
-        product_state([:up, :down, :up, :down, :up, :down]),
-        product_state([:down, :up, :up, :down, :down, :up]),
-    ),
-]
+function conformance_states()
+    states = [
+        "neel" => neel_state(6),
+        "odd-length product" => product_state([:up, :up, :down, :up, :down]),
+        "sum of two products" => mps_sum(
+            product_state([:up, :down, :up, :down, :up, :down]),
+            product_state([:down, :up, :up, :down, :down, :up]),
+        ),
+    ]
+    symmetry_mode() === :none &&
+        push!(states, "qtt field" => qtt_mps(_random_tt(_tt_ranks(6, 3)); center = 2))
+    return states
+end
 
 const TRAITS = Dict(:U1 => U1Symmetry, :none => NoSymmetry)
 
@@ -44,7 +50,7 @@ const TRAITS = Dict(:U1 => U1Symmetry, :none => NoSymmetry)
             bd = bond_dimensions(psi)
             @test length(bd) == L - 1
             @test bd == [bond_dimension(psi, b) for b = 1:(L-1)]
-            name == "sum of two products" && @test maximum(bd) > 1   # non-vacuous
+            name in ("sum of two products", "qtt field") && @test maximum(bd) > 1   # non-vacuous
 
             v = dense_state(psi)
             n2 = real(inner_product(psi, psi))

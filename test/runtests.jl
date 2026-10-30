@@ -20,10 +20,15 @@ end
     run_testfile("BUG/Core/TensorNetworks/test_symmetric_mps.jl")
     run_testfile("BUG/Core/TensorNetworks/test_sectors.jl")
     run_testfile("BUG/Core/TensorNetworks/test_fusion_cache.jl")
+    run_testfile("BUG/Core/TensorNetworks/test_mpo.jl")
     run_testfile("BUG/Core/Sweeps/test_frames.jl")
     run_testfile("BUG/Core/Interfaces/test_state_conformance.jl")
     # QMB
     run_testfile("QMB/Observables/test_local_observables.jl")
+    # QTTS
+    run_testfile("QTTS/Tooling/test_grid.jl")
+    run_testfile("QTTS/Tooling/test_cores.jl")
+    run_testfile("QTTS/Tooling/test_operators.jl")
 
     run_testfile("quality/import_boundaries.jl")
     run_testfile("quality/aqua.jl")

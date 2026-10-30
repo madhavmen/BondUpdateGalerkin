@@ -35,9 +35,13 @@ The contracts every state and operator type implements, so BUG kernels never bra
 | Type | Symmetries | Status |
 |---|---|---|
 | `SymMPS` (dense and block-symmetric MPS) | `NoSymmetry`, `U1Symmetry` tested; `SU2Symmetry`, `Z2Symmetry` once their states move (dimer and Ising states) | PR 2 |
-| QTT field state (no-symmetry `SymMPS` with a grid `Ordering`) | `NoSymmetry` | PR 3 |
+| QTT field state (no-symmetry `SymMPS`, built by `QTTS.qtt_mps`; its grid and bit placement live in a `QTTOrdering`, not in the state) | `NoSymmetry` | PR 3 |
 
 ## Still to define
 
-- Operator contract (`operator.jl`): local action, environment update, Hermiticity and linearity traits. Written with the MPO move (PR 4), against the MPO type it has to describe.
+- Operator contract (`operator.jl`): local action, environment update, Hermiticity and linearity traits. Written in PR 4 with the environments, against the `MPO` storage that moved in PR 3 (`Core/TensorNetworks/mpo.jl`).
 - `EvolutionProblem` (`problem.jl`): `du/dt = F(t, u)` for real time, imaginary time and linear and nonlinear PDEs (PR 4, with the flows of `qtt_flows.jl`).
+
+## QTT orderings (`QTTS/Tooling/grid.jl`)
+
+A `QTTOrdering` names the axes, their bit counts, the layout (`:grouped` or `:interleaved`) and the endianness, and maps every bit to a site. `qtt_bits`/`qtt_point` are exact inverses on every grid point; `qtt_site_permutation` re-indexes a dense site-basis object (site 1 fastest) onto the grid index (axis 1 fastest), for small-grid checks. `QTTGrid` adds the 2D geometry (origin, spacing, periodicity) to a two-axis ordering. Tests: `test/QTTS/Tooling/test_grid.jl` (round trips in 1, 2 and 3 axes) and `test_operators.jl` (dense against TT operators in all four layouts).
