@@ -37,6 +37,8 @@ end
     run_testfile("QMB/ClosedSystem/test_z2_ising.jl")
     run_testfile("QMB/ClosedSystem/test_tfim.jl")
     run_testfile("QMB/ClosedSystem/test_oat.jl")
+    run_testfile("QMB/OpenSystem/MPDO/test_liouville.jl")
+    run_testfile("QMB/OpenSystem/MCWF/test_quantum_jumps.jl")
     # QTTS
     run_testfile("QTTS/Tooling/test_grid.jl")
     run_testfile("QTTS/Tooling/test_cores.jl")
