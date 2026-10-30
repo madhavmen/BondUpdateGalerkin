@@ -50,6 +50,12 @@ The `target` column of the index holds the per-file map. The grouping:
 | `test/QTTS` | `test_qtt_task1`, `test_qtt_task2` (stage-solver parts to `test/BUG/TimeEvolution`) |
 | `test/common` | `tests/common/*`, plus `benchmarks/exact_sparse.jl`, `benchmarks/hubbard_aa_exact.jl`, `benchmarks/open_system/sparse_lindblad.jl`, which tests include |
 
+## Moved so far
+
+| PR | Legacy | New | Deviations from Section 8 |
+|---|---|---|---|
+| 2 | `BondUpdateBUG/symmetric_mps.jl`, `symmetric_mps_canonical.jl`, `sectors.jl`, `frame.jl`; `tensor_inner` from `expv.jl` | `BUG/Core/TensorNetworks/{symmetric_mps,canonical_form,sectors}.jl`, `BUG/Core/Sweeps/frames.jl`; `QMB/Tooling/{local_spaces,initial_states}.jl`, `QMB/Observables/local_observables.jl` | `tensor_inner` goes to TensorNetworks, not LocalSolvers, because `overlap` needs it. `dimer_state` waits for `gates.jl` (it projects with Heisenberg gates). Tests not yet moved: the dimer case and the `sz_overlaps` testset (need `tdvp2_step!`), and the d=4 allocation guard of `test_fusion_cache.jl` (needs `cbe_bug_step!`) |
+
 ## Baseline
 
 The pass/fail state of every legacy test at `b155550` comes from cluster job 17610132 and is recorded here when it finishes.

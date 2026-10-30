@@ -15,5 +15,14 @@ Include directories:
 module QMB
 
 using ..BUG
+using LurCGT, Telum
+
+include("Tooling/local_spaces.jl")
+include("Tooling/initial_states.jl")
+include("Observables/local_observables.jl")
+
+export local_space, SECTOR_UP, SECTOR_DOWN, SECTOR_SU2_HALF, SECTOR_SU2_SINGLET
+export product_state, sector_product_state, domain_wall_state, neel_state
+export site_expval, sz_expectation, total_sz, apply_sz!, sz_overlaps
 
 end
