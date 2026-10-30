@@ -63,12 +63,8 @@ end
 
 "`S^z` on the site leg (leg 2) of one MPS tensor, by sector projection ([`apply_sz!`](@ref))."
 function _sz_site(A)
-    up = to_concrete(
-        getsub(A, 2, s -> s == SECTOR_UP ? Colon() : nothing; preserve_space = true),
-    )
-    dn = to_concrete(
-        getsub(A, 2, s -> s == SECTOR_DOWN ? Colon() : nothing; preserve_space = true),
-    )
+    up = to_concrete(getsub(A, 2, s -> s == SECTOR_UP ? Colon() : nothing; preserve_space = true))
+    dn = to_concrete(getsub(A, 2, s -> s == SECTOR_DOWN ? Colon() : nothing; preserve_space = true))
     return to_concrete(to_concrete(0.5 * up) + to_concrete(-0.5 * dn))
 end
 
@@ -120,9 +116,7 @@ function sz_overlaps(bra::SymMPS, ket::SymMPS)
     for x = 1:L
         b = _sz_site(braR[x])
         if x == L
-            G[x] = scalar(
-                contract(contract(E[L-1], (1,), b', (1,)), (1, 2, 3), ket[L], (1, 2, 3)),
-            )
+            G[x] = scalar(contract(contract(E[L-1], (1,), b', (1,)), (1, 2, 3), ket[L], (1, 2, 3)))
         else
             Ex = x == 1 ? contract(b', (1, 2), ket[1], (1, 2)) : lstep(E[x-1], b, x)
             G[x] = scalar(contract(Ex, (1, 2), R[x+1], (1, 2)))

@@ -33,9 +33,9 @@ norm_diff(a, b) = sqrt(abs(tensor_inner(to_concrete(a - b), to_concrete(a - b)))
 function sample_frames()
     out = Any[]
     charged = Ref(false)
-    for psi in (domain_wall_state(4), neel_state(6),
-                product_state([:up, :down, :down, :up, :up, :down]))
-        for i in 1:(length(psi) - 1)
+    for psi in
+        (domain_wall_state(4), neel_state(6), product_state([:up, :down, :down, :up, :up, :down]))
+        for i = 1:(length(psi)-1)
             canonical!(psi, i)
             t = bond_frame(psi, i).U0
             any(q != dual_charge(symm(t), q) for (q, _) in t.spaces[1]) && (charged[] = true)
@@ -113,7 +113,7 @@ end
         clear_fusion_cache!()
         old = set_fusion_budget!(nothing)
         try
-            seen = Dict{Any, Int}()
+            seen = Dict{Any,Int}()
             for (t, c) in zip(frames, cold)
                 fusion_basis(t, 1, 2; tag = "cbeG")
                 seen[(BUGCORE._leg_key(t, 1), BUGCORE._leg_key(t, 2))] = nel(c)

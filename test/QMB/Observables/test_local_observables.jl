@@ -19,7 +19,7 @@ using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
     @testset "observables read the Neel state correctly" begin
         psi = neel_state(6)
         @test isapprox(total_sz(psi), 0.0; atol = 1e-14)
-        for j in 1:6
+        for j = 1:6
             @test isapprox(sz_expectation(psi, j), isodd(j) ? +0.5 : -0.5; atol = 1e-14)
         end
     end
@@ -30,7 +30,7 @@ using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
         canonical!(psi, 6)
         canonical!(psi, 3)
         @test isapprox(norm(psi), 1.0; atol = 1e-13)
-        for j in 1:6
+        for j = 1:6
             @test isapprox(sz_expectation(psi, j), isodd(j) ? +0.5 : -0.5; atol = 1e-12)
         end
     end
@@ -48,13 +48,14 @@ using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
     # returns a correctly SHAPED tensor whose site sectors have been re-sorted, i.e. a wrong state
     # that measures right. These checks are chosen to fail on exactly that.
     @testset "apply_sz! builds S^z_j|psi>, not merely something of the right shape" begin
-        for (name, psi0) in (("neel", neel_state(6)),
-                             ("domain wall", domain_wall_state(6)),
-                             # ⛔ ASYMMETRIC on purpose: Neel, the dimer and the domain wall are all
-                             # invariant under reversal-composed-with-flip, so a convention error
-                             # that reverses the chain passes on every one of them.
-                             ("asymmetric product", product_state([:up, :up, :down, :up,
-                                                                   :down, :down])))
+        for (name, psi0) in (
+            ("neel", neel_state(6)),
+            ("domain wall", domain_wall_state(6)),
+            # ⛔ ASYMMETRIC on purpose: Neel, the dimer and the domain wall are all
+            # invariant under reversal-composed-with-flip, so a convention error
+            # that reverses the chain passes on every one of them.
+            ("asymmetric product", product_state([:up, :up, :down, :up, :down, :down])),
+        )
             @testset "$name" begin
                 for j in (1, 3, 6)
                     psi = deepcopy(psi0)
@@ -90,12 +91,15 @@ using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
         # S^z_j commutes with the total charge, so the result stays in the SAME U(1) sector.
         # `total_sz` here is a ratio because `apply_sz!` deliberately does not renormalise.
         psi = neel_state(6)
-        phi = deepcopy(psi); apply_sz!(phi, 3)
+        phi = deepcopy(psi)
+        apply_sz!(phi, 3)
         @test isapprox(total_sz(phi) / norm(phi)^2, total_sz(psi); atol = 1e-11)
 
         # Idempotence up to the scalar: applying twice is (S^z)^2 = 1/4, i.e. the state comes back
         # parallel to the original with norm 1/4.
-        phi2 = deepcopy(psi); apply_sz!(phi2, 2); apply_sz!(phi2, 2)
+        phi2 = deepcopy(psi)
+        apply_sz!(phi2, 2)
+        apply_sz!(phi2, 2)
         @test isapprox(norm(phi2), 0.25; atol = 1e-12)
         @test isapprox(abs(overlap(psi, phi2)), 0.25; atol = 1e-12)
     end

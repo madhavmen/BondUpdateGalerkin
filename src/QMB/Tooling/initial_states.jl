@@ -32,8 +32,7 @@ end
 function _product_state_u1(spins::Vector{Symbol}, T::Type{<:Number} = ComplexF64)
     targets = map(enumerate(spins)) do (i, s)
         s === :up ? SECTOR_UP :
-        s === :down ? SECTOR_DOWN :
-        throw(ArgumentError("spin $i must be :up or :down, got $s"))
+        s === :down ? SECTOR_DOWN : throw(ArgumentError("spin $i must be :up or :down, got $s"))
     end
     return sector_product_state(local_space(:U1), targets; eltype = T)
 end

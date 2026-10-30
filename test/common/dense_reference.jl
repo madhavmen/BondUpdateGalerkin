@@ -28,8 +28,11 @@ const _SP = ComplexF64[0 1; 0 0]
 const _SM = ComplexF64[0 0; 1 0]
 const _SZ = ComplexF64[0.5 0; 0 -0.5]
 
-_embed(o, i, L) = kron(Matrix{ComplexF64}(I, 2^(i - 1), 2^(i - 1)), o,
-                       Matrix{ComplexF64}(I, 2^(L - i), 2^(L - i)))
+_embed(o, i, L) = kron(
+    Matrix{ComplexF64}(I, 2^(i - 1), 2^(i - 1)),
+    o,
+    Matrix{ComplexF64}(I, 2^(L - i), 2^(L - i)),
+)
 
 """
     dense_bond_term(L, i; J=1.0, delta=1.0) -> Matrix{ComplexF64}
@@ -50,7 +53,7 @@ Open-boundary nearest-neighbour Heisenberg chain, `sum_b h_b`.
 """
 function dense_heisenberg(L::Int; J::Float64 = 1.0, delta::Float64 = 1.0)
     H = zeros(ComplexF64, 2^L, 2^L)
-    for i in 1:(L - 1)
+    for i = 1:(L-1)
         H .+= dense_bond_term(L, i; J = J, delta = delta)
     end
     return H
@@ -68,15 +71,14 @@ reaching every pair of sites, and the only way to test that claim is to sum the 
 independently. `lambda = 0` leaves the `r = 1` pairs only, i.e. the nearest-neighbour
 chain -- the limit that ties this reference to `dense_heisenberg`.
 """
-function dense_long_range_zz(L::Int; J::Float64 = 1.0, Jz::Float64 = 1.0,
-                             lambda::Float64 = 0.5)
+function dense_long_range_zz(L::Int; J::Float64 = 1.0, Jz::Float64 = 1.0, lambda::Float64 = 0.5)
     H = zeros(ComplexF64, 2^L, 2^L)
-    for i in 1:(L - 1)                                   # nearest-neighbour XY
+    for i = 1:(L-1)                                   # nearest-neighbour XY
         sp1, sm1 = _embed(_SP, i, L), _embed(_SM, i, L)
         sp2, sm2 = _embed(_SP, i + 1, L), _embed(_SM, i + 1, L)
         H .+= J * 0.5 * (sp1 * sm2 + sm1 * sp2)
     end
-    for i in 1:(L - 1), j in (i + 1):L                   # the geometric ZZ tail
+    for i = 1:(L-1), j = (i+1):L                   # the geometric ZZ tail
         H .+= (Jz * lambda^(j - i - 1)) * (_embed(_SZ, i, L) * _embed(_SZ, j, L))
     end
     return H
@@ -93,11 +95,11 @@ power law is this with `Jr[r] = Jz r^-alpha`, and a fitted MPO is this with `Jr[
 measured as a difference of two matrices rather than inferred.
 """
 function dense_zz_tail(L::Int, Jr::AbstractVector{<:Real})
-    length(Jr) >= L - 1 || throw(ArgumentError(
-        "need couplings out to distance $(L - 1), got $(length(Jr))"))
+    length(Jr) >= L - 1 ||
+        throw(ArgumentError("need couplings out to distance $(L - 1), got $(length(Jr))"))
     H = zeros(ComplexF64, 2^L, 2^L)
-    for i in 1:(L - 1), j in (i + 1):L
-        H .+= Jr[j - i] * (_embed(_SZ, i, L) * _embed(_SZ, j, L))
+    for i = 1:(L-1), j = (i+1):L
+        H .+= Jr[j-i] * (_embed(_SZ, i, L) * _embed(_SZ, j, L))
     end
     return H
 end
@@ -117,14 +119,17 @@ Only the STRICT UPPER TRIANGLE is read, matching `pair_mpo`, so passing a symmet
 gives the same operator rather than twice it.
 """
 function dense_long_range_pairs(L::Int, J::AbstractMatrix)
-    size(J) == (L, L) || throw(DimensionMismatch(
-        "coupling matrix is $(size(J)), expected ($L, $L)"))
+    size(J) == (L, L) ||
+        throw(DimensionMismatch("coupling matrix is $(size(J)), expected ($L, $L)"))
     H = zeros(ComplexF64, 2^L, 2^L)
-    for i in 1:(L - 1), j in (i + 1):L
+    for i = 1:(L-1), j = (i+1):L
         J[i, j] == 0 && continue
-        H .+= J[i, j] * (0.5 * (_embed(_SP, i, L) * _embed(_SM, j, L) +
-                                _embed(_SM, i, L) * _embed(_SP, j, L)) +
-                         _embed(_SZ, i, L) * _embed(_SZ, j, L))
+        H .+=
+            J[i, j] * (
+                0.5 *
+                (_embed(_SP, i, L) * _embed(_SM, j, L) + _embed(_SM, i, L) * _embed(_SP, j, L)) +
+                _embed(_SZ, i, L) * _embed(_SZ, j, L)
+            )
     end
     return H
 end
@@ -132,7 +137,7 @@ end
 "`J Σ_i (Sx Sx + Sy Sy)_{i,i+1}`, the nearest-neighbour hopping shared by the long-range models."
 function dense_xy_chain(L::Int; J::Float64 = 1.0)
     H = zeros(ComplexF64, 2^L, 2^L)
-    for i in 1:(L - 1)
+    for i = 1:(L-1)
         sp1, sm1 = _embed(_SP, i, L), _embed(_SM, i, L)
         sp2, sm2 = _embed(_SP, i + 1, L), _embed(_SM, i + 1, L)
         H .+= J * 0.5 * (sp1 * sm2 + sm1 * sp2)
@@ -153,7 +158,7 @@ independently. `lambda = 0` leaves the `r = 1` pairs only, i.e. the nearest-neig
 chain -- the limit that ties this reference to `dense_heisenberg`.
 """
 dense_long_range_zz(L::Int; J::Float64 = 1.0, Jz::Float64 = 1.0, lambda::Float64 = 0.5) =
-    dense_xy_chain(L; J = J) .+ dense_zz_tail(L, [Jz * lambda^(r - 1) for r in 1:(L - 1)])
+    dense_xy_chain(L; J = J) .+ dense_zz_tail(L, [Jz * lambda^(r - 1) for r = 1:(L-1)])
 
 """
     dense_power_law_zz(L; J=1.0, Jz=1.0, alpha=3.0) -> Matrix{ComplexF64}
@@ -162,7 +167,7 @@ The same with a power-law tail, `Jz |i-j|^-alpha`. THE TRUE Hamiltonian a fitted
 approximates -- the thing the fit error is an error with respect to.
 """
 dense_power_law_zz(L::Int; J::Float64 = 1.0, Jz::Float64 = 1.0, alpha::Float64 = 3.0) =
-    dense_xy_chain(L; J = J) .+ dense_zz_tail(L, [Jz * float(r)^(-alpha) for r in 1:(L - 1)])
+    dense_xy_chain(L; J = J) .+ dense_zz_tail(L, [Jz * float(r)^(-alpha) for r = 1:(L-1)])
 
 """
     dense_parity_hamiltonian(L, parity; J, delta) -> Matrix{ComplexF64}
@@ -171,8 +176,7 @@ The sum of one commuting bond group. Its terms act on disjoint site pairs, so
 exponentiating this whole matrix is EXACT for the group -- no splitting error is
 introduced inside a group, only between them.
 """
-function dense_parity_hamiltonian(L::Int, parity::Symbol;
-                                  J::Float64 = 1.0, delta::Float64 = 1.0)
+function dense_parity_hamiltonian(L::Int, parity::Symbol; J::Float64 = 1.0, delta::Float64 = 1.0)
     H = zeros(ComplexF64, 2^L, 2^L)
     for i in parity_bonds(L, parity)
         H .+= dense_bond_term(L, i; J = J, delta = delta)
@@ -181,15 +185,14 @@ function dense_parity_hamiltonian(L::Int, parity::Symbol;
 end
 
 "`sum_j Sz_j` as a `2^L x 2^L` matrix."
-dense_total_sz(L::Int) =
-    sum(_embed(_SZ, j, L) for j in 1:L)
+dense_total_sz(L::Int) = sum(_embed(_SZ, j, L) for j = 1:L)
 
 # ── state ───────────────────────────────────────────────────────────────────
 
 "Contract a whole `SymMPS` into one tensor: (link_0, S_1 ... S_L, link_{L+1})."
 function _full_tensor(psi::SymMPS)
     T = psi[1]
-    for j in 2:length(psi)
+    for j = 2:length(psi)
         T = T * psi[j]
     end
     return to_concrete(T)
@@ -213,11 +216,11 @@ function dense_state(psi::SymMPS)
     L = length(psi)
     P = _full_tensor(psi)
     v = zeros(ComplexF64, 2^L)
-    for idx in 0:(2^L - 1)
-        spins = [((idx >> (L - j)) & 1) == 0 ? :up : :down for j in 1:L]
+    for idx = 0:(2^L-1)
+        spins = [((idx >> (L - j)) & 1) == 0 ? :up : :down for j = 1:L]
         cfg = product_state(spins)
         psi[L].spaces[3] == cfg[L].spaces[3] || continue    # charge-forbidden
-        v[idx + 1] = tensor_inner(_full_tensor(cfg), P)
+        v[idx+1] = tensor_inner(_full_tensor(cfg), P)
     end
     return v
 end
@@ -230,8 +233,7 @@ end
 `exp(-i t H) v`. The unsplit reference: any Trotter scheme differs from this at
 its own order, so a splitting integrator can never match it to machine precision.
 """
-dense_exact_propagate(H::AbstractMatrix, v::AbstractVector, t::Real) =
-    exp(-im * t * Matrix(H)) * v
+dense_exact_propagate(H::AbstractMatrix, v::AbstractVector, t::Real) = exp(-im * t * Matrix(H)) * v
 
 """
     dense_trotter_propagate(L, v, dt, n_steps; J, delta, order=:strang)
@@ -240,11 +242,17 @@ The reference the integrator CAN match to machine precision: the same odd/even
 split, each group exponentiated exactly, applied in the order the sweep applies
 them (even first, then odd; for `:strang`, even at half step on both sides).
 """
-function dense_trotter_propagate(L::Int, v::AbstractVector, dt::Real, n_steps::Int;
-                                 J::Float64 = 1.0, delta::Float64 = 1.0,
-                                 order::Symbol = :strang)
+function dense_trotter_propagate(
+    L::Int,
+    v::AbstractVector,
+    dt::Real,
+    n_steps::Int;
+    J::Float64 = 1.0,
+    delta::Float64 = 1.0,
+    order::Symbol = :strang,
+)
     He = dense_parity_hamiltonian(L, :even; J = J, delta = delta)
-    Ho = dense_parity_hamiltonian(L, :odd;  J = J, delta = delta)
+    Ho = dense_parity_hamiltonian(L, :odd; J = J, delta = delta)
     U = if order === :strang
         Uh = exp(-im * (dt / 2) * He)
         Uh * exp(-im * dt * Ho) * Uh        # rightmost acts first
@@ -254,7 +262,7 @@ function dense_trotter_propagate(L::Int, v::AbstractVector, dt::Real, n_steps::I
         throw(ArgumentError("order must be :strang or :lie, got $order"))
     end
     w = ComplexF64.(v)
-    for _ in 1:n_steps
+    for _ = 1:n_steps
         w = U * w
     end
     return w

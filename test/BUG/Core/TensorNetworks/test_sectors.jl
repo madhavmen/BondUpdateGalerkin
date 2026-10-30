@@ -6,8 +6,9 @@ using Test, LinearAlgebra, LurCGT, Telum
 using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
 
 function mps_sum(a::SymMPS, b::SymMPS)
-    L = length(a); ts = Any[]
-    for i in 1:L
+    L = length(a)
+    ts = Any[]
+    for i = 1:L
         dims = i == 1 ? (3,) : (i == L ? (1,) : (1, 3))
         push!(ts, to_concrete(oplus(a[i], b[i], dims)))
     end
@@ -17,7 +18,8 @@ end
 @testset "sector enumeration" begin
 
     @testset "reachable sectors of link(x)site cover the fused charges" begin
-        psi = domain_wall_state(4); canonical!(psi, 1)
+        psi = domain_wall_state(4)
+        canonical!(psi, 1)
         f = bond_frame(psi, 1)
         secs = reachable_sectors(f.U0, 1, 2)
         # `dim(f.link_l)` is impossible -- a TLIndex carries no dimension.
@@ -30,16 +32,20 @@ end
         # reachable set is {+q,-q}, which is its own dual, so a spurious extra
         # dual still passes -- that false pass hid a real sign bug (job 93413).
         saw_charged_link = Ref(false)
-        for psi in (domain_wall_state(4), neel_state(6),
-                    mps_sum(product_state([:up, :down, :up, :down]),
-                            product_state([:down, :up, :up, :down])))
-            for i in 1:(length(psi) - 1)
+        for psi in (
+            domain_wall_state(4),
+            neel_state(6),
+            mps_sum(
+                product_state([:up, :down, :up, :down]),
+                product_state([:down, :up, :up, :down]),
+            ),
+        )
+            for i = 1:(length(psi)-1)
                 canonical!(psi, i)
                 f = bond_frame(psi, i)
                 t = f.U0
                 viaTelum = reachable_sectors(t, 1, 2)
-                mine = fuse_spaces(symm(t), t.spaces[1], t.inds[1].dir,
-                                             t.spaces[2], t.inds[2].dir)
+                mine = fuse_spaces(symm(t), t.spaces[1], t.inds[1].dir, t.spaces[2], t.inds[2].dir)
                 any(q != dual_charge(symm(t), q) for (q, _) in t.spaces[1]) &&
                     (saw_charged_link[] = true)
                 @test sort(collect(viaTelum), by = string) == sort(collect(mine), by = string)

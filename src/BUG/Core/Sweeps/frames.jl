@@ -40,25 +40,32 @@ produce a tensor carrying two identical `TLIndex`es -- Telum rejects that with
 """
 function bond_frame(psi::SymMPS, i::Int)
     1 <= i < length(psi) || throw(BoundsError(psi, i))
-    psi.center == i || throw(ArgumentError(
-        "bond_frame requires the orthogonality centre on site $i, got $(psi.center)"))
+    psi.center == i || throw(
+        ArgumentError("bond_frame requires the orthogonality centre on site $i, got $(psi.center)"),
+    )
 
-    left  = psi[i]      # (link_l, site_l, link_mid)
-    right = psi[i + 1]  # (link_mid, site_r, link_r)
+    left = psi[i]      # (link_l, site_l, link_mid)
+    right = psi[i+1]  # (link_mid, site_r, link_r)
 
-    res_l = svd(left,  (1, 2), "bU,L", "bU,R"; cutoff = 0.0)
-    res_r = svd(right, (1,),   "bV,L", "bV,R"; cutoff = 0.0)
+    res_l = svd(left, (1, 2), "bU,L", "bU,R"; cutoff = 0.0)
+    res_r = svd(right, (1,), "bV,L", "bV,R"; cutoff = 0.0)
 
     U0 = to_concrete(res_l.U)    # (link_l, site_l, bU,L)   -- left isometry
     V0 = to_concrete(res_r.Vd)   # (bV,R, site_r, link_r)   -- right isometry
 
-    s_left  = res_l.S * res_l.Vd     # (bU,L, link_mid)
+    s_left = res_l.S * res_l.Vd     # (bU,L, link_mid)
     s_right = res_r.U * res_r.S      # (link_mid, bV,R)
     S0 = to_concrete(s_left * s_right)   # (bU,L, bV,R)
 
     return BondFrame(
-        U0, S0, V0,
-        left.inds[1], left.inds[2], left.inds[3], right.inds[2], right.inds[3],
+        U0,
+        S0,
+        V0,
+        left.inds[1],
+        left.inds[2],
+        left.inds[3],
+        right.inds[2],
+        right.inds[3],
         leg_dim(U0, 3),
         copy(left.spaces[3]),
     )
@@ -78,4 +85,4 @@ frame_theta(f::BondFrame) = to_concrete((f.U0 * f.S0) * f.V0)
 The uncontracted two-site block `psi[i] * psi[i+1]`, same leg order as
 `frame_theta`. Used to check the snapshot is exact.
 """
-two_site_block(psi::SymMPS, i::Int) = to_concrete(psi[i] * psi[i + 1])
+two_site_block(psi::SymMPS, i::Int) = to_concrete(psi[i] * psi[i+1])

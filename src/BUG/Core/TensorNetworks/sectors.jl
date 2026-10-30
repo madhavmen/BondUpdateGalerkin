@@ -22,8 +22,8 @@ so use [`reachable_sectors`](@ref), which delegates to Telum's own
 function add_charge(syms, qa, qb)
     return ntuple(length(syms)) do n
         s = syms[n]
-        isabelian(s) || throw(ArgumentError(
-            "add_charge is abelian-only; use reachable_sectors for $(s)"))
+        isabelian(s) ||
+            throw(ArgumentError("add_charge is abelian-only; use reachable_sectors for $(s)"))
         (add_qn(s, qa[n][1], qb[n][1]),)
     end
 end
@@ -36,7 +36,7 @@ the frame convention (incoming legs dualised, sum, dualise once more). Abelian o
 link cannot tell the sign convention apart, so test on charged links.
 """
 function fuse_spaces(syms, space_a, dir_a::Char, space_b, dir_b::Char)
-    acc = Dict{Any, Int}()
+    acc = Dict{Any,Int}()
     order = Any[]
     for (qa, da) in space_a, (qb, db) in space_b
         ca = dir_a == '+' ? dual_charge(syms, qa) : qa
@@ -53,7 +53,7 @@ Memo for [`fusion_basis`](@ref) and its hit/miss counters. The result depends on
 spaces, arrows, tags and prime levels, so it is memoised; the key carries itags and arrows, a copy
 is returned, and the lock (held only around the Dict) makes it safe under the parallel half-sweeps.
 """
-const _FUSION_CACHE = Dict{Any, Any}()
+const _FUSION_CACHE = Dict{Any,Any}()
 const _FUSION_LOCK = ReentrantLock()
 const _FUSION_CALLS = Ref(0)
 const _FUSION_MISSES = Ref(0)
@@ -67,10 +67,10 @@ equal). An insert that would pass the budget empties the memo first; within a st
 recur, so the reuse the memo exists for survives. `nothing` = unbounded (before 2026-10-27). 2^28 elements (2-4 GB) holds one
 step's legs at D ~ 1024, d = 4 (~200 keys of up to ~6e5 elements), so a step does not thrash it.
 """
-const _FUSION_BUDGET = Ref{Union{Nothing, Int}}(2^28)
+const _FUSION_BUDGET = Ref{Union{Nothing,Int}}(2^28)
 
 "Set the memo's element budget (`nothing` = unbounded); returns the previous one."
-function set_fusion_budget!(n::Union{Nothing, Integer})
+function set_fusion_budget!(n::Union{Nothing,Integer})
     n === nothing || n > 0 || throw(ArgumentError("fusion budget must be positive, got $n"))
     old = _FUSION_BUDGET[]
     _FUSION_BUDGET[] = n === nothing ? nothing : Int(n)
@@ -78,8 +78,12 @@ function set_fusion_budget!(n::Union{Nothing, Integer})
 end
 
 "Calls and misses since the last `reset_fusion_stats!`; distinct keys and stored elements now."
-fusion_stats() = (calls = _FUSION_CALLS[], misses = _FUSION_MISSES[],
-                  keys = length(_FUSION_CACHE), elems = _FUSION_ELEMS[])
+fusion_stats() = (
+    calls = _FUSION_CALLS[],
+    misses = _FUSION_MISSES[],
+    keys = length(_FUSION_CACHE),
+    elems = _FUSION_ELEMS[],
+)
 
 "Zero the counters (NOT the cache) so a step can be attributed on its own."
 function reset_fusion_stats!()
@@ -96,8 +100,8 @@ function clear_fusion_cache!()
     return nothing
 end
 
-_leg_key(t, l::Int) = (t.spaces[l], t.inds[l].dir, string(t.inds[l].itags),
-                       t.inds[l].plev, t.inds[l].lock)
+_leg_key(t, l::Int) =
+    (t.spaces[l], t.inds[l].dir, string(t.inds[l].itags), t.inds[l].plev, t.inds[l].lock)
 
 """
     fusion_basis(t, leg_a=1, leg_b=2; tag="fused") -> TLArray
@@ -170,8 +174,7 @@ an outgoing leg and `dual(q)` on an incoming one. `U0`'s bond leg comes from
 (measured, job 93412), so comparing their `spaces` without this conversion
 silently mismatches every non-self-dual sector.
 """
-align_charge(syms, q, from_dir::Char, to_dir::Char) =
-    from_dir == to_dir ? q : dual_charge(syms, q)
+align_charge(syms, q, from_dir::Char, to_dir::Char) = from_dir == to_dir ? q : dual_charge(syms, q)
 
 """
     perp_component(U0, K1) -> TLArray

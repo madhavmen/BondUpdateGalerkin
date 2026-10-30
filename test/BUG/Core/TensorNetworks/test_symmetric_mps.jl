@@ -15,7 +15,7 @@ using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
 
     @testset "site tensors have the documented leg layout" begin
         psi = domain_wall_state(6)
-        for i in 1:6
+        for i = 1:6
             A = psi[i]
             @test length(A.inds) == 3
             @test A.inds[1].itags == "L,$i"
@@ -26,8 +26,8 @@ using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
             @test leg_dim(A, 2) == 2
         end
         # bonds carry opposite arrows -- the invariant canonical! maintains
-        for i in 1:5
-            @test psi[i].inds[3].dir != psi[i + 1].inds[1].dir
+        for i = 1:5
+            @test psi[i].inds[3].dir != psi[i+1].inds[1].dir
         end
     end
 
@@ -45,16 +45,16 @@ using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
     @testset "canonical! keeps the bond arrow invariant" begin
         psi = neel_state(6)
         canonical!(psi, 2)                       # forces left moves
-        for i in 1:5
-            @test psi[i].inds[3].dir != psi[i + 1].inds[1].dir
-            @test psi[i].inds[3].itags == psi[i + 1].inds[1].itags
+        for i = 1:5
+            @test psi[i].inds[3].dir != psi[i+1].inds[1].dir
+            @test psi[i].inds[3].itags == psi[i+1].inds[1].itags
         end
     end
 
     @testset "canonical! makes every tensor left of the centre a left isometry" begin
         psi = domain_wall_state(6)
         canonical!(psi, 4)
-        for i in 1:3
+        for i = 1:3
             gram = left_gram(psi[i])             # NOT psi[i]' * psi[i] -- see below
             @test isapprox(norm(gram - 1), 0.0; atol = 1e-12)
         end
@@ -63,7 +63,7 @@ using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
     @testset "canonical! makes every tensor right of the centre a right isometry" begin
         psi = neel_state(6)
         canonical!(psi, 2)
-        for i in 3:6
+        for i = 3:6
             gram = right_gram(psi[i])
             @test isapprox(norm(gram - 1), 0.0; atol = 1e-12)
         end
