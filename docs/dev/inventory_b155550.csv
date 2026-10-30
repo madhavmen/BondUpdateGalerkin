@@ -1,0 +1,440 @@
+path,area,kind,target,treatment,references
+src/BondUpdateBUG/BondUpdateBUG.jl,src,core,"BUG/BUG.jl, QMB/QMB.jl",Replaced by the new module entry points,BondUpdateBUG Telum LurCGT
+src/BondUpdateBUG/expv.jl,src,core,BUG/Core/LocalSolvers/krylov.jl,Move,Telum
+src/BondUpdateBUG/expv_root_methods.jl,src,core,"BUG/Core/LocalSolvers/krylov.jl (Lanczos/Arnoldi), root_methods.jl (exp, trapezoid, Radau)",Split,Telum
+src/BondUpdateBUG/frame.jl,src,core,BUG/Core/Sweeps/frames.jl,Move,Telum
+src/BondUpdateBUG/gates.jl,src,core,apply_gate -> BUG/Core/TensorNetworks/mpo.jl; Heisenberg/magnetisation gates -> QMB/Tooling/gates.jl,Split,Telum
+src/BondUpdateBUG/observables.jl,src,core,QMB/Observables/bond_observables.jl,"Move (`energy`, `parity_bonds`, bond spectra)",
+src/BondUpdateBUG/sectors.jl,src,core,BUG/Core/TensorNetworks/sectors.jl,Move,Telum
+src/BondUpdateBUG/sweep.jl,src,core,QMB/Observables/bond_observables.jl,"Move (`energy`, `parity_bonds`, bond spectra)",Telum
+src/BondUpdateBUG/symmetric_mps.jl,src,core,"BUG/Core/TensorNetworks/symmetric_mps.jl; product_state, sector_product_state, dimer_state -> QMB/Tooling/initial_states.jl",Split,Telum
+src/BondUpdateBUG/symmetric_mps_canonical.jl,src,core,"BUG/Core/TensorNetworks/canonical_form.jl; site_expval, apply_sz!, sz_overlaps -> QMB/Observables/local_observables.jl",Split,
+src/BondUpdateBUG/z2_ising.jl,src,core,QMB/Models/ClosedSystem/z2_ising.jl; ising_local_space -> QMB/Tooling/local_spaces.jl,Split,RSVDCBEBondUpdate Telum LurCGT
+src/BUGJulia.jl,src,core,src/BondUpdateGalerkin.jl,Replaced (module root; the precompile workload is rebuilt with PrecompileTools later),BondUpdateBUG RSVDCBEBondUpdate Telum
+src/RSVDCBEBondUpdate/baselines/dmrg_cbe1s.jl,src,baseline,Baselines/DMRG/dmrg_cbe.jl,Merge,
+src/RSVDCBEBondUpdate/baselines/dmrg_cbe1s_driver.jl,src,baseline,Baselines/DMRG/dmrg_cbe.jl,Merge,
+src/RSVDCBEBondUpdate/baselines/ground_state.jl,src,baseline,Baselines/DMRG/dmrg_cbe.jl,Merge,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+src/RSVDCBEBondUpdate/baselines/tdvp1_cbe.jl,src,baseline,Baselines/TDVP/tdvp1_cbe.jl,Merge; keep only variants used by a maintained comparison,
+src/RSVDCBEBondUpdate/baselines/tdvp1_cbe_variants.jl,src,baseline,Baselines/TDVP/tdvp1_cbe.jl,Merge; keep only variants used by a maintained comparison,
+src/RSVDCBEBondUpdate/baselines/tdvp2.jl,src,baseline,Baselines/TDVP/tdvp2.jl,Move,BondUpdateBUG Telum
+src/RSVDCBEBondUpdate/baselines/tdvp_cbe1s.jl,src,baseline,Baselines/TDVP/tdvp1_cbe.jl,Merge; keep only variants used by a maintained comparison,
+src/RSVDCBEBondUpdate/budget/adaptive_budget.jl,src,core,BUG/Core/RankAdaptation/basis_budget.jl,Move,
+src/RSVDCBEBondUpdate/budget/multiplets.jl,src,core,BUG/Core/TensorNetworks/sectors.jl,Merge,
+src/RSVDCBEBondUpdate/bug/cbe_bug.jl,src,core,BUG/TimeEvolution/bug_step.jl,Move; expansion calls go through the strategy interface,Telum
+src/RSVDCBEBondUpdate/bug/cbe_bug_info.jl,src,core,BUG/Core/diagnostics.jl,Move,
+src/RSVDCBEBondUpdate/bug/cbe_bug_midpoint.jl,src,core,BUG/TimeEvolution/midpoint.jl,Move,
+src/RSVDCBEBondUpdate/bug/frontier_sweeps.jl,src,core,BUG/Core/Sweeps/,Move,Telum
+src/RSVDCBEBondUpdate/bug/half_sweeps.jl,src,core,BUG/Core/Sweeps/,Move,
+src/RSVDCBEBondUpdate/bug/imaginary_time.jl,src,core,"BUG/ITE/ite_step.jl; log_panel_steps, uniform_beta_steps -> BUG/ITE/schedules.jl",Split,
+src/RSVDCBEBondUpdate/bug/krylov_closure.jl,src,core,BUG/Core/RankAdaptation/krylov_enrichment.jl,Merge,
+src/RSVDCBEBondUpdate/bug/krylov_closure_loop.jl,src,core,BUG/Core/RankAdaptation/krylov_enrichment.jl,Merge,
+src/RSVDCBEBondUpdate/bug/krylov_enrich.jl,src,core,BUG/Core/RankAdaptation/krylov_enrichment.jl,Merge,Telum
+src/RSVDCBEBondUpdate/bug/krylov_recycle.jl,src,core,BUG/Core/LocalSolvers/krylov_recycle.jl,Move,
+src/RSVDCBEBondUpdate/bug/parallel_kls.jl,src,core,BUG/Core/Sweeps/,Move,
+src/RSVDCBEBondUpdate/bug/quantum_jumps.jl,src,domain,QMB/Models/OpenSystem/MCWF/quantum_jumps.jl,Move; the no-jump segment keeps calling the BUG step,
+src/RSVDCBEBondUpdate/expansion/bond_expansion.jl,src,core,BUG/Randomised/cbe.jl,Merge into one CBE strategy; `lanczos_lowest` goes to `Baselines/DMRG` if only DMRG uses it,
+src/RSVDCBEBondUpdate/expansion/cbe_bond_update.jl,src,core,BUG/Randomised/cbe.jl,Merge into one CBE strategy; `lanczos_lowest` goes to `Baselines/DMRG` if only DMRG uses it,BondUpdateBUG
+src/RSVDCBEBondUpdate/expansion/cbe_core.jl,src,core,BUG/Randomised/cbe.jl,Merge into one CBE strategy; `lanczos_lowest` goes to `Baselines/DMRG` if only DMRG uses it,Telum
+src/RSVDCBEBondUpdate/expansion/cbe_expand.jl,src,core,BUG/Randomised/cbe.jl,Merge into one CBE strategy; `lanczos_lowest` goes to `Baselines/DMRG` if only DMRG uses it,Telum
+src/RSVDCBEBondUpdate/expansion/cbe_options.jl,src,core,Solver options -> BUG/solve.jl; CBEBugRunInfo -> BUG/Core/diagnostics.jl,Split,
+src/RSVDCBEBondUpdate/expansion/cbe_range.jl,src,core,BUG/Randomised/range_finder.jl,Move,
+src/RSVDCBEBondUpdate/expansion/cbe_sketch.jl,src,core,BUG/Randomised/sketch.jl,Move,Telum
+src/RSVDCBEBondUpdate/expansion/dd_cbe.jl,src,core,BUG/Randomised/dd_cbe.jl,Merge,Telum
+src/RSVDCBEBondUpdate/expansion/dd_cbe_controller.jl,src,core,BUG/Randomised/dd_cbe.jl,Merge,Telum
+src/RSVDCBEBondUpdate/models/breathing_kagome.jl,src,study,studies/,Not in the package until maintained (WP4),
+src/RSVDCBEBondUpdate/models/dissipative.jl,src,domain,QMB/Models/OpenSystem/jump_channels.jl,Move (channels and jump MPOs serve both MPDO and MCWF),Telum
+src/RSVDCBEBondUpdate/models/haldane_shastry.jl,src,study,studies/,Not in the package until maintained (WP4),Telum
+src/RSVDCBEBondUpdate/models/hubbard_d4.jl,src,domain,"QMB/Models/ClosedSystem/pxp.jl, mbl.jl, hubbard.jl",Move; `pair_loss_junction` -> `OpenSystem/jump_channels.jl`,Telum
+src/RSVDCBEBondUpdate/models/kagome.jl,src,study,studies/,Not in the package until maintained (WP4),
+src/RSVDCBEBondUpdate/models/liouville.jl,src,domain,"QMB/Models/OpenSystem/MPDO/liouville_space.jl; dissipator_super, lindblad_mpo -> lindblad_mpo.jl",Split,Telum LurCGT
+src/RSVDCBEBondUpdate/models/liouville_blocks.jl,src,domain,QMB/Models/OpenSystem/MPDO/mpdo_observables.jl,Move,
+src/RSVDCBEBondUpdate/models/mbl_scars.jl,src,domain,"QMB/Models/ClosedSystem/pxp.jl, mbl.jl, hubbard.jl",Move; `pair_loss_junction` -> `OpenSystem/jump_channels.jl`,
+src/RSVDCBEBondUpdate/models/oat.jl,src,domain,"QMB/Models/ClosedSystem/tfim.jl, oat.jl",Move,Telum
+src/RSVDCBEBondUpdate/models/pair_mpo.jl,src,domain,QMB/Tooling/pair_mpo.jl,Move,Telum
+src/RSVDCBEBondUpdate/models/pxp_scars.jl,src,domain,"QMB/Models/ClosedSystem/pxp.jl, mbl.jl, hubbard.jl",Move; `pair_loss_junction` -> `OpenSystem/jump_channels.jl`,Telum
+src/RSVDCBEBondUpdate/models/spin_xx.jl,src,domain,QMB/Models/ClosedSystem/xx.jl; spin_space -> QMB/Tooling/local_spaces.jl,Split,Telum
+src/RSVDCBEBondUpdate/models/square_cylinder.jl,src,study,studies/,Not in the package until maintained (WP4),
+src/RSVDCBEBondUpdate/models/tfim.jl,src,domain,"QMB/Models/ClosedSystem/tfim.jl, oat.jl",Move,
+src/RSVDCBEBondUpdate/models/triangular_cylinder.jl,src,study,studies/,Not in the package until maintained (WP4),
+src/RSVDCBEBondUpdate/operators/henv.jl,src,core,"XXZTerm, XXZChain, xxz_chain, heisenberg_su2_chain -> QMB/Models/ClosedSystem/xxz.jl; ZeroEnv, ChannelSet, channel pushes -> BUG/Core/Environments/environment_stacks.jl",Split,Telum
+src/RSVDCBEBondUpdate/operators/henv_stacks.jl,src,core,BUG/Core/Environments/environment_stacks.jl,Move,Telum
+src/RSVDCBEBondUpdate/operators/mpo.jl,src,core,"MPO, mpo_from_terms, onsite_mpo, mpo_sum -> BUG/Core/TensorNetworks/mpo.jl; heisenberg_su2_mpo -> QMB/Models/ClosedSystem/xxz.jl; long-range terms and fits -> QMB/Tooling/long_range_mpo.jl",Split,Telum
+src/RSVDCBEBondUpdate/operators/mpo_apply.jl,src,core,BUG/Core/TensorNetworks/mpo.jl,Merge,
+src/RSVDCBEBondUpdate/operators/mpo_env.jl,src,core,BUG/Core/Environments/mpo_environments.jl,Move,Telum
+src/RSVDCBEBondUpdate/operators/mpo_fold.jl,src,core,"BUG/Core/Environments/effective_operators.jl; truncate_sweep!, truncate_recursive! -> BUG/Core/RankAdaptation/truncation.jl",Split,
+src/RSVDCBEBondUpdate/operators/zero_site_core.jl,src,core,"BUG/Core/Environments/effective_operators.jl; truncate_sweep!, truncate_recursive! -> BUG/Core/RankAdaptation/truncation.jl",Split,Telum
+src/RSVDCBEBondUpdate/qtt/qtt_cores.jl,src,domain,"tt_from_*, tt_compress, tt_dot, tt_norm, tt_evaluate, qtt_embed, qtt_function, qtt_separable, qtt_values -> QTTS/Tooling/cores.jl; op_* -> QTTS/Tooling/mpo_algebra.jl; tt_hadamard, tt_product, zip-up -> QTTS/Elementwise/products.jl; tt_conj, tt_scale, tt_density, tt_add, tt_lincomb -> QTTS/Elementwise/pointwise.jl",Split,Telum
+src/RSVDCBEBondUpdate/qtt/qtt_flows.jl,src,domain,"QTTFlow, LinearFlow, flow_op, flow_jac_ops, frozen_flow -> BUG/TimeEvolution/flows.jl (GPFlow -> gross_pitaevskii.jl); QTTFrames, frame_*, reduced_field, reduced_jacobian, RK_TABLEAUX, rk_stage_solve, _gmres_real, _unpack -> BUG/TimeEvolution/stage_solvers.jl, ported onto Core/Interfaces; qtt_bug_step!, _replace_state! -> merged into BUG/TimeEvolution/bug_step.jl; _tc, _env_*, _eff1, _eff2, _op_expect -> replaced by BUG/Core/Environments; tt_expv, _dense_expv -> replaced by BUG/Core/LocalSolvers; qtt_tdvp2_step!, qtt_split_tdvp_step! -> merged into Baselines/TDVP","Split, port and deduplicate (WP3); requires before/after fixtures from WP0",Telum
+src/RSVDCBEBondUpdate/qtt/qtt_grid.jl,src,domain,QTTS/Tooling/grid.jl,Move,
+src/RSVDCBEBondUpdate/qtt/qtt_imaginary.jl,src,domain,"uniform_schedule, geometric_schedule -> BUG/ITE/schedules.jl; gp_ground_state!, gp_gradient_descent! -> GrossPitaevskii/ground_state.jl",Split,
+src/RSVDCBEBondUpdate/qtt/qtt_models.jl,src,domain,"qtt_d, qtt_coord_diag, qtt_op -> QTTS/Tooling/operator_assembly.jl; GP model/Hamiltonian/vector field/JVP -> QTTS/Models/GrossPitaevskii/gross_pitaevskii.jl; GPPaddle, paddle_state, gp_paddle_op -> paddle.jl; Heston -> QTTS/Models/Heston/heston.jl",Split; `gp_bug_step!` dropped (callers use `BUG.solve`),
+src/RSVDCBEBondUpdate/qtt/qtt_observables.jl,src,domain,"qtt_normalize!, qtt_sample -> QTTS/Tooling/sampling.jl; gp_parts, gp_observables, vortex_count -> GrossPitaevskii/observables.jl; heston_* -> Heston/heston_reference.jl",Split,
+src/RSVDCBEBondUpdate/qtt/qtt_ops1d.jl,src,domain,QTTS/Tooling/derivatives.jl,Move,
+src/RSVDCBEBondUpdate/qtt/qtt_telum.jl,src,domain,QTTS/Tooling/state_adapter.jl,Move,Telum
+src/RSVDCBEBondUpdate/RSVDCBEBondUpdate.jl,src,core,"BUG/BUG.jl, QMB/QMB.jl",Replaced by the new module entry points,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/BondUpdateBUG/test_expv.jl,tests,core,test/BUG/Core/LocalSolvers/test_krylov.jl,"Move, grouped by tested behaviour",BondUpdateBUG Telum LurCGT
+tests/BondUpdateBUG/test_frame.jl,tests,core,test/BUG/Core/Sweeps/test_frames.jl,"Move, grouped by tested behaviour",BondUpdateBUG Telum LurCGT
+tests/BondUpdateBUG/test_fusion_cache.jl,tests,core,test/BUG/Core/TensorNetworks/test_sectors.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/BondUpdateBUG/test_gates.jl,tests,core,test/BUG/Core/TensorNetworks/test_mpo.jl (apply_gate) + QMB/Tooling/test_gates.jl,"Move, grouped by tested behaviour",BondUpdateBUG Telum LurCGT
+tests/BondUpdateBUG/test_sectors.jl,tests,core,test/BUG/Core/TensorNetworks/test_sectors.jl,"Move, grouped by tested behaviour",BondUpdateBUG Telum LurCGT
+tests/BondUpdateBUG/test_symmetric_mps.jl,tests,core,test/BUG/Core/TensorNetworks/test_symmetric_mps.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/BondUpdateBUG/test_z2_ising.jl,tests,core,test/QMB/ClosedSystem/test_z2_ising.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum
+tests/common/adaptive_fixtures.jl,tests,core,test/common/adaptive_fixtures.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum
+tests/common/analytic_reference.jl,tests,core,test/common/analytic_reference.jl,"Move, grouped by tested behaviour",
+tests/common/bug_tolerances.jl,tests,core,test/common/bug_tolerances.jl,"Move, grouped by tested behaviour",
+tests/common/dd_fixtures.jl,tests,core,test/common/dd_fixtures.jl,"Move, grouped by tested behaviour",
+tests/common/dense_lindblad.jl,tests,core,test/common/dense_lindblad.jl,"Move, grouped by tested behaviour",BondUpdateBUG
+tests/common/dense_reference.jl,tests,core,test/common/dense_reference.jl,"Move, grouped by tested behaviour",BondUpdateBUG Telum LurCGT
+tests/common/dissipative_fixtures.jl,tests,core,test/common/dissipative_fixtures.jl,"Move, grouped by tested behaviour",Telum
+tests/common/free_fermion.jl,tests,core,test/common/free_fermion.jl,"Move, grouped by tested behaviour",
+tests/common/free_fermion_open.jl,tests,core,test/common/free_fermion_open.jl,"Move, grouped by tested behaviour",RSVDCBEBondUpdate
+tests/common/krylov_closure_fixtures.jl,tests,core,test/common/krylov_closure_fixtures.jl,"Move, grouped by tested behaviour",
+tests/common/liouville_fixtures.jl,tests,core,test/common/liouville_fixtures.jl,"Move, grouped by tested behaviour",
+tests/common/qtt_fixtures.jl,tests,core,test/common/qtt_fixtures.jl,"Move, grouped by tested behaviour",
+tests/common/ramped_tdvp.jl,tests,core,test/common/ramped_tdvp.jl,"Move, grouped by tested behaviour",
+tests/common/spin_ed.jl,tests,core,test/common/spin_ed.jl,"Move, grouped by tested behaviour",Telum
+tests/common/spin_jw.jl,tests,core,test/common/spin_jw.jl,"Move, grouped by tested behaviour",
+tests/common/test_analytic_reference.jl,tests,core,test/common/test_analytic_reference.jl,"Move, grouped by tested behaviour",
+tests/common/test_dense_reference.jl,tests,core,test/common/test_dense_reference.jl,"Move, grouped by tested behaviour",BondUpdateBUG Telum LurCGT
+tests/common/test_exact_sparse.jl,tests,core,test/common/test_exact_sparse.jl,"Move, grouped by tested behaviour",
+tests/common/xx_efficiency_fixtures.jl,tests,core,test/common/xx_efficiency_fixtures.jl,"Move, grouped by tested behaviour",
+tests/common/xx_free_fermion.jl,tests,core,test/common/xx_free_fermion.jl,"Move, grouped by tested behaviour",
+tests/runtests.jl,tests,core,test/runtests.jl,"Move, grouped by tested behaviour",BondUpdateBUG
+tests/submit_full_test_suite.slurm,tests,core,not copied (CI runs the suite),"Move, grouped by tested behaviour",
+tests/sweeps/runtests.jl,tests,core,test/runtests.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_adaptive_api.jl,tests,core,test/BUG/test_solve_options.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_adaptive_compression.jl,tests,core,test/BUG/Core/RankAdaptation/test_truncation.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_adaptive_diagnostics.jl,tests,core,test/BUG/Core/test_diagnostics.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_adaptive_dmrg.jl,tests,core,test/Baselines/test_dmrg.jl,"Move, grouped by tested behaviour",RSVDCBEBondUpdate
+tests/sweeps/test_adaptive_expv.jl,tests,core,test/BUG/Core/LocalSolvers/test_krylov.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_adaptive_krylov.jl,tests,core,test/BUG/Core/RankAdaptation/test_krylov_enrichment.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_adaptive_parallel.jl,tests,core,test/BUG/TimeEvolution/test_parallel.jl,"Move, grouped by tested behaviour",
+tests/sweeps/test_adaptive_rsvd.jl,tests,core,test/BUG/Randomised/test_cbe.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_adaptive_search.jl,tests,core,test/BUG/Randomised/test_cbe.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_cbe_bug_exact_refs.jl,tests,core,test/QMB/ClosedSystem/test_exact_refs.jl,"Move, grouped by tested behaviour",
+tests/sweeps/test_dd_cbe.jl,tests,core,test/BUG/Randomised/test_dd_cbe.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_dd_cbe_controller.jl,tests,core,test/BUG/Randomised/test_dd_cbe.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_dissipative_t1.jl,tests,core,test/QMB/OpenSystem/MCWF/test_no_jump.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_dissipative_t2.jl,tests,core,test/QMB/OpenSystem/MCWF/test_no_jump.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_dissipative_t2_g12.jl,tests,core,test/QMB/OpenSystem/MCWF/test_no_jump.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_dissipative_t3_a1.jl,tests,core,test/QMB/OpenSystem/MCWF/test_models.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_dissipative_t3_a2.jl,tests,core,test/QMB/OpenSystem/MCWF/test_models.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_dissipative_t4.jl,tests,core,test/QMB/OpenSystem/MCWF/test_quantum_jumps.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_dissipative_t4_b.jl,tests,core,test/QMB/OpenSystem/MCWF/test_quantum_jumps.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_dissipative_t4_conv.jl,tests,core,test/QMB/OpenSystem/MCWF/test_quantum_jumps.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_dissipative_t5.jl,tests,core,test/QMB/OpenSystem/MCWF/test_quantum_jumps.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_dissipative_t6.jl,tests,core,test/QMB/OpenSystem/MCWF/test_quantum_jumps.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_dissipative_u18.jl,tests,core,test/QMB/OpenSystem/MCWF/test_no_jump.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_env_inplace.jl,tests,core,test/BUG/Core/Environments/test_environment_stacks.jl,"Move, grouped by tested behaviour",RSVDCBEBondUpdate Telum
+tests/sweeps/test_hq_kernels.jl,tests,core,test/BUG/Randomised/test_dd_cbe.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_hq_root.jl,tests,core,test/BUG/Core/LocalSolvers/test_root_methods.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_imaginary_time.jl,tests,core,test/BUG/ITE/test_ite_step.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_kagome.jl,tests,study,studies/ (with kagome.jl),"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_krylov_closure.jl,tests,core,test/BUG/Core/RankAdaptation/test_krylov_enrichment.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_krylov_closure_steps.jl,tests,core,test/BUG/Core/RankAdaptation/test_krylov_enrichment.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_krylov_recycle.jl,tests,core,test/BUG/Core/LocalSolvers/test_krylov_recycle.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_liouville.jl,tests,core,test/QMB/OpenSystem/MPDO/test_liouville.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_oat.jl,tests,core,test/QMB/ClosedSystem/test_oat.jl,"Move, grouped by tested behaviour",Telum
+tests/sweeps/test_pair_mpo.jl,tests,core,test/QMB/Tooling/test_pair_mpo.jl,"Move, grouped by tested behaviour",RSVDCBEBondUpdate
+tests/sweeps/test_parallel_kls.jl,tests,core,test/BUG/Core/Sweeps/test_parallel_kls.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_physics.jl,tests,core,test/QMB/ClosedSystem/test_heisenberg.jl (Haldane-Shastry arm -> studies/),"Move, grouped by tested behaviour",Telum
+tests/sweeps/test_qtt_task1.jl,tests,core,"test/QTTS/ (Tooling, Elementwise and BUG-on-QTT gates, split by tested file)","Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_qtt_task2.jl,tests,core,test/QTTS/ + BUG/TimeEvolution/test_stage_solvers.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_spin_jw.jl,tests,core,test/QMB/ClosedSystem/test_xx.jl,"Move, grouped by tested behaviour",
+tests/sweeps/test_spin_xx.jl,tests,core,test/QMB/ClosedSystem/test_xx.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_square_cylinder.jl,tests,study,studies/ (with square_cylinder.jl),"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_sweeps.jl,tests,core,test/BUG/TimeEvolution/test_bug_step.jl (BUG parts) + Baselines (DMRG/TDVP parts),"Move, grouped by tested behaviour",RSVDCBEBondUpdate
+tests/sweeps/test_symmetry_parity.jl,tests,core,test/QMB/ClosedSystem/test_symmetry_parity.jl,"Move, grouped by tested behaviour",RSVDCBEBondUpdate
+tests/sweeps/test_tdvp2_order.jl,tests,core,test/Baselines/test_tdvp2.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_tdvp2_truncation.jl,tests,core,test/Baselines/test_tdvp2.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_tfim_mpo.jl,tests,core,test/QMB/ClosedSystem/test_tfim.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate
+tests/sweeps/test_xx_efficiency.jl,tests,core,test/QMB/ClosedSystem/test_xx.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+test/test_contract_threaded.jl,test,core,test/BUG/Core/TensorNetworks/ (Telum kernel checks),"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum
+test/test_fused_dim_fast.jl,test,core,test/BUG/Core/TensorNetworks/ (Telum kernel checks),"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate
+test/test_to_concrete_inplace.jl,test,core,test/BUG/Core/TensorNetworks/ (Telum kernel checks),"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum
+examples/adaptive_quickstart.jl,examples,example,examples/QMB/xx_quickstart.jl,Verify and port (WP7),BondUpdateBUG RSVDCBEBondUpdate
+examples/common.jl,examples,example,examples/QMB/common.jl,Verify and port (WP7),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+examples/oat_z2.jl,examples,example,examples/QMB/oat_z2.jl,Verify and port (WP7),
+examples/observables_demo.jl,examples,example,examples/QMB/observables_demo.jl,Verify and port (WP7),BondUpdateBUG
+examples/plot_examples.py,examples,obsolete,archive tag,Verify and port (WP7),
+examples/README.md,examples,example,examples/README.md,Verify and port (WP7),
+examples/tfim_z2.jl,examples,example,examples/QMB/tfim_z2.jl,Verify and port (WP7),
+examples/xx_domain_wall.jl,examples,example,examples/QMB/xx_domain_wall.jl,Verify and port (WP7),
+benchmarks/ab_fingerprint.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",
+benchmarks/adaptive_xx_l20.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/alloc_attribution.jl,benchmarks,study,benchmarks/kernels/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum
+benchmarks/analyze_adaptive_xx.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
+benchmarks/analyze_krylov_closure.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
+benchmarks/arnoldi_check.jl,benchmarks,obsolete,archive tag,Not copied (one-off probe),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/bug_closed_exactness.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/bug_exactness_probe.jl,benchmarks,obsolete,archive tag,Not copied (one-off probe),
+benchmarks/cbe_sweeps_l16.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/comp_ratio_study.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate
+benchmarks/composite_order.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/cost_fair.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/cyl88_probe.jl,benchmarks,obsolete,archive tag,Not copied (one-off probe),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/cylinder_8x8.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/cylinder_adaptive.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/cylinder_depth_scan.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/diag_rank_freeze.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum
+benchmarks/dissipative_b1_smoke.jl,benchmarks,study,benchmarks/QMB/OpenSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/dissipative_b2_sector_p0.py,benchmarks,study,benchmarks/QMB/OpenSystem/ or studies/,Curate,
+benchmarks/dissipative_figures.py,benchmarks,study,benchmarks/QMB/OpenSystem/ or studies/,Curate,
+benchmarks/dissipative_heisenberg.jl,benchmarks,study,benchmarks/QMB/OpenSystem/ or studies/,Curate,RSVDCBEBondUpdate Telum
+benchmarks/dissipative_longrange.jl,benchmarks,study,benchmarks/QMB/OpenSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/dissipative_rank_probe.jl,benchmarks,study,benchmarks/QMB/OpenSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/dissipative_restart_check.sh,benchmarks,study,benchmarks/QMB/OpenSystem/ or studies/,Curate,
+benchmarks/dissipative_run.jl,benchmarks,study,benchmarks/QMB/OpenSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/dissipative_t4_figures.py,benchmarks,study,benchmarks/QMB/OpenSystem/ or studies/,Curate,
+benchmarks/dissipative_t6_figures.py,benchmarks,study,benchmarks/QMB/OpenSystem/ or studies/,Curate,
+benchmarks/dissipative_t7_figures.py,benchmarks,study,benchmarks/QMB/OpenSystem/ or studies/,Curate,
+benchmarks/dissipative_t7_parallel.py,benchmarks,study,benchmarks/QMB/OpenSystem/ or studies/,Curate,
+benchmarks/dissipative_t7_tolk.py,benchmarks,study,benchmarks/QMB/OpenSystem/ or studies/,Curate,
+benchmarks/entanglement_dynamics.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/exact_sparse.jl,benchmarks,core,test/common/exact_sparse.jl,Move (independent reference included by tests),
+benchmarks/factor_check.jl,benchmarks,obsolete,archive tag,Not copied (one-off probe),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/fold_omega_check.jl,benchmarks,obsolete,archive tag,Not copied (one-off probe),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/fused_common.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/fused_freeze_probe.jl,benchmarks,obsolete,archive tag,Not copied (one-off probe),RSVDCBEBondUpdate Telum
+benchmarks/fused_growth_scan.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",
+benchmarks/fused_jump_convention.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",
+benchmarks/fused_lindblad.jl,benchmarks,study,benchmarks/QMB/OpenSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/ground_state/adaptive_dmrg_tolerance.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/ground_state/analyze_dmrg_tolerance.py,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,
+benchmarks/ground_state/dmrg_knobs.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/ground_state/exact_2209.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,RSVDCBEBondUpdate
+benchmarks/ground_state/gap_n12.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,RSVDCBEBondUpdate
+benchmarks/ground_state/gate_l20.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/ground_state/knob_study.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/ground_state/paper_2209.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/ground_state/plot_fig3_2209.py,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,
+benchmarks/ground_state/su2_gate.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/gse_comp_ratio_scan.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/gse_defer_truncation.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/gse_rsvd_vs_exact.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/half_check.jl,benchmarks,obsolete,archive tag,Not copied (one-off probe),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/heis_square_open.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",
+benchmarks/heisenberg_tolerance.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",Telum
+benchmarks/hq_bench.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/hq_dd_gap_l8.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/hq_dd_scaling.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/hq_rank_monotone_l12.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/hq_task8_figures.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
+benchmarks/hq_xx_reference.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/hq_xx_reference_band.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",
+benchmarks/hs_structure_factor.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",
+benchmarks/hub4_profile.jl,benchmarks,study,benchmarks/kernels/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/hubbard_aa_check.jl,benchmarks,obsolete,archive tag,Not copied (one-off probe),Telum
+benchmarks/hubbard_aa_exact.jl,benchmarks,core,test/common/hubbard_aa_exact.jl,Move (independent reference included by tests),Telum
+benchmarks/identity_superket.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/imaginary_time/bug_knob_study.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/imaginary_time/certify_xx_reference.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,Telum
+benchmarks/imaginary_time/dissipative_ising.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,RSVDCBEBondUpdate
+benchmarks/imaginary_time/dissipative_xx.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,
+benchmarks/imaginary_time/expv_substep_check.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/imaginary_time/first_step_probe.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/imaginary_time/fusion_tag_probe.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/imaginary_time/grids_common.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,
+benchmarks/imaginary_time/it1_heisenberg_chain.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,
+benchmarks/imaginary_time/it2_square_cylinder.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,
+benchmarks/imaginary_time/it_common.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/imaginary_time/krylov_depth_scan.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/imaginary_time/logtime_ite.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/imaginary_time/logtime_suite.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/imaginary_time/logtime_trajectory.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/imaginary_time/mpdo_validate_fast.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,
+benchmarks/imaginary_time/plot_it1.py,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,
+benchmarks/imaginary_time/plot_logtime.py,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,
+benchmarks/imaginary_time/plot_logtime_traj.py,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,
+benchmarks/imaginary_time/plot_spectrum.py,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,
+benchmarks/imaginary_time/plot_xx_chigrowth.py,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,
+benchmarks/imaginary_time/README.md,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,
+benchmarks/imaginary_time/submit_bug_knob_study.slurm,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,
+benchmarks/imaginary_time/submit_dissipative_xx.slurm,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,
+benchmarks/imaginary_time/submit_logtime_suite.slurm,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,
+benchmarks/imaginary_time/u1_cylinder_repro.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/kagome_paper_observables.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/keepawake.ps1,benchmarks,obsolete,archive tag,Not copied (local/cluster wrapper or retired note),
+benchmarks/krylov_closure_l16.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/krylov_grow_smoke.jl,benchmarks,obsolete,archive tag,Not copied (one-off probe),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/krylov_stopping.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/l16_timing_probe.jl,benchmarks,obsolete,archive tag,Not copied (one-off probe),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/l18_backward_step.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/l18_campaign.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/l18_krylov_depth.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/l18_matrix.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum
+benchmarks/l18_rank_scan.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/l18_square_open_protocol.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/large_chi_profile.jl,benchmarks,study,benchmarks/kernels/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum
+benchmarks/lattice_study.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/layout_bootstrap.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/lgt_open.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",
+benchmarks/lindblad_common.jl,benchmarks,study,benchmarks/QMB/OpenSystem/ or studies/,Curate,Telum
+benchmarks/lindblad_dephasing.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/lindblad_diag.jl,benchmarks,obsolete,archive tag,Not copied (one-off probe),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/mbl_scars.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/mbl_scars_exact.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",
+benchmarks/method_matrix.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum
+benchmarks/midpoint_bug.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/model_ladder.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/mpo_vs_dense.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/nonunitary_blowup.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/oat_l10.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/open_exact_gate.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/open_system/os1_driven_xx.jl,benchmarks,study,benchmarks/QMB/OpenSystem/MPDO/,Curate,
+benchmarks/open_system/os2_bose_hubbard_loss.jl,benchmarks,study,benchmarks/QMB/OpenSystem/MPDO/,Curate,
+benchmarks/open_system/os3_east_dephasing.jl,benchmarks,study,benchmarks/QMB/OpenSystem/MPDO/,Curate,
+benchmarks/open_system/os_common.jl,benchmarks,study,benchmarks/QMB/OpenSystem/MPDO/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/open_system/plot_os.py,benchmarks,study,benchmarks/QMB/OpenSystem/MPDO/,Curate,
+benchmarks/open_system/sparse_lindblad.jl,benchmarks,core,test/common/sparse_lindblad.jl,Move (independent reference included by tests),
+benchmarks/open_system.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/plot_bug_wins.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
+benchmarks/plot_cbe_sweeps_l16.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
+benchmarks/plot_dissip_heis.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
+benchmarks/plot_dissipative_longrange.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
+benchmarks/plot_dt_order.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
+benchmarks/plot_gse_comp_ratio.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
+benchmarks/plot_gse_seed.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
+benchmarks/plot_heis_profiles.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
+benchmarks/plot_heisenberg_tolerance.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
+benchmarks/plot_hs_skw.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
+benchmarks/plot_knob_cube.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
+benchmarks/plot_krylov_matrix.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
+benchmarks/plot_l18.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
+benchmarks/plot_l18_campaign.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
+benchmarks/plot_l18_special.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
+benchmarks/plot_large_chi.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
+benchmarks/plot_mbl_scars.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
+benchmarks/plot_models_separate.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
+benchmarks/plot_oat.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
+benchmarks/plot_open_suite.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
+benchmarks/plot_rsvd_parallel.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
+benchmarks/plot_rsvd_scan.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
+benchmarks/plot_svg_panels.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
+benchmarks/plot_three_models.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
+benchmarks/plot_xx_l18_campaign.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
+benchmarks/plot_xx_lightcone.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
+benchmarks/probe_edge_refusal.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate
+benchmarks/profile_buckets.jl,benchmarks,study,benchmarks/kernels/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum
+benchmarks/profile_step.jl,benchmarks,study,benchmarks/kernels/,Curate,
+benchmarks/qtt/common.jl,benchmarks,study,benchmarks/QTTS/,Curate,BondUpdateBUG RSVDCBEBondUpdate
+benchmarks/qtt/diag_heston_step.jl,benchmarks,study,benchmarks/QTTS/,Curate,
+benchmarks/qtt/first_impressions.jl,benchmarks,study,benchmarks/QTTS/,Curate,BondUpdateBUG RSVDCBEBondUpdate
+benchmarks/qtt/gp_ground_state.jl,benchmarks,study,benchmarks/QTTS/,Curate,
+benchmarks/qtt/heston_pilot.jl,benchmarks,study,benchmarks/QTTS/,Curate,
+benchmarks/qtt/impressions_report.py,benchmarks,study,benchmarks/QTTS/,Curate,
+benchmarks/qtt/plot_qtt.py,benchmarks,study,benchmarks/QTTS/,Curate,
+benchmarks/qtt/production.jl,benchmarks,study,benchmarks/QTTS/,Curate,
+benchmarks/qtt/restart_check.jl,benchmarks,study,benchmarks/QTTS/,Curate,RSVDCBEBondUpdate
+benchmarks/qtt/task2_study.jl,benchmarks,study,benchmarks/QTTS/,Curate,
+benchmarks/qtt/vortex_shedding.jl,benchmarks,study,benchmarks/QTTS/,Curate,
+benchmarks/random_mpo.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum
+benchmarks/random_mps.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum
+benchmarks/response_check.jl,benchmarks,obsolete,archive tag,Not copied (one-off probe),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/retired_cbe_project_first.jl.txt,benchmarks,obsolete,archive tag,Not copied (local/cluster wrapper or retired note),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/rsvd_lgt.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",
+benchmarks/rsvd_models.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",
+benchmarks/rsvd_optimal.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",
+benchmarks/rsvd_parallel.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",
+benchmarks/rsvd_param_scan.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/rsvd_probe_microbench.jl,benchmarks,study,benchmarks/kernels/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/rsvd_sketch_width.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/rsvd_speedup_2d.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/run_2209_campaign.sh,benchmarks,obsolete,archive tag,Not copied (local/cluster wrapper or retired note),
+benchmarks/run_dissipative_l16.ps1,benchmarks,obsolete,archive tag,Not copied (local/cluster wrapper or retired note),
+benchmarks/run_hs_structure_factor.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/smoke_hermitian.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/smoke_lindblad.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/sparse_krylov.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",
+benchmarks/spectral/bug_knobs.jl,benchmarks,study,studies/,Archive tag unless promoted,
+benchmarks/spectral/bug_profile_2d.jl,benchmarks,study,studies/,Archive tag unless promoted,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/spectral/fig45_2209.jl,benchmarks,study,studies/,Archive tag unless promoted,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/spectral/fig4_2209.jl,benchmarks,study,studies/,Archive tag unless promoted,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/spectral/fig5a_static.jl,benchmarks,study,studies/,Archive tag unless promoted,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/spectral/growth_vs_exact.py,benchmarks,study,studies/,Archive tag unless promoted,
+benchmarks/spectral/knobs_l20.jl,benchmarks,study,studies/,Archive tag unless promoted,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/spectral/lattice2d.jl,benchmarks,study,studies/,Archive tag unless promoted,RSVDCBEBondUpdate
+benchmarks/spectral/matched_error.py,benchmarks,study,studies/,Archive tag unless promoted,
+benchmarks/spectral/order_ladder_2d.jl,benchmarks,study,studies/,Archive tag unless promoted,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/spectral/plot_fig45_2209.py,benchmarks,study,studies/,Archive tag unless promoted,
+benchmarks/spectral/plot_fig4_2209.py,benchmarks,study,studies/,Archive tag unless promoted,
+benchmarks/spectral/plot_fig5a.py,benchmarks,study,studies/,Archive tag unless promoted,RSVDCBEBondUpdate
+benchmarks/spectral/plot_knobs_l20.py,benchmarks,study,studies/,Archive tag unless promoted,
+benchmarks/spectral/select_knobs.py,benchmarks,study,studies/,Archive tag unless promoted,
+benchmarks/spectral/xc_gate.jl,benchmarks,study,studies/,Archive tag unless promoted,RSVDCBEBondUpdate Telum LurCGT
+benchmarks/study_models.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",
+benchmarks/su2_cylinder.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/su2_knob_cube.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/submit_cbe_sweeps_l16.slurm,benchmarks,obsolete,archive tag,Not copied (local/cluster wrapper or retired note),
+benchmarks/submit_dissipative_heisenberg.slurm,benchmarks,obsolete,archive tag,Not copied (local/cluster wrapper or retired note),
+benchmarks/submit_heisenberg_tolerance.slurm,benchmarks,obsolete,archive tag,Not copied (local/cluster wrapper or retired note),
+benchmarks/submit_hs_structure_factor.slurm,benchmarks,obsolete,archive tag,Not copied (local/cluster wrapper or retired note),
+benchmarks/submit_oat_large.slurm,benchmarks,obsolete,archive tag,Not copied (local/cluster wrapper or retired note),
+benchmarks/submit_rsvd_scan.slurm,benchmarks,obsolete,archive tag,Not copied (local/cluster wrapper or retired note),
+benchmarks/symmetric_composition.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/tdvp2_order_probe.jl,benchmarks,obsolete,archive tag,Not copied (one-off probe),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/tfim_accumulate.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/tfim_anomaly.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/tfim_bisect.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/tfim_observables.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/three_models.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/tolerance_driven_selection.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/trace_preservation.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",
+benchmarks/trace_superket_test.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/transport_check.jl,benchmarks,obsolete,archive tag,Not copied (one-off probe),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/validate_analytic_ref.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",
+benchmarks/xx20_rsvd_adaptive.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate
+benchmarks/xx_efficiency/common.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/xx_efficiency/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/xx_efficiency/diag_recycle_unmet.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/xx_efficiency/,Curate,
+benchmarks/xx_efficiency/fig1_dd.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/xx_efficiency/,Curate,
+benchmarks/xx_efficiency/fig2_krylov.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/xx_efficiency/,Curate,
+benchmarks/xx_efficiency/fig3_recycle.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/xx_efficiency/,Curate,
+benchmarks/xx_efficiency/fig4_endtoend.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/xx_efficiency/,Curate,
+benchmarks/xx_efficiency/plot_figs.py,benchmarks,study,benchmarks/QMB/ClosedSystem/xx_efficiency/,Curate,
+benchmarks/xx_efficiency/s6_first_step.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/xx_efficiency/,Curate,
+benchmarks/xx_efficiency/s6_s7_order.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/xx_efficiency/,Curate,
+benchmarks/xx_efficiency/snapshots.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/xx_efficiency/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/xx_l18_campaign.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate
+benchmarks/xx_open_exact_gate.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/xx_open_transport.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",
+notebooks/.gitignore,notebooks,study,docs/ tutorials (WP7),Rewrite against the new API; one source format,
+notebooks/01_rsvd_lubich.ipynb,notebooks,study,docs/ tutorials (WP7),Rewrite against the new API; one source format,
+notebooks/01_rsvd_lubich.jl,notebooks,study,docs/ tutorials (WP7),Rewrite against the new API; one source format,
+notebooks/02_rsvd_gate.ipynb,notebooks,study,docs/ tutorials (WP7),Rewrite against the new API; one source format,
+notebooks/02_rsvd_gate.jl,notebooks,study,docs/ tutorials (WP7),Rewrite against the new API; one source format,
+notebooks/03_imaginary_time.ipynb,notebooks,study,docs/ tutorials (WP7),Rewrite against the new API; one source format,
+notebooks/03_imaginary_time.jl,notebooks,study,docs/ tutorials (WP7),Rewrite against the new API; one source format,
+notebooks/04_ground_state_dmrg.ipynb,notebooks,study,docs/ tutorials (WP7),Rewrite against the new API; one source format,
+notebooks/04_ground_state_dmrg.jl,notebooks,study,docs/ tutorials (WP7),Rewrite against the new API; one source format,
+notebooks/build_notebooks.py,notebooks,study,docs/ tutorials (WP7),Rewrite against the new API; one source format,
+notebooks/submit_notebook.slurm,notebooks,study,docs/ tutorials (WP7),Rewrite against the new API; one source format,
+scripts/add_json.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
+scripts/aug_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
+scripts/chi_scan_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
+scripts/driver_norm_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
+scripts/dup_column_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
+scripts/expv_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
+scripts/expv_reference_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
+scripts/gate_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
+scripts/gate_diag2.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
+scripts/install_deps.jl,scripts,obsolete,not copied,Superseded by Project.toml + README install,
+scripts/l6_accuracy_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
+scripts/l6_exactness_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
+scripts/missing_sector_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
+scripts/norm_blowup_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
+scripts/parity_gap_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
+scripts/run_julia.sbatch,scripts,study,studies/runners/,Only if a kept study needs it,
+scripts/run_python.sbatch,scripts,study,studies/runners/,Only if a kept study needs it,
+scripts/sector_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
+scripts/sector_diag2.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
+scripts/sector_waste_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
+scripts/seed_blame_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
+scripts/seed_spread_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
+scripts/seed_starve_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
+scripts/smoke_examples.jl,scripts,core,test/examples (WP7 examples check),Port,
+scripts/sulz_check_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
+scripts/symmetry_check_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
+scripts/symmetry_gap_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
+scripts/telum_probe.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
+scripts/telum_probe2.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
+scripts/telum_smoke.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),

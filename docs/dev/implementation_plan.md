@@ -669,12 +669,13 @@ Avoid storing large generated PNGs in the package repository or using tests that
 
 ## 8. Explicit old-to-new migration map
 
-The source is BUG-Julia `main` at `b155550`. Paths on the left are relative to its `src/`, and paths on the right are relative to the new `src/`. "Split" means one legacy file feeds several new files, by mathematical ownership rather than by filename. WP0 confirms every row against call sites before anything moves. A legacy file absent from this table is not copied.
+The source is BUG-Julia `main` at `b155550`. Paths on the left are relative to its `src/`, and paths on the right are relative to the new `src/`. "Split" means one legacy file feeds several new files, by mathematical ownership rather than by filename; names a Split row does not list go to its first destination. WP0 confirms every row against call sites before anything moves. A legacy file absent from this table is not copied.
 
 ### 8.1 Engine: `BondUpdateBUG/`, `RSVDCBEBondUpdate/{bug,expansion,budget,operators}/`
 
 | Legacy file | New location | Treatment |
 |---|---|---|
+| `BUGJulia.jl` | `BondUpdateGalerkin.jl` | Replaced; its precompile workload is rebuilt later with PrecompileTools |
 | `BondUpdateBUG/BondUpdateBUG.jl`, `RSVDCBEBondUpdate/RSVDCBEBondUpdate.jl` | `BUG/BUG.jl`, `QMB/QMB.jl` | Replaced by the new module entry points |
 | `BondUpdateBUG/expv.jl` | `BUG/Core/LocalSolvers/krylov.jl` | Move |
 | `BondUpdateBUG/expv_root_methods.jl` | `BUG/Core/LocalSolvers/krylov.jl` (Lanczos/Arnoldi), `root_methods.jl` (exp, trapezoid, Radau) | Split |
@@ -700,9 +701,9 @@ The source is BUG-Julia `main` at `b155550`. Paths on the left are relative to i
 | `expansion/cbe_core.jl`, `cbe_expand.jl`, `cbe_bond_update.jl`, `bond_expansion.jl` | `BUG/Randomised/cbe.jl` | Merge into one CBE strategy; `lanczos_lowest` goes to `Baselines/DMRG` if only DMRG uses it |
 | `expansion/cbe_options.jl` | Solver options -> `BUG/solve.jl`; `CBEBugRunInfo` -> `BUG/Core/diagnostics.jl` | Split |
 | `expansion/dd_cbe.jl`, `expansion/dd_cbe_controller.jl` | `BUG/Randomised/dd_cbe.jl` | Merge |
-| `operators/henv.jl` | `XXZTerm`, `XXZChain`, `xxz_chain`, `heisenberg_su` -> `QMB/Models/ClosedSystem/xxz.jl`; `ZeroEnv`, `ChannelSet`, channel pushes -> `BUG/Core/Environments/environment_stacks.jl` | Split |
+| `operators/henv.jl` | `XXZTerm`, `XXZChain`, `xxz_chain`, `heisenberg_su2_chain` -> `QMB/Models/ClosedSystem/xxz.jl`; `ZeroEnv`, `ChannelSet`, channel pushes -> `BUG/Core/Environments/environment_stacks.jl` | Split |
 | `operators/henv_stacks.jl` | `BUG/Core/Environments/environment_stacks.jl` | Move |
-| `operators/mpo.jl` | `MPO`, `mpo_from_terms`, `onsite_mpo`, `mpo_sum` -> `BUG/Core/TensorNetworks/mpo.jl`; long-range terms and fits -> `QMB/Tooling/long_range_mpo.jl` | Split |
+| `operators/mpo.jl` | `MPO`, `mpo_from_terms`, `onsite_mpo`, `mpo_sum` -> `BUG/Core/TensorNetworks/mpo.jl`; `heisenberg_su2_mpo` -> `QMB/Models/ClosedSystem/xxz.jl`; long-range terms and fits -> `QMB/Tooling/long_range_mpo.jl` | Split |
 | `operators/mpo_apply.jl` | `BUG/Core/TensorNetworks/mpo.jl` | Merge |
 | `operators/mpo_env.jl` | `BUG/Core/Environments/mpo_environments.jl` | Move |
 | `operators/mpo_fold.jl`, `operators/zero_site_core.jl` | `BUG/Core/Environments/effective_operators.jl`; `truncate_sweep!`, `truncate_recursive!` -> `BUG/Core/RankAdaptation/truncation.jl` | Split |
@@ -731,7 +732,7 @@ The source is BUG-Julia `main` at `b155550`. Paths on the left are relative to i
 | `qtt_models.jl` | `qtt_d`, `qtt_coord_diag`, `qtt_op` -> `QTTS/Tooling/operator_assembly.jl`; GP model/Hamiltonian/vector field/JVP -> `QTTS/Models/GrossPitaevskii/gross_pitaevskii.jl`; `GPPaddle`, `paddle_state`, `gp_paddle_op` -> `paddle.jl`; Heston -> `QTTS/Models/Heston/heston.jl` | Split; `gp_bug_step!` dropped (callers use `BUG.solve`) |
 | `qtt_observables.jl` | `qtt_normalize!`, `qtt_sample` -> `QTTS/Tooling/sampling.jl`; `gp_parts`, `gp_observables`, `vortex_count` -> `GrossPitaevskii/observables.jl`; `heston_*` -> `Heston/heston_reference.jl` | Split |
 | `qtt_imaginary.jl` | `uniform_schedule`, `geometric_schedule` -> `BUG/ITE/schedules.jl`; `gp_ground_state!`, `gp_gradient_descent!` -> `GrossPitaevskii/ground_state.jl` | Split |
-| `qtt_flows.jl` | `QTTFlow`, `LinearFlow`, `flow_op`, `flow_jac_ops`, `frozen_flow` -> `BUG/TimeEvolution/flows.jl` (`GPFlow` -> `gross_pitaevskii.jl`); `QTTFrames`, `frame_*`, `reduced_field`, `reduced_jacobian`, `RK_TABLEAUX`, `rk_stage_solve` -> `BUG/TimeEvolution/stage_solvers.jl`, ported onto `Core/Interfaces`; `qtt_bug_step!` -> merged into `BUG/TimeEvolution/bug_step.jl`; `_env_*`, `_eff`, `_op_expect` -> replaced by `BUG/Core/Environments`; `tt_expv`, `_dense_expv` -> replaced by `BUG/Core/LocalSolvers`; `qtt_tdvp`, `qtt_split_tdvp_step!` -> merged into `Baselines/TDVP` | Split, port and deduplicate (WP3); requires before/after fixtures from WP0 |
+| `qtt_flows.jl` | `QTTFlow`, `LinearFlow`, `flow_op`, `flow_jac_ops`, `frozen_flow` -> `BUG/TimeEvolution/flows.jl` (`GPFlow` -> `gross_pitaevskii.jl`); `QTTFrames`, `frame_*`, `reduced_field`, `reduced_jacobian`, `RK_TABLEAUX`, `rk_stage_solve`, `_gmres_real`, `_unpack` -> `BUG/TimeEvolution/stage_solvers.jl`, ported onto `Core/Interfaces`; `qtt_bug_step!`, `_replace_state!` -> merged into `BUG/TimeEvolution/bug_step.jl`; `_tc`, `_env_*`, `_eff1`, `_eff2`, `_op_expect` -> replaced by `BUG/Core/Environments`; `tt_expv`, `_dense_expv` -> replaced by `BUG/Core/LocalSolvers`; `qtt_tdvp2_step!`, `qtt_split_tdvp_step!` -> merged into `Baselines/TDVP` | Split, port and deduplicate (WP3); requires before/after fixtures from WP0 |
 
 ### 8.4 Baselines: `RSVDCBEBondUpdate/baselines/`
 
@@ -750,7 +751,8 @@ The source is BUG-Julia `main` at `b155550`. Paths on the left are relative to i
 | `tests/common` | `test/common` | Retain independent analytic/dense/sparse/free-fermion/Lindblad references |
 | `examples/` | `examples/QMB/`, `examples/QTTS/` | Keep as short, verified onboarding examples |
 | `benchmarks/` (237 files) | `benchmarks/QMB/{ClosedSystem,OpenSystem}`, `benchmarks/QTTS`, `benchmarks/kernels`; the rest to `studies/` or the archive tag | Curate; no cluster requirement by default |
-| `scripts/`, `bin/`, `deps/` | `studies/runners/` or the archive tag | Remove probes/wrappers from the user path |
+| `scripts/`, `bin/` | `studies/runners/` or the archive tag | Remove probes/wrappers from the user path |
+| `deps/Telum` (our fork) | `deps/Telum` | Vendored with its MIT `LICENSE`; the no-symmetry SVD fix is already in its source at `b155550`, so `deps/build.jl` is not copied |
 | `notebooks/` | `docs/` tutorials | Single authoritative source |
 | `docs/` plans, handoffs, audits | Archive tag; stable content -> `docs/src/developer_architecture.md` | Not copied |
 | `figures/`, `handover5_figs/`, `plots/` | Not copied | Curated figures only, later, into `docs/src/assets/` |
