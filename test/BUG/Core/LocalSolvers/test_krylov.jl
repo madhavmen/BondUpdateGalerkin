@@ -155,7 +155,8 @@ diag_exact(scale, tau, v) =
 end
 
 @testset "root stability functions: A-stability, L-stability, classical order" begin
-    zs = vcat(-10.0 .^ range(-3, 8; length = 60), 0.0)
+    # the negative real axis from -1e-3 to -1e8; `-10.0 .^ x` would raise the literal -10.0
+    zs = vcat(-(10.0 .^ range(-3, 8; length = 60)), 0.0)
     for m in (:trapezoid, :radau2, :radau3)
         @test all(abs(root_stability(m, z)) <= 1 + 1e-14 for z in zs)          # z <= 0
         @test all(abs(root_stability(m, 1im * y)) <= 1 + 1e-12 for y in -50:0.5:50)

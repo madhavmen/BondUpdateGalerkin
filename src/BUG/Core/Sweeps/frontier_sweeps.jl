@@ -335,7 +335,8 @@ function _frontier_sweep!(fr::KLFrames, psi::SymMPS, mpo, F::KrylovFrontier, tau
 end
 
 """
-    estimate_global_complement_action(psi, mpo, fr, core; nsample = 0, rng) -> NamedTuple
+    estimate_global_complement_action(psi, mpo, fr, core; expansion, nsample = 0, rng)
+        -> NamedTuple
 
 The outside-space action `(I - P) H v` of the Galerkin vector `v = (W ⊗ Z) core`, from the per-bond
 two-site misses of a non-enriching frontier sweep. For a nearest-neighbour `H` the per-bond pieces
@@ -344,15 +345,16 @@ are orthogonal, so
     max(left, right) <= ||(I - P) H v|| <= sqrt(left^2 + right^2)
 
 with `left = ||(I - P_L ⊗ 1) H v||` and `right = ||(1 ⊗ (I - P_R)) H v||`. Longer-range terms make
-these an estimate; `nsample > 0` adds randomised per-bond estimates (`sampled_*`).
+these an estimate; `nsample > 0` adds randomised per-bond estimates (`sampled_*`). `expansion` is
+the step's `BasisExpansion`, which measures the per-bond actions.
 """
 function estimate_global_complement_action(psi::SymMPS, mpo, fr::KLFrames, core;
-                                           nsample::Int = 0,
+                                           expansion::BasisExpansion, nsample::Int = 0,
                                            rng::AbstractRNG = MersenneTwister(0x5EED))
     L, c = length(psi), fr.c
     alloc = basis_allocation(AdaptiveBudget(1.0, 0.0, 1.0), L - 1)    # scale 1: raw norms
     r = _frontier_sweep!(fr, psi, mpo, KrylovFrontier(core, 0, fr.gen), ComplexF64(0), alloc,
-                         NamedTuple(); enrich = false, nrm = max(norm(core), eps()),
+                         (expansion = expansion,); enrich = false, nrm = max(norm(core), eps()),
                          nsample = nsample, rng = rng)
     pl, pr = r.leaks_left, r.leaks_right[c:(L - 1)]
     sl, sr = r.sleaks_left, r.sleaks_right[c:(L - 1)]

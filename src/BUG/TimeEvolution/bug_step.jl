@@ -293,7 +293,7 @@ function cbe_bug_step!(psi::SymMPS, mpo::MPO, tau::ComplexF64;
         # A copied `rng` and untouched frames: the step itself stays bit-identical.
         pr = _measure_frontiers(KLFrames(W, Z, c, lenv_root, renv_root, 0, nothing, nothing,
                                          Float64(eshift)), psi, mpo, S0, tau,
-                                alloc, NamedTuple(), closure_probe; nrm = _nrm,
+                                alloc, (expansion = expansion,), closure_probe; nrm = _nrm,
                                 parallel = parallel, rng = copy(rng), fold = fold_omega)
         merge_ledger!(ledger, pr.ledger)
     end
@@ -337,7 +337,7 @@ function cbe_bug_step!(psi::SymMPS, mpo::MPO, tau::ComplexF64;
         e_pre = rq(S0)
         outside_of(S) = estimate_global_complement_action(psi, mpo,
             KLFrames(W, Z, c, lenv_root, renv_root, 0, nothing, nothing, Float64(eshift)),
-            S; rng = copy(rng))
+            S; expansion = expansion, rng = copy(rng))
         out = outside_residual ? outside_of(S1) : nothing
         resid_of(o, S) = o === nothing ? NaN : abs(tau) * o.bound / max(norm(S), eps())
         resid0 = resid_of(out, S1)
@@ -350,7 +350,8 @@ function cbe_bug_step!(psi::SymMPS, mpo::MPO, tau::ComplexF64;
                 fr = KLFrames(W, Z, c, lenv_root, renv_root, 0, nothing, nothing, Float64(eshift))
                 npass += 1
                 r = _frontier_sweep!(fr, psi, mpo, KrylovFrontier(S1, 0, fr.gen), tau, alloc,
-                                     merge(exkw, (krylov_depth = krylov_depth,));
+                                     merge(exkw, (expansion = expansion,
+                                                  krylov_depth = krylov_depth));
                                      enrich = true, workcap = wcap_step, nrm = _nrm,
                                      parallel = parallel, rng = rng, pass = npass,
                                      fold = fold_omega)

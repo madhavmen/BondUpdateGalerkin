@@ -38,4 +38,11 @@ jobs:
         run: |
           julia -e 'using Pkg; Pkg.add(name = "JuliaFormatter", version = "1")'
           julia -e 'using JuliaFormatter; format(["src", "test", "docs"])'  # deps/Telum is vendored, not ours to restyle
+          git diff > format.patch
           git diff --exit-code
+      # A large diff is unreliable to copy from the job log; on failure keep it as a patch to apply.
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: format-patch
+          path: format.patch
