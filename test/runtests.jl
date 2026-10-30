@@ -23,6 +23,8 @@ end
     run_testfile("BUG/Core/TensorNetworks/test_mpo.jl")
     run_testfile("BUG/Core/Sweeps/test_frames.jl")
     run_testfile("BUG/Core/Interfaces/test_state_conformance.jl")
+    # BUG/TimeEvolution and BUG/ITE: the moved engine against the frozen b155550 runs
+    run_testfile("BUG/TimeEvolution/test_fixtures_b155550.jl")
     # QMB
     run_testfile("QMB/Observables/test_local_observables.jl")
     # QTTS
