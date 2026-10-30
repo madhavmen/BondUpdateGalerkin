@@ -24,6 +24,7 @@ include("Core/Interfaces/state.jl")
 include("Core/TensorNetworks/symmetric_mps.jl")
 include("Core/TensorNetworks/canonical_form.jl")
 include("Core/TensorNetworks/sectors.jl")
+include("Core/TensorNetworks/mpo.jl")
 include("Core/Sweeps/frames.jl")
 
 # state interface (Core/Interfaces)
@@ -42,6 +43,7 @@ export left_gram, right_gram, left_isometry_defect, right_isometry_defect
 export perp_component, perp_component_right
 export reachable_sectors, fusion_basis, fuse_spaces, add_charge, dual_charge, sector_dim
 export align_charge, fusion_stats, reset_fusion_stats!, clear_fusion_cache!, set_fusion_budget!
+export MPO, mpo_virtual_dims, onsite_mpo, mpo_product
 # bond frames (Core/Sweeps)
 export BondFrame, bond_frame, frame_theta, two_site_block
 
