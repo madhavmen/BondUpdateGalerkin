@@ -45,10 +45,11 @@ to roundoff. The overlap form `||a||^2 + ||b||^2 - 2 Re<a,b>` cancels to `~eps`:
 function _mps_distance(a::SymMPS, b::SymMPS)
     L = length(a)
     length(b) == L || throw(DimensionMismatch("_mps_distance: $L sites against $(length(b))"))
-    L == 1 && return norm(to_concrete(to_concrete(ComplexF64(1) * a[1]) +
-                                      to_concrete(ComplexF64(-1) * b[1])))
+    L == 1 && return norm(
+        to_concrete(to_concrete(ComplexF64(1) * a[1]) + to_concrete(ComplexF64(-1) * b[1])),
+    )
     Ts = Any[]
-    for i in 1:L
+    for i = 1:L
         Ai = to_concrete(ComplexF64(1) * a[i])
         Bi = to_concrete(ComplexF64(i == 1 ? -1 : 1) * b[i])
         T = if i == 1 || i == L
@@ -71,7 +72,8 @@ end
 Plan eq. (7): `||Φ_h ψ - Φ_{h/2} Φ_{h/2} ψ|| / (1 - 2^-p)`, the full step's error estimated from the
 two half steps, for an order-`p` method.
 """
-step_doubling_error(full::SymMPS, half::SymMPS, p::Int = 3) = _mps_distance(full, half) / (1 - 2.0^(-p))
+step_doubling_error(full::SymMPS, half::SymMPS, p::Int = 3) =
+    _mps_distance(full, half) / (1 - 2.0^(-p))
 
 "Plan eq. (7): `clip(0.8 h (tau / e)^(1/(p+1)), h/2, 2h)`."
 next_step_size(h::Real, e::Real, tau::Real, p::Int = 3) =
@@ -80,8 +82,8 @@ next_step_size(h::Real, e::Real, tau::Real, p::Int = 3) =
 "Scale the canonical `psi` to unit norm in place; returns the squared norm it had."
 function _jt_normalise!(psi::SymMPS)
     n2 = norm(psi)^2
-    (isfinite(n2) && n2 > 0) || throw(ErrorException(
-        "quantum-jump segment: the state has norm^2 $n2 -- not representable"))
+    (isfinite(n2) && n2 > 0) ||
+        throw(ErrorException("quantum-jump segment: the state has norm^2 $n2 -- not representable"))
     psi[psi.center] = to_concrete((1.0 / sqrt(n2)) * psi[psi.center])
     return n2
 end
@@ -136,22 +138,45 @@ Returns `times`, `obs`, `logp` (log survival since the last jump, at each grid t
 and with step control `steps` (`(t, h)` of every accepted step), `checks` (`(t, h, err, accepted)`)
 and `nreject`.
 """
-function jump_trajectory(psi0::SymMPS, G::MPO, channels::AbstractVector{JumpChannel},
-                         tgrid::AbstractVector{<:Real}; dt::Real, seed::Integer,
-                         observe = nothing, step = nothing, step_kw = NamedTuple(),
-                         event_tol::Float64 = 1e-10, max_event_evals::Int = 40,
-                         growth_tol::Float64 = 1e-10, tol_trunc::Float64 = 1e-10,
-                         maxdim::Int = 256, jumps::Bool = true,
-                         target_step_error::Union{Nothing, Real} = nothing, check_every::Int = 4,
-                         dt_min::Real = dt / 64, dt_max::Real = 4dt, checkpoint = nothing,
-                         resume = nothing)
+function jump_trajectory(
+    psi0::SymMPS,
+    G::MPO,
+    channels::AbstractVector{JumpChannel},
+    tgrid::AbstractVector{<:Real};
+    dt::Real,
+    seed::Integer,
+    observe = nothing,
+    step = nothing,
+    step_kw = NamedTuple(),
+    event_tol::Float64 = 1e-10,
+    max_event_evals::Int = 40,
+    growth_tol::Float64 = 1e-10,
+    tol_trunc::Float64 = 1e-10,
+    maxdim::Int = 256,
+    jumps::Bool = true,
+    target_step_error::Union{Nothing,Real} = nothing,
+    check_every::Int = 4,
+    dt_min::Real = dt / 64,
+    dt_max::Real = 4dt,
+    checkpoint = nothing,
+    resume = nothing,
+)
     isempty(channels) && throw(ArgumentError("jump_trajectory needs at least one channel"))
-    (length(tgrid) >= 1 && tgrid[1] == 0 && issorted(tgrid)) || throw(ArgumentError(
-        "tgrid must be sorted and start at 0"))
+    (length(tgrid) >= 1 && tgrid[1] == 0 && issorted(tgrid)) ||
+        throw(ArgumentError("tgrid must be sorted and start at 0"))
     dt > 0 || throw(ArgumentError("dt must be positive, got $dt"))
-    stepfn = step !== nothing ? step :
-        (p, h) -> cbe_bug_step!(p, G, ComplexF64(-im * h); hermitian = false, order = 3,
-                                tol_trunc = tol_trunc, maxdim = maxdim, step_kw...)
+    stepfn =
+        step !== nothing ? step :
+        (p, h) -> cbe_bug_step!(
+            p,
+            G,
+            ComplexF64(-im * h);
+            hermitian = false,
+            order = 3,
+            tol_trunc = tol_trunc,
+            maxdim = maxdim,
+            step_kw...,
+        )
     ctl = target_step_error !== nothing
     if resume === nothing
         rng = MersenneTwister(seed)
@@ -160,34 +185,55 @@ function jump_trajectory(psi0::SymMPS, G::MPO, channels::AbstractVector{JumpChan
         logp, logu = 0.0, jumps ? log(rand(rng)) : -Inf
         t, nj, nsteps, nevals = 0.0, 0, 0, 0
         hcur, since, nreject = Float64(dt), check_every - 1, 0
-        steps, checks = Tuple{Float64, Float64}[], NamedTuple[]
+        steps, checks = Tuple{Float64,Float64}[], NamedTuple[]
         events, flags = NamedTuple[], NamedTuple[]
         obs, logps, njs = Any[], Float64[], Int[]
         k0 = 1
     else
         k0 = resume.k
-        resume.seed == seed || throw(ArgumentError(
-            "resume: the checkpoint is seed $(resume.seed), the run seed $seed"))
+        resume.seed == seed || throw(
+            ArgumentError("resume: the checkpoint is seed $(resume.seed), the run seed $seed"),
+        )
         (length(tgrid) >= k0 && collect(Float64, tgrid[1:k0]) == resume.times) ||
             throw(ArgumentError("resume: the grid does not extend the checkpoint's"))
         rng, psi = copy(resume.rng), copy(resume.psi)
         logp, logu, t, nj = resume.logp, resume.logu, resume.t, resume.nj
         nsteps, nevals, hcur, since, nreject =
             resume.nsteps, resume.nevals, resume.hcur, resume.since, resume.nreject
-        steps, checks, events, flags = copy.((resume.steps, resume.checks, resume.events,
-                                              resume.flags))
+        steps, checks, events, flags =
+            copy.((resume.steps, resume.checks, resume.events, resume.flags))
         obs, logps, njs = copy.((resume.obs, resume.logp_grid, resume.njumps))
     end
     draw() = jumps ? log(rand(rng)) : -Inf
-    record!(p) = (push!(obs, observe === nothing ? nothing : observe(p)); push!(logps, logp);
-                  push!(njs, nj))
-    save(k) = checkpoint === nothing || checkpoint((
-        k = k, times = collect(Float64, tgrid[1:k]), seed = seed, psi = psi, rng = rng, logp = logp,
-        logu = logu, t = t, nj = nj, nsteps = nsteps, nevals = nevals, hcur = hcur, since = since,
-        nreject = nreject, steps = steps, checks = checks, events = events, flags = flags,
-        obs = obs, logp_grid = logps, njumps = njs))
+    record!(p) = (push!(obs, observe === nothing ? nothing : observe(p));
+    push!(logps, logp);
+    push!(njs, nj))
+    save(k) =
+        checkpoint === nothing || checkpoint((
+            k = k,
+            times = collect(Float64, tgrid[1:k]),
+            seed = seed,
+            psi = psi,
+            rng = rng,
+            logp = logp,
+            logu = logu,
+            t = t,
+            nj = nj,
+            nsteps = nsteps,
+            nevals = nevals,
+            hcur = hcur,
+            since = since,
+            nreject = nreject,
+            steps = steps,
+            checks = checks,
+            events = events,
+            flags = flags,
+            obs = obs,
+            logp_grid = logps,
+            njumps = njs,
+        ))
     resume === nothing && record!(psi)
-    for k in (k0 + 1):length(tgrid)
+    for k = (k0+1):length(tgrid)
         tnext = Float64(tgrid[k])
         while tnext - t > 1e-12 * max(1.0, tnext)
             h = min(hcur, tnext - t)
@@ -248,17 +294,29 @@ function jump_trajectory(psi0::SymMPS, G::MPO, channels::AbstractVector{JumpChan
             _jt_normalise!(psi)
             w = [jump_weight(ch, psi) for ch in channels]
             W = sum(w)
-            W > 0 || throw(ErrorException(
-                "jump at t = $(t + b): every channel weight is zero, but the survival fell -- " *
-                "the channels do not match the generator's Q"))
+            W > 0 || throw(
+                ErrorException(
+                    "jump at t = $(t + b): every channel weight is zero, but the survival fell -- " *
+                    "the channels do not match the generator's Q",
+                ),
+            )
             r = rand(rng) * W
             mu = something(findfirst(>=(r), cumsum(w)), length(w))
             psi, disc = apply_jump(channels[mu], psi; tol_trunc = tol_trunc, maxdim = maxdim)
             _jt_normalise!(psi)
             t += b
             nj += 1
-            push!(events, (t = t, channel = channels[mu].name, weights = w, evals = ev,
-                           resid = fb, discarded = disc))
+            push!(
+                events,
+                (
+                    t = t,
+                    channel = channels[mu].name,
+                    weights = w,
+                    evals = ev,
+                    resid = fb,
+                    discarded = disc,
+                ),
+            )
             logp, logu = 0.0, draw()
             hcur, since = Float64(dt), check_every - 1
         end
@@ -266,9 +324,20 @@ function jump_trajectory(psi0::SymMPS, G::MPO, channels::AbstractVector{JumpChan
         record!(psi)
         save(k)
     end
-    return (times = collect(Float64, tgrid), obs = obs, logp = logps, njumps = njs,
-            events = events, flags = flags, nsteps = nsteps, nevals = nevals, seed = seed,
-            steps = steps, checks = checks, nreject = nreject)
+    return (
+        times = collect(Float64, tgrid),
+        obs = obs,
+        logp = logps,
+        njumps = njs,
+        events = events,
+        flags = flags,
+        nsteps = nsteps,
+        nevals = nevals,
+        seed = seed,
+        steps = steps,
+        checks = checks,
+        nreject = nreject,
+    )
 end
 
 """
@@ -283,30 +352,56 @@ independent trajectories.
 one's [`jump_trajectory`](@ref) state (`nothing` right after one finishes), live as there;
 `resume = state` continues from it.
 """
-function jump_ensemble(psi0::SymMPS, G::MPO, channels::AbstractVector{JumpChannel},
-                       tgrid::AbstractVector{<:Real}; ntraj::Int, seed::Integer = 1,
-                       observe, checkpoint = nothing, resume = nothing, kwargs...)
-    ntraj >= 2 || throw(ArgumentError("jump_ensemble needs ntraj >= 2 for an error bar, got $ntraj"))
+function jump_ensemble(
+    psi0::SymMPS,
+    G::MPO,
+    channels::AbstractVector{JumpChannel},
+    tgrid::AbstractVector{<:Real};
+    ntraj::Int,
+    seed::Integer = 1,
+    observe,
+    checkpoint = nothing,
+    resume = nothing,
+    kwargs...,
+)
+    ntraj >= 2 ||
+        throw(ArgumentError("jump_ensemble needs ntraj >= 2 for an error bar, got $ntraj"))
     trajs = resume === nothing ? NamedTuple[] : copy(resume.done)
-    [tr.seed for tr in trajs] == seed .+ (0:(length(trajs) - 1)) || throw(ArgumentError(
-        "resume: the finished trajectories are not seeds $seed, $(seed + 1), ..."))
+    [tr.seed for tr in trajs] == seed .+ (0:(length(trajs)-1)) || throw(
+        ArgumentError("resume: the finished trajectories are not seeds $seed, $(seed + 1), ..."),
+    )
     current = resume === nothing ? nothing : resume.current
     save(st) = checkpoint === nothing || checkpoint((done = trajs, current = st))
-    for r in (length(trajs) + 1):ntraj
-        push!(trajs, jump_trajectory(psi0, G, channels, tgrid; seed = seed + r - 1,
-                                     observe = observe, resume = current,
-                                     checkpoint = checkpoint === nothing ? nothing : save,
-                                     kwargs...))
+    for r = (length(trajs)+1):ntraj
+        push!(
+            trajs,
+            jump_trajectory(
+                psi0,
+                G,
+                channels,
+                tgrid;
+                seed = seed + r - 1,
+                observe = observe,
+                resume = current,
+                checkpoint = checkpoint === nothing ? nothing : save,
+                kwargs...,
+            ),
+        )
         current = nothing
         save(nothing)
     end
     nt = length(tgrid)
-    O = [reduce(hcat, [Float64.(tr.obs[k]) for tr in trajs]) for k in 1:nt]   # (ncomp, ntraj)
-    N = [Float64[tr.njumps[k] for tr in trajs] for k in 1:nt]
+    O = [reduce(hcat, [Float64.(tr.obs[k]) for tr in trajs]) for k = 1:nt]   # (ncomp, ntraj)
+    N = [Float64[tr.njumps[k] for tr in trajs] for k = 1:nt]
     avg(x) = sum(x) / length(x)
     sem(x) = sqrt(sum(abs2, x .- avg(x)) / (length(x) - 1) / length(x))
-    rows(o) = [o[c, :] for c in 1:size(o, 1)]
-    return (trajs = trajs, times = collect(Float64, tgrid),
-            mean = [avg.(rows(o)) for o in O], stderr = [sem.(rows(o)) for o in O],
-            jumps_mean = avg.(N), jumps_stderr = sem.(N))
+    rows(o) = [o[c, :] for c = 1:size(o, 1)]
+    return (
+        trajs = trajs,
+        times = collect(Float64, tgrid),
+        mean = [avg.(rows(o)) for o in O],
+        stderr = [sem.(rows(o)) for o in O],
+        jumps_mean = avg.(N),
+        jumps_stderr = sem.(N),
+    )
 end

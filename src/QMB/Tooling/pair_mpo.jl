@@ -55,14 +55,24 @@ function _outer(A, B)
             T = to_concrete!(contract(x, (length(x.inds),), y, (1,)))
             # Restore (A's legs..., B's legs...) if the contractable order was the other one.
             return x === A1 ? T :
-                   to_concrete(permutedims(T, (ntuple(k -> length(B.inds) + k,
-                                                      length(A.inds))...,
-                                              ntuple(k -> k, length(B.inds))...)))
+                   to_concrete(
+                permutedims(
+                    T,
+                    (
+                        ntuple(k -> length(B.inds) + k, length(A.inds))...,
+                        ntuple(k -> k, length(B.inds))...,
+                    ),
+                ),
+            )
         catch
         end
     end
-    throw(ArgumentError("_outer: neither ⊗ nor a singleton contraction produced a tensor " *
-                        "product; Telum's API has changed"))
+    throw(
+        ArgumentError(
+            "_outer: neither ⊗ nor a singleton contraction produced a tensor " *
+            "product; Telum's API has changed",
+        ),
+    )
 end
 
 """
@@ -73,11 +83,10 @@ channel's (possibly charged) virtual space. Every leg assignment is built and th
 contracts correctly against opening -> transport, transport -> transport and transport -> closing
 is returned. Uncharged channels are detected by comparing spaces, not dimensions.
 """
-function _charged_transport(v::PairVertex, Iloc, i::Int,
-                            tl::AbstractString, tr::AbstractString)
+function _charged_transport(v::PairVertex, Iloc, i::Int, tl::AbstractString, tr::AbstractString)
     tnext = "W,$(i + 1)"
     op_i = _mpo_block(v.left, i, tl, tr, _side(v.left, :left))
-    Iid  = _mpo_block(Iloc, i, tl, tr, :none)
+    Iid = _mpo_block(Iloc, i, tl, tr, :none)
     # Charge-NEUTRAL channel: the virtual space is the vacuum, so the plain identity block IS
     # the transport. Tested by SPACE -- see the docstring for why a dimension test is wrong.
     op_i.spaces[4] == Iid.spaces[4] && return Iid
@@ -87,7 +96,7 @@ function _charged_transport(v::PairVertex, Iloc, i::Int,
     # carry the same tag -- so contracting `T(i)` with `T(i)` produces four legs tagged `S,i` and
     # throws on a DUPLICATE INDEX, which has nothing to do with the virtual spaces the test is
     # about. Building the partners at `i+1` is what makes the three tests test what they claim.
-    cl_n    = _mpo_block(v.right, i + 1, tr, tnext, _side(v.right, :right))
+    cl_n = _mpo_block(v.right, i + 1, tr, tnext, _side(v.right, :right))
     Isite_i = _mpo_retag(Iloc, i)
     Isite_n = _mpo_retag(Iloc, i + 1)
     # Placeholder tags: `getIdentity` gives both legs the same tag and arrow, which would make an
@@ -105,10 +114,22 @@ function _charged_transport(v::PairVertex, Iloc, i::Int,
         # Either virtual leg may be the left one; try both assignments.
         for perm in ((1, 3, 4, 2), (2, 3, 4, 1))
             Tt, Tn = try
-                (to_concrete(setitag(setitag(
-                     to_concrete(permutedims(_outer(Iw, Isite_i), perm)), 1, tl), 4, tr)),
-                 to_concrete(setitag(setitag(
-                     to_concrete(permutedims(_outer(Iw, Isite_n), perm)), 1, tr), 4, tnext)))
+                (
+                    to_concrete(
+                        setitag(
+                            setitag(to_concrete(permutedims(_outer(Iw, Isite_i), perm)), 1, tl),
+                            4,
+                            tr,
+                        ),
+                    ),
+                    to_concrete(
+                        setitag(
+                            setitag(to_concrete(permutedims(_outer(Iw, Isite_n), perm)), 1, tr),
+                            4,
+                            tnext,
+                        ),
+                    ),
+                )
             catch
                 continue
             end
@@ -123,10 +144,13 @@ function _charged_transport(v::PairVertex, Iloc, i::Int,
             ok && return Tt
         end
     end
-    throw(ArgumentError(
-        "_charged_transport: could not build a transport block for a channel whose virtual " *
-        "space is $(op_i.spaces[4]); no candidate leg assignment satisfied all three of " *
-        "open->T, T->T and T->close"))
+    throw(
+        ArgumentError(
+            "_charged_transport: could not build a transport block for a channel whose virtual " *
+            "space is $(op_i.spaces[4]); no candidate leg assignment satisfied all three of " *
+            "open->T, T->T and T->close",
+        ),
+    )
 end
 
 # ── the automaton ────────────────────────────────────────────────────────────
@@ -139,18 +163,35 @@ end
 triangle of `J` is read; `vertices` come from [`pair_vertices`](@ref). The vector form takes one
 coupling matrix per vertex (paired by position), for vertices with different ranges.
 """
-function pair_mpo(L::Int, Js::Vector{<:AbstractMatrix}, vertices::Vector{PairVertex};
-                  Iloc = nothing, Itrans = nothing, field = nothing, triples = TripleTerm[])
+function pair_mpo(
+    L::Int,
+    Js::Vector{<:AbstractMatrix},
+    vertices::Vector{PairVertex};
+    Iloc = nothing,
+    Itrans = nothing,
+    field = nothing,
+    triples = TripleTerm[],
+)
 
-    length(Js) == length(vertices) || throw(DimensionMismatch(
-        "pair_mpo got $(length(Js)) coupling matrices for $(length(vertices)) vertices; " *
-        "they pair by position"))
+    length(Js) == length(vertices) || throw(
+        DimensionMismatch(
+            "pair_mpo got $(length(Js)) coupling matrices for $(length(vertices)) vertices; " *
+            "they pair by position",
+        ),
+    )
     for (t, J) in pairs(Js)
-        size(J) == (L, L) || throw(DimensionMismatch(
-            "coupling matrix $t is $(size(J)), expected ($L, $L)"))
+        size(J) == (L, L) ||
+            throw(DimensionMismatch("coupling matrix $t is $(size(J)), expected ($L, $L)"))
     end
-    return _pair_mpo(L, collect(Js), vertices; Iloc = Iloc, Itrans = Itrans, field = field,
-                     triples = triples)
+    return _pair_mpo(
+        L,
+        collect(Js),
+        vertices;
+        Iloc = Iloc,
+        Itrans = Itrans,
+        field = field,
+        triples = triples,
+    )
 end
 
 """
@@ -171,43 +212,76 @@ struct TripleTerm
     w::Vector{ComplexF64}
 end
 
-function pair_mpo(L::Int, J::AbstractMatrix, vertices::Vector{PairVertex}; Iloc = nothing,
-                  Itrans = nothing, field = nothing, triples = TripleTerm[])
+function pair_mpo(
+    L::Int,
+    J::AbstractMatrix,
+    vertices::Vector{PairVertex};
+    Iloc = nothing,
+    Itrans = nothing,
+    field = nothing,
+    triples = TripleTerm[],
+)
     L >= 2 || throw(ArgumentError("pair_mpo needs at least two sites, got $L"))
-    size(J) == (L, L) || throw(DimensionMismatch(
-        "coupling matrix is $(size(J)), expected ($L, $L)"))
-    return _pair_mpo(L, [J for _ in vertices], vertices; Iloc = Iloc, Itrans = Itrans,
-                     field = field, triples = triples)
+    size(J) == (L, L) ||
+        throw(DimensionMismatch("coupling matrix is $(size(J)), expected ($L, $L)"))
+    return _pair_mpo(
+        L,
+        [J for _ in vertices],
+        vertices;
+        Iloc = Iloc,
+        Itrans = Itrans,
+        field = field,
+        triples = triples,
+    )
 end
 
-function _pair_mpo(L::Int, Js::Vector, vertices::Vector{PairVertex}; Iloc = nothing,
-                   Itrans = nothing, field = nothing, triples = TripleTerm[])
+function _pair_mpo(
+    L::Int,
+    Js::Vector,
+    vertices::Vector{PairVertex};
+    Iloc = nothing,
+    Itrans = nothing,
+    field = nothing,
+    triples = TripleTerm[],
+)
     L >= 2 || throw(ArgumentError("pair_mpo needs at least two sites, got $L"))
     n = length(vertices)
     m = length(triples)
     n + m >= 1 || throw(ArgumentError("pair_mpo needs at least one vertex or triple"))
     for (k, tt) in pairs(triples)
-        length(tt.A.inds) == 2 || throw(ArgumentError(
-            "pair_mpo: triple $k's first operator must be charge-neutral (rank 2)"))
-        length(tt.w) == L - 2 || throw(DimensionMismatch(
-            "pair_mpo: triple $k needs $(L - 2) weights (one per j = 1..L-2), got $(length(tt.w))"))
+        length(tt.A.inds) == 2 || throw(
+            ArgumentError("pair_mpo: triple $k's first operator must be charge-neutral (rank 2)"),
+        )
+        length(tt.w) == L - 2 || throw(
+            DimensionMismatch(
+                "pair_mpo: triple $k needs $(L - 2) weights (one per j = 1..L-2), got $(length(tt.w))",
+            ),
+        )
         nl, nr = length(tt.pair.left.inds), length(tt.pair.right.inds)
-        (nl in (2, 3) && nl == nr) || throw(ArgumentError(
-            "pair_mpo: triple $k's pair joins a rank-$nl to a rank-$nr operator"))
+        (nl in (2, 3) && nl == nr) || throw(
+            ArgumentError("pair_mpo: triple $k's pair joins a rank-$nl to a rank-$nr operator"),
+        )
     end
     for (k, v) in pairs(vertices)
         nl, nr = length(v.left.inds), length(v.right.inds)
-        (nl in (2, 3) && nr in (2, 3)) || throw(ArgumentError(
-            "pair_mpo: vertex $k has operators of rank $nl / $nr; only 2 or 3 are operators"))
-        nl == nr || throw(ArgumentError(
-            "pair_mpo: vertex $k joins a rank-$nl to a rank-$nr operator -- the two halves " *
-            "must both carry an op-leg or neither"))
+        (nl in (2, 3) && nr in (2, 3)) || throw(
+            ArgumentError(
+                "pair_mpo: vertex $k has operators of rank $nl / $nr; only 2 or 3 are operators",
+            ),
+        )
+        nl == nr || throw(
+            ArgumentError(
+                "pair_mpo: vertex $k joins a rank-$nl to a rank-$nr operator -- the two halves " *
+                "must both carry an op-leg or neither",
+            ),
+        )
     end
     # The transported identity comes from the mode's own local space, or `Iloc` when the site is not the
     # mode's default (e.g. a fused d = 4 Liouville site).
-    Iloc = Iloc !== nothing ? Iloc :
-           symmetry_mode() === :SU2 ? local_space(:SU2).I :
-           symmetry_mode() === :Z2  ? ising_local_space(:Z2).I : local_space().I
+    Iloc =
+        Iloc !== nothing ? Iloc :
+        symmetry_mode() === :SU2 ? local_space(:SU2).I :
+        symmetry_mode() === :Z2 ? ising_local_space(:Z2).I : local_space().I
     # `Itrans` is the operator carried across open channels; `σ^z` with a range-2 coupling gives the
     # interleaved fermionic hop. The identity channels keep `Iloc`.
     Itrans = Itrans !== nothing ? Itrans : Iloc
@@ -219,33 +293,33 @@ function _pair_mpo(L::Int, Js::Vector, vertices::Vector{PairVertex}; Iloc = noth
     # partner ahead of it; testing only one would silently drop the longer-ranged term.
     coupling(o, j) = o < j && !isempty(Js) ? maximum(abs(Js[t][o, j]) for t in eachindex(Js)) : 0.0
     # A channel opened at `o` is still useful at link `i` iff some later site can close it.
-    closable(o, i) = any(coupling(o, j) != 0.0 for j in (i + 1):L)
+    closable(o, i) = any(coupling(o, j) != 0.0 for j = (i+1):L)
     # Openings alive on link `i` (i.e. between sites `i` and `i+1`): opened at `o <= i`.
-    alive(i) = [o for o in 1:min(i, L - 1) if closable(o, i)]
+    alive(i) = [o for o = 1:min(i, L - 1) if closable(o, i)]
     # Triple states on link `i`: `pre` after `A` placed at `i` (a term starting at `j = i`), `mid`
     # after `B` placed at `i` (a term that started at `j = i - 1`). Only where the weight is nonzero.
-    tstates(i) = vcat([(t, :pre) for t in 1:m if 1 <= i <= L - 2 && triples[t].w[i] != 0],
-                      [(t, :mid) for t in 1:m if 2 <= i <= L - 1 && triples[t].w[i - 1] != 0])
+    tstates(i) = vcat(
+        [(t, :pre) for t = 1:m if 1 <= i <= L - 2 && triples[t].w[i] != 0],
+        [(t, :mid) for t = 1:m if 2 <= i <= L - 1 && triples[t].w[i-1] != 0],
+    )
 
     Ws = Any[]
-    for i in 1:L
+    for i = 1:L
         tl, tr = "W,$(i - 1)", "W,$i"
-        Iid  = _mpo_block(Iloc, i, tl, tr, :none)
+        Iid = _mpo_block(Iloc, i, tl, tr, :none)
         Znil = to_concrete(0.0 * Iid)
 
         # Opening/closing/transport blocks for this site, one set per vertex.
-        opens  = [_mpo_block(v.left,  i, tl, tr, _side(v.left,  :left))  for v in vertices]
+        opens = [_mpo_block(v.left, i, tl, tr, _side(v.left, :left)) for v in vertices]
         closes = [_mpo_block(v.right, i, tl, tr, _side(v.right, :right)) for v in vertices]
         # The transport block is built from the VERTEX rather than from `opens`/`closes`, because
         # verifying it needs partner blocks tagged for site `i+1` -- see `_charged_transport`.
-        trans  = [_charged_transport(vertices[t], Itrans, i, tl, tr) for t in 1:n]
+        trans = [_charged_transport(vertices[t], Itrans, i, tl, tr) for t = 1:n]
 
         prev, cur = alive(i - 1), alive(i)
         # Row index of channel `(o,t)` in the incoming set, column index in the outgoing one.
-        rowof = Dict((o, t) => 1 + (k - 1) * n + t
-                     for (k, o) in enumerate(prev) for t in 1:n)
-        colof = Dict((o, t) => 1 + (k - 1) * n + t
-                     for (k, o) in enumerate(cur) for t in 1:n)
+        rowof = Dict((o, t) => 1 + (k - 1) * n + t for (k, o) in enumerate(prev) for t = 1:n)
+        colof = Dict((o, t) => 1 + (k - 1) * n + t for (k, o) in enumerate(cur) for t = 1:n)
         tprev, tcur = tstates(i - 1), tstates(i)
         trow = Dict(s => 1 + n * length(prev) + k for (k, s) in enumerate(tprev))
         tcol = Dict(s => 1 + n * length(cur) + k for (k, s) in enumerate(tcur))
@@ -258,15 +332,15 @@ function _pair_mpo(L::Int, Js::Vector, vertices::Vector{PairVertex}; Iloc = noth
         # `done -> done`: a complete pair already lies behind us.
         i > 1 && (mat[nrow, ncol] = Iid)
         # `id -> (i,t)`: OPEN a channel at site `i`.
-        for t in 1:n
+        for t = 1:n
             haskey(colof, (i, t)) && (mat[1, colof[(i, t)]] = opens[t])
         end
         # `(o,t) -> (o,t)`: TRANSPORT an open channel across site `i`. The charged block.
-        for o in prev, t in 1:n
+        for o in prev, t = 1:n
             haskey(colof, (o, t)) && (mat[rowof[(o, t)], colof[(o, t)]] = trans[t])
         end
         # `(o,t) -> done`: CLOSE at site `i`, weighted by `J[o,i]` and the vertex coefficient.
-        for o in prev, t in 1:n
+        for o in prev, t = 1:n
             c = coupling(o, i, t) * vertices[t].coeff
             # An explicit zero, not a gap: with one matrix per vertex a channel can be alive while this
             # vertex's coupling vanishes, and `oplus` cannot infer a hole.
@@ -275,14 +349,20 @@ function _pair_mpo(L::Int, Js::Vector, vertices::Vector{PairVertex}; Iloc = noth
         # Triples: `id -(A)-> pre`, `pre -(B)-> mid`, `mid -(w C)-> done` -- the same opening and
         # closing block forms as a pair, with a neutral (vacuum) `pre` state in front.
         for (t, tt) in pairs(triples)
-            haskey(tcol, (t, :pre)) && (mat[1, tcol[(t, :pre)]] = _mpo_block(tt.A, i, tl, tr, :none))
-            haskey(trow, (t, :pre)) && haskey(tcol, (t, :mid)) &&
-                (mat[trow[(t, :pre)], tcol[(t, :mid)]] =
-                     _mpo_block(tt.pair.left, i, tl, tr, _side(tt.pair.left, :left)))
+            haskey(tcol, (t, :pre)) &&
+                (mat[1, tcol[(t, :pre)]] = _mpo_block(tt.A, i, tl, tr, :none))
+            haskey(trow, (t, :pre)) &&
+                haskey(tcol, (t, :mid)) &&
+                (
+                    mat[trow[(t, :pre)], tcol[(t, :mid)]] =
+                        _mpo_block(tt.pair.left, i, tl, tr, _side(tt.pair.left, :left))
+                )
             if haskey(trow, (t, :mid))
-                c = tt.w[i - 2] * tt.pair.coeff
-                mat[trow[(t, :mid)], ncol] = to_concrete((isreal(c) ? real(c) : c) *
-                    _mpo_block(tt.pair.right, i, tl, tr, _side(tt.pair.right, :right)))
+                c = tt.w[i-2] * tt.pair.coeff
+                mat[trow[(t, :mid)], ncol] = to_concrete(
+                    (isreal(c) ? real(c) : c) *
+                    _mpo_block(tt.pair.right, i, tl, tr, _side(tt.pair.right, :right)),
+                )
             end
         end
 
@@ -317,8 +397,8 @@ identity is the pin on this whole construction against the already-validated bui
 """
 function nn_coupling_matrix(L::Int)
     J = zeros(Float64, L, L)
-    for i in 1:(L - 1)
-        J[i, i + 1] = 1.0
+    for i = 1:(L-1)
+        J[i, i+1] = 1.0
     end
     return J
 end
@@ -333,8 +413,8 @@ anything -- which is why it is the first thing the tests check after the `r = 1`
 function distance_coupling_matrix(L::Int, r::Int)
     r >= 1 || throw(ArgumentError("distance must be at least 1, got $r"))
     J = zeros(Float64, L, L)
-    for i in 1:(L - r)
-        J[i, i + r] = 1.0
+    for i = 1:(L-r)
+        J[i, i+r] = 1.0
     end
     return J
 end

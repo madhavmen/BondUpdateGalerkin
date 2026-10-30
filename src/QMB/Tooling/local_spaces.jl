@@ -53,23 +53,32 @@ const _Z2_Q1 = ((1,),)      # sigma^x = -1
 # `_localspace_cgt_fields` wants `Vector{Tuple{NTuple{QD, NTuple{N, Tuple{Vararg{Int}}}}, ...}}`
 # and Array is INVARIANT in its element type, so `Tuple{Tuple{Int}}` does NOT match
 # `Tuple{Tuple{Vararg{Int}}}` and dispatch fails with a confusing MethodError. Spell them out.
-const _QT   = Tuple{Vararg{Int}}
+const _QT = Tuple{Vararg{Int}}
 
-const _DAT2 = Tuple{NTuple{2, NTuple{1, _QT}}, Array{Float64, 3}}
+const _DAT2 = Tuple{NTuple{2,NTuple{1,_QT}},Array{Float64,3}}
 
-const _DAT3 = Tuple{NTuple{3, NTuple{1, _QT}}, Array{Float64, 4}}
+const _DAT3 = Tuple{NTuple{3,NTuple{1,_QT}},Array{Float64,4}}
 
-const _ISING_SPACES = Dict{Symbol, Any}()
+const _ISING_SPACES = Dict{Symbol,Any}()
 
 "Charge-preserving (diagonal) rank-2 operator with entries `v0`, `v1` on the two sectors."
 function _z2_diag_op(v0::Float64, v1::Float64)
     sp = [(_Z2_Q0, 1), (_Z2_Q1, 1)]
-    data = _DAT2[((_Z2_Q0, _Z2_Q0), reshape([v0], 1, 1, 1)),
-                 ((_Z2_Q1, _Z2_Q1), reshape([v1], 1, 1, 1))]
+    data = _DAT2[
+        ((_Z2_Q0, _Z2_Q0), reshape([v0], 1, 1, 1)),
+        ((_Z2_Q1, _Z2_Q1), reshape([v1], 1, 1, 1)),
+    ]
     spaces = (sp, sp)
     f = _localspace_cgt_fields(data, (Z{2},), spaces)
-    return TLArray((Z{2},), f.qlabels, f.wmatdata, f.wmatinfo, f.RMTs,
-                   (TLIndex("s", '+'), TLIndex("s", '-')), spaces)
+    return TLArray(
+        (Z{2},),
+        f.qlabels,
+        f.wmatdata,
+        f.wmatinfo,
+        f.RMTs,
+        (TLIndex("s", '+'), TLIndex("s", '-')),
+        spaces,
+    )
 end
 
 """
@@ -82,12 +91,21 @@ op-leg charges (`+1` and `-1`) and would not be one irreducible operator at all.
 function _z2_flip_op()
     sp = [(_Z2_Q0, 1), (_Z2_Q1, 1)]
     opsp = [(_Z2_Q1, 1)]
-    data = _DAT3[((_Z2_Q1, _Z2_Q0, _Z2_Q1), reshape([1.0], 1, 1, 1, 1)),
-                 ((_Z2_Q0, _Z2_Q1, _Z2_Q1), reshape([1.0], 1, 1, 1, 1))]
+    data = _DAT3[
+        ((_Z2_Q1, _Z2_Q0, _Z2_Q1), reshape([1.0], 1, 1, 1, 1)),
+        ((_Z2_Q0, _Z2_Q1, _Z2_Q1), reshape([1.0], 1, 1, 1, 1)),
+    ]
     spaces = (sp, sp, opsp)
     f = _localspace_cgt_fields(data, (Z{2},), spaces)
-    return TLArray((Z{2},), f.qlabels, f.wmatdata, f.wmatinfo, f.RMTs,
-                   (TLIndex("s", '+'), TLIndex("s", '-'), TLIndex("op", '-')), spaces)
+    return TLArray(
+        (Z{2},),
+        f.qlabels,
+        f.wmatdata,
+        f.wmatinfo,
+        f.RMTs,
+        (TLIndex("s", '+'), TLIndex("s", '-'), TLIndex("op", '-')),
+        spaces,
+    )
 end
 
 """
@@ -107,16 +125,20 @@ function ising_local_space(sym::Symbol = symmetry_mode())
     elseif sym === :none
         # Same operators, one dense block. Telum's own no-symmetry builder, so the tensors are
         # constructed exactly as `local_space(:none)`'s are.
-        ops = Dict{Symbol, SparseMatrixCSC{Float64, Int}}(
+        ops = Dict{Symbol,SparseMatrixCSC{Float64,Int}}(
             :I => spdiagm(0 => ones(Float64, 2)),
             :X => spdiagm(0 => Float64[1.0, -1.0]),
-            :Z => sparse(Float64[0 1; 1 0]))
+            :Z => sparse(Float64[0 1; 1 0]),
+        )
         _getLocalSpace_no_symmetry(ops, ("s", "s", "op"))
     else
-        throw(ArgumentError(
-            "the transverse-field Ising local space is defined for :Z2 and :none, got $sym. " *
-            "The TFIM has no U(1) spin symmetry -- Z_i Z_{i+1} does not conserve Sz -- and no " *
-            "SU(2) symmetry either, since the transverse field singles out an axis."))
+        throw(
+            ArgumentError(
+                "the transverse-field Ising local space is defined for :Z2 and :none, got $sym. " *
+                "The TFIM has no U(1) spin symmetry -- Z_i Z_{i+1} does not conserve Sz -- and no " *
+                "SU(2) symmetry either, since the transverse field singles out an axis.",
+            ),
+        )
     end
     _ISING_SPACES[sym] = s
     return s
@@ -124,7 +146,7 @@ end
 
 # ── from src/RSVDCBEBondUpdate/models/spin_xx.jl ──
 
-const _SPIN_SPACES = Dict{Int, Any}()
+const _SPIN_SPACES = Dict{Int,Any}()
 
 """
     spin_space(twoS) -> NamedTuple

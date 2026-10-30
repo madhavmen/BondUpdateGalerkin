@@ -29,13 +29,16 @@ virtual dimension `2 + |nn| + |lr|`, independent of `L` and of the interaction r
 in [`mpo_from_terms`](@ref), so the two builders cannot disagree about normalisation.
 """
 function long_range_mpo(L::Int, nn::XXZChain, lr::Vector{LongRangeTerm})
-    length(nn) == L || throw(DimensionMismatch(
-        "nn term list is for $(length(nn)) sites, asked for $L"))
+    length(nn) == L ||
+        throw(DimensionMismatch("nn term list is for $(length(nn)) sites, asked for $L"))
     for (k, t) in pairs(lr)
-        (length(t.left.inds) == 2 && length(t.right.inds) == 2) || throw(ArgumentError(
-            "long_range_mpo: term $k carries a rank-3 operator, so its channel would need " *
-            "a CHARGED self-loop identity. Only charge-neutral (rank-2) long-range " *
-            "operators are supported -- see the block comment above `LongRangeTerm`."))
+        (length(t.left.inds) == 2 && length(t.right.inds) == 2) || throw(
+            ArgumentError(
+                "long_range_mpo: term $k carries a rank-3 operator, so its channel would need " *
+                "a CHARGED self-loop identity. Only charge-neutral (rank-2) long-range " *
+                "operators are supported -- see the block comment above `LongRangeTerm`.",
+            ),
+        )
     end
     terms = nn.terms
     n, m = length(terms), length(lr)
@@ -43,29 +46,32 @@ function long_range_mpo(L::Int, nn::XXZChain, lr::Vector{LongRangeTerm})
     Iloc = symmetry_mode() === :SU2 ? local_space(:SU2).I : local_space().I
 
     Ws = Any[]
-    for i in 1:L
+    for i = 1:L
         tl, tr = "W,$(i - 1)", "W,$i"
-        Iid  = _mpo_block(Iloc, i, tl, tr, :none)
+        Iid = _mpo_block(Iloc, i, tl, tr, :none)
         Znil = to_concrete(0.0 * Iid)
         mat = Matrix{Any}(nothing, W, W)
         i < L && (mat[1, 1] = Iid)
         i > 1 && (mat[W, W] = Iid)
-        for t in 1:n
-            i < L && (mat[1, 1 + t] =
-                _mpo_block(terms[t].left, i, tl, tr, _side(terms[t].left, :left)))
-            i > 1 && (mat[1 + t, W] = to_concrete(terms[t].coeff *
-                _mpo_block(terms[t].right, i, tl, tr, _side(terms[t].right, :right))))
+        for t = 1:n
+            i < L &&
+                (mat[1, 1+t] = _mpo_block(terms[t].left, i, tl, tr, _side(terms[t].left, :left)))
+            i > 1 && (
+                mat[1+t, W] = to_concrete(
+                    terms[t].coeff *
+                    _mpo_block(terms[t].right, i, tl, tr, _side(terms[t].right, :right)),
+                )
+            )
         end
-        for k in 1:m
+        for k = 1:m
             c = 1 + n + k
             i < L && (mat[1, c] = _mpo_block(lr[k].left, i, tl, tr, :none))
             # THE SELF-LOOP. Needs both a predecessor and a successor site, so it exists
             # only in the interior -- at `i = 1` nothing has opened yet and at `i = L`
             # nothing may still be open, which the boundary trimming below enforces anyway.
-            1 < i < L && lr[k].decay != 0.0 &&
-                (mat[c, c] = to_concrete(lr[k].decay * Iid))
-            i > 1 && (mat[c, W] = to_concrete(lr[k].coeff *
-                _mpo_block(lr[k].right, i, tl, tr, :none)))
+            1 < i < L && lr[k].decay != 0.0 && (mat[c, c] = to_concrete(lr[k].decay * Iid))
+            i > 1 &&
+                (mat[c, W] = to_concrete(lr[k].coeff * _mpo_block(lr[k].right, i, tl, tr, :none)))
         end
         if i == 1
             mat = reshape(mat[1, :], 1, W)
@@ -88,13 +94,15 @@ A genuinely long-range, U(1)-symmetric test model: nearest-neighbour hopping wit
 exponentially decaying Ising tail reaching every pair of sites. Virtual dimension `5`
 whatever `L` is. `lambda = 0` reduces it to `xxz_mpo(L; J, delta = Jz/J)`.
 """
-function long_range_zz_mpo(L::Int; J::Float64 = 1.0, Jz::Float64 = 1.0,
-                           lambda::Float64 = 0.5)
-    symmetry_mode() === :SU2 && throw(ArgumentError(
-        "long_range_zz_mpo needs a rank-2 Sz, which SU(2) does not have"))
+function long_range_zz_mpo(L::Int; J::Float64 = 1.0, Jz::Float64 = 1.0, lambda::Float64 = 0.5)
+    symmetry_mode() === :SU2 &&
+        throw(ArgumentError("long_range_zz_mpo needs a rank-2 Sz, which SU(2) does not have"))
     q = local_space()
-    return long_range_mpo(L, xxz_chain(L; J = J, delta = 0.0),
-                          [LongRangeTerm(q.Sz, q.Sz, Jz, lambda)])
+    return long_range_mpo(
+        L,
+        xxz_chain(L; J = J, delta = 0.0),
+        [LongRangeTerm(q.Sz, q.Sz, Jz, lambda)],
+    )
 end
 
 """
@@ -128,8 +136,7 @@ to put both the head and the tail of a power law on.
 """
 default_decays(n::Int) =
     n <= 0 ? Float64[] :
-    n == 1 ? [exp(-0.5)] :
-    [exp(-0.05 * (4.0 / 0.05)^((k - 1) / (n - 1))) for k in 1:n]
+    n == 1 ? [exp(-0.5)] : [exp(-0.05 * (4.0 / 0.05)^((k - 1) / (n - 1))) for k = 1:n]
 
 """
     fit_long_range(Jr; n_exp=4, decays=default_decays(n_exp)) -> LongRangeFit
@@ -141,14 +148,16 @@ above for why the rates are not fitted too.
 The residual is reported per distance, because a power-law fit is good at the head and
 poor at the tail and a single number hides that.
 """
-function fit_long_range(Jr::AbstractVector{<:Real};
-                        n_exp::Int = 4,
-                        decays::AbstractVector{<:Real} = default_decays(n_exp))
+function fit_long_range(
+    Jr::AbstractVector{<:Real};
+    n_exp::Int = 4,
+    decays::AbstractVector{<:Real} = default_decays(n_exp),
+)
     R = length(Jr)
     R >= 1 || throw(ArgumentError("fit_long_range needs at least one distance"))
     lam = collect(Float64, decays)
     all(0 .< lam .< 1) || throw(ArgumentError("decays must lie strictly in (0, 1)"))
-    M = [lam[k]^(r - 1) for r in 1:R, k in 1:length(lam)]
+    M = [lam[k]^(r - 1) for r = 1:R, k = 1:length(lam)]
     c = M \ collect(Float64, Jr)
     fitted = M * c
     tgt = collect(Float64, Jr)
@@ -163,8 +172,7 @@ end
 The fit as one self-loop channel per exponential.
 """
 long_range_terms(fit::LongRangeFit, left, right) =
-    [LongRangeTerm(left, right, fit.coeffs[k], fit.decays[k])
-     for k in 1:length(fit.coeffs)]
+    [LongRangeTerm(left, right, fit.coeffs[k], fit.decays[k]) for k = 1:length(fit.coeffs)]
 
 """
     power_law_zz_mpo(L; J=1.0, Jz=1.0, alpha=3.0, n_exp=4, decays=...) -> (MPO, LongRangeFit)
@@ -177,16 +185,19 @@ RETURNS THE FIT AS WELL AS THE OPERATOR, and the two-tuple is the point: unlike
 at each distance is `fit.rel_errs`. Quoting a result from it without quoting that is
 quoting an unstated model.
 """
-function power_law_zz_mpo(L::Int; J::Float64 = 1.0, Jz::Float64 = 1.0,
-                          alpha::Float64 = 3.0, n_exp::Int = 4,
-                          decays::AbstractVector{<:Real} = default_decays(n_exp))
-    symmetry_mode() === :SU2 && throw(ArgumentError(
-        "power_law_zz_mpo needs a rank-2 Sz, which SU(2) does not have"))
+function power_law_zz_mpo(
+    L::Int;
+    J::Float64 = 1.0,
+    Jz::Float64 = 1.0,
+    alpha::Float64 = 3.0,
+    n_exp::Int = 4,
+    decays::AbstractVector{<:Real} = default_decays(n_exp),
+)
+    symmetry_mode() === :SU2 &&
+        throw(ArgumentError("power_law_zz_mpo needs a rank-2 Sz, which SU(2) does not have"))
     L >= 2 || throw(ArgumentError("power_law_zz_mpo needs at least two sites"))
     q = local_space()
-    fit = fit_long_range([Jz * float(r)^(-alpha) for r in 1:(L - 1)];
-                         n_exp = n_exp, decays = decays)
-    mpo = long_range_mpo(L, xxz_chain(L; J = J, delta = 0.0),
-                         long_range_terms(fit, q.Sz, q.Sz))
+    fit = fit_long_range([Jz * float(r)^(-alpha) for r = 1:(L-1)]; n_exp = n_exp, decays = decays)
+    mpo = long_range_mpo(L, xxz_chain(L; J = J, delta = 0.0), long_range_terms(fit, q.Sz, q.Sz))
     return mpo, fit
 end

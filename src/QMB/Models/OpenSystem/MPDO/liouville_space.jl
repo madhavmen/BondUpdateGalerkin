@@ -23,7 +23,7 @@ struct LiouvilleSpace
     symm::Tuple
     labels::Vector{Any}
     sectors::Vector{Any}            # [(label, dim)] in sorted label order -- the leg space
-    members::Dict{Any, Vector{Int}}
+    members::Dict{Any,Vector{Int}}
     pos::Vector{Int}
     I::Any
 end
@@ -48,13 +48,13 @@ The Liouville site for a physical space whose state `a` carries integer charge `
 (`length(q) = d`). See the file header for the three gradings.
 """
 function liouville_space(q::AbstractVector{<:Integer}; sym::Symbol = :weak)
-    sym in (:weak, :strong, :none) || throw(ArgumentError(
-        "liouville_space: sym must be :weak, :strong or :none, got :$sym"))
+    sym in (:weak, :strong, :none) ||
+        throw(ArgumentError("liouville_space: sym must be :weak, :strong or :none, got :$sym"))
     d = length(q)
     d >= 1 || throw(ArgumentError("liouville_space needs at least one physical state"))
-    labels = Any[_lv_label(sym, Int(q[a]), Int(q[b])) for a in 1:d for b in 1:d]
-    members = Dict{Any, Vector{Int}}()
-    for g in 1:(d^2)
+    labels = Any[_lv_label(sym, Int(q[a]), Int(q[b])) for a = 1:d for b = 1:d]
+    members = Dict{Any,Vector{Int}}()
+    for g = 1:(d^2)
         push!(get!(members, labels[g], Int[]), g)
     end
     keys_sorted = sort(collect(keys(members)))
@@ -81,16 +81,19 @@ function liouville_charge(ls::LiouvilleSpace, M::AbstractMatrix)
     size(M) == (D, D) || throw(DimensionMismatch("superoperator is $(size(M)), expected ($D, $D)"))
     shift = nothing
     first_at = nothing
-    for j in 1:D, i in 1:D
+    for j = 1:D, i = 1:D
         iszero(M[i, j]) && continue
         s = _lv_diff(ls.labels[i], ls.labels[j])
         if shift === nothing
             shift, first_at = s, (i, j)
         elseif s != shift
-            throw(ArgumentError(
-                "superoperator is not covariant under :$(ls.sym): entry $(first_at) shifts the " *
-                "label by $(shift) but entry $((i, j)) by $(s) -- it mixes charge sectors, so " *
-                "this grading cannot be enabled for it"))
+            throw(
+                ArgumentError(
+                    "superoperator is not covariant under :$(ls.sym): entry $(first_at) shifts the " *
+                    "label by $(shift) but entry $((i, j)) by $(s) -- it mixes charge sectors, so " *
+                    "this grading cannot be enabled for it",
+                ),
+            )
         end
     end
     return shift === nothing ? ntuple(_ -> (0,), length(ls.symm)) : shift
@@ -106,7 +109,7 @@ function _liouville_tensor(ls::LiouvilleSpace, S::AbstractMatrix{<:Real}, shift)
     QT = Tuple{Vararg{Int}}
     neutral = _lv_iszero(shift)
     QD = neutral ? 2 : 3
-    data = Vector{Tuple{NTuple{QD, NTuple{N, QT}}, Array{Float64, QD + N}}}()
+    data = Vector{Tuple{NTuple{QD,NTuple{N,QT}},Array{Float64,QD + N}}}()
     for (lin, din) in ls.sectors
         lout = _lv_add(lin, shift)
         haskey(ls.members, lout) || continue
@@ -117,8 +120,9 @@ function _liouville_tensor(ls::LiouvilleSpace, S::AbstractMatrix{<:Real}, shift)
     end
     sp = [(l, n) for (l, n) in ls.sectors]           # concretely typed, as Telum's spaces are
     spaces = neutral ? (sp, sp) : (sp, sp, [(shift, 1)])
-    inds = neutral ? (TLIndex("s", '+'), TLIndex("s", '-')) :
-                     (TLIndex("s", '+'), TLIndex("s", '-'), TLIndex("op", '-'))
+    inds =
+        neutral ? (TLIndex("s", '+'), TLIndex("s", '-')) :
+        (TLIndex("s", '+'), TLIndex("s", '-'), TLIndex("op", '-'))
     if isempty(data)
         # a zero operator: the identity's structure times zero keeps every leg's space
         neutral || throw(ArgumentError("a zero charged superoperator has no op-leg space"))
@@ -160,8 +164,8 @@ NEUTRAL under the grading (a charged one would change the state's sector).
 """
 function mpdo_apply!(rho::SymMPS, j::Int, ls::LiouvilleSpace, M::AbstractMatrix)
     T = liouville_op(ls, M)
-    length(T.inds) == 2 || throw(ArgumentError(
-        "mpdo_apply! needs a neutral superoperator; this one shifts the label"))
+    length(T.inds) == 2 ||
+        throw(ArgumentError("mpdo_apply! needs a neutral superoperator; this one shifts the label"))
     t = rho[j].inds[2].itags
     op = to_concrete(setitag(setitag(T, 1, t), 2, t))
     rho[j] = to_concrete(permutedims(contract(op, (1,), rho[j], (2,)), (2, 1, 3)))
@@ -184,18 +188,22 @@ function mpdo_product_state(ls::LiouvilleSpace, rhos::AbstractVector)
     secs = Any[]
     for (j, r) in pairs(rhos)
         size(r) == (d, d) || throw(DimensionMismatch("local rho $j must be $d x $d"))
-        v = ComplexF64[r[a, b] for a in 1:d for b in 1:d]
+        v = ComplexF64[r[a, b] for a = 1:d for b = 1:d]
         nz = findall(!iszero, v)
         isempty(nz) && throw(ArgumentError("local rho $j is zero"))
         labs = unique(ls.labels[nz])
-        length(labs) == 1 || throw(ArgumentError(
-            "local rho $j spans sectors $(labs) of :$(ls.sym) -- not representable as one " *
-            "charge sector (the state breaks the symmetry being used)"))
-        push!(vecs, v); push!(secs, labs[1])
+        length(labs) == 1 || throw(
+            ArgumentError(
+                "local rho $j spans sectors $(labs) of :$(ls.sym) -- not representable as one " *
+                "charge sector (the state breaks the symmetry being used)",
+            ),
+        )
+        push!(vecs, v)
+        push!(secs, labs[1])
     end
     tensors = Any[]
     prev = (getvac(ls.I, ("L,0", "L,1")), 2)
-    for i in 1:L
+    for i = 1:L
         F = to_concrete(getIdentity(prev, (ls.I, 1); itag = "L,$(i + 1)"))
         F = to_concrete(setitag(F, 2, "S,$i"))
         # ⚠ Telum refuses `preserve_space = true` with a slice INSIDE a sector, so the physical leg
@@ -208,7 +216,7 @@ function mpdo_product_state(ls::LiouvilleSpace, rhos::AbstractVector)
         prev = (tensors[end], 3)
     end
     rho = SymMPS(tensors, L)
-    for i in 1:L
+    for i = 1:L
         # which basis state of the sector survived the link cut is Telum's fusion order, so map
         # EVERY state of the sector onto vec(rho_i): neutral, and right whichever one it was
         M = zeros(ComplexF64, D, D)
@@ -230,9 +238,10 @@ Pass it as `cbe_bug_step!(...; keep_states = [mpdo_identity(ls, L)])` to make th
 trace-preserving before the compression.
 """
 function mpdo_identity(ls::LiouvilleSpace, L::Int)
-    ls.sym === :strong && throw(ArgumentError(
-        "|I>> spans every (N, N) block under :strong and is not a single-charge MPS"))
-    return mpdo_product_state(ls, [Matrix{ComplexF64}(I, ls.d, ls.d) for _ in 1:L])
+    ls.sym === :strong && throw(
+        ArgumentError("|I>> spans every (N, N) block under :strong and is not a single-charge MPS"),
+    )
+    return mpdo_product_state(ls, [Matrix{ComplexF64}(I, ls.d, ls.d) for _ = 1:L])
 end
 
 """
@@ -246,8 +255,9 @@ Built by the fusion recursion of [`mpdo_product_state`](@ref); `like` fixes the 
 needs non-negative local charges.
 """
 function mpdo_identity_sector(ls::LiouvilleSpace, L::Int, like::SymMPS)
-    ls.sym === :strong || throw(ArgumentError(
-        "mpdo_identity_sector is for :strong; under :$(ls.sym) use mpdo_identity"))
+    ls.sym === :strong || throw(
+        ArgumentError("mpdo_identity_sector is for :strong; under :$(ls.sym) use mpdo_identity"),
+    )
     all(>=(0), ls.q) || throw(ArgumentError("mpdo_identity_sector needs non-negative charges"))
     length(like) == L || throw(DimensionMismatch("`like` has $(length(like)) sites, not $L"))
     targets = unique(ql[3] for ql in to_concrete(like[L]).qlabels)
@@ -255,24 +265,25 @@ function mpdo_identity_sector(ls::LiouvilleSpace, L::Int, like::SymMPS)
     target = targets[1]
     nof(lab) = abs(lab[1][1])                     # the charge of a diagonal label, any sign convention
     N, qmax = nof(target), maximum(ls.q)
-    diag = Set(ls.labels[liouville_index(ls.d, a, a)] for a in 1:ls.d)
+    diag = Set(ls.labels[liouville_index(ls.d, a, a)] for a = 1:ls.d)
     NS = length(ls.symm)
     QT = Tuple{Vararg{Int}}
     tensors = Any[]
     prev = (getvac(ls.I, ("L,0", "L,1")), 2)
-    for i in 1:L
+    for i = 1:L
         F = to_concrete(getIdentity(prev, (ls.I, 1); itag = "L,$(i + 1)"))
         F = to_concrete(setitag(F, 2, "S,$i"))
         B = to_concrete(getsub(F, 2, s -> s in diag ? Colon() : nothing; preserve_space = true))
         reach(lab) = i == L ? lab == target : (nof(lab) <= N && N - nof(lab) <= qmax * (L - i))
-        data = Vector{Tuple{NTuple{3, NTuple{NS, QT}}, Array{Float64, 3 + NS}}}()
+        data = Vector{Tuple{NTuple{3,NTuple{NS,QT}},Array{Float64,3 + NS}}}()
         for (k, ql) in pairs(B.qlabels)
             reach(ql[3]) || continue
             v = sum(real, Array(B.RMTs[k]))         # the fusion isometry's one entry on this path
             iszero(v) && continue
             push!(data, ((ql[1], ql[2], ql[3]), reshape([v], ntuple(_ -> 1, 3 + NS))))
         end
-        isempty(data) && throw(ErrorException("mpdo_identity_sector: no reachable sector at site $i"))
+        isempty(data) &&
+            throw(ErrorException("mpdo_identity_sector: no reachable sector at site $i"))
         kept = Set(d[1][3] for d in data)
         spaces = (B.spaces[1], B.spaces[2], [(l, 1) for (l, _) in B.spaces[3] if l in kept])
         f = _localspace_cgt_fields(data, symm(B), spaces)

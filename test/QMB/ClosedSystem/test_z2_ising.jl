@@ -45,7 +45,7 @@ using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
                 @test bond_dims(p) == ones(Int, L - 1)      # a genuine product state
                 @test x_profile(p) ≈ ones(L) atol = 1e-12   # every spin along +x
                 k = ising_kink_state(L)
-                @test x_profile(k) ≈ [i <= L ÷ 2 ? 1.0 : -1.0 for i in 1:L] atol = 1e-12
+                @test x_profile(k) ≈ [i <= L ÷ 2 ? 1.0 : -1.0 for i = 1:L] atol = 1e-12
             end
         end
     end

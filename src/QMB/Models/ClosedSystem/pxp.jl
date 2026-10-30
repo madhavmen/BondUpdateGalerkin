@@ -20,24 +20,35 @@ which makes `exp(-iHt)` non-unitary without any error being raised. `P` needs no
 the +-1/2 eigenvalues asserted below.
 """
 function pxp_operators()
-    symmetry_mode() === :none || throw(ArgumentError(
-        "pxp_operators is :none only, got $(symmetry_mode()): σ^x does not conserve S^z, so " *
-        "the PXP model has no U(1) or SU(2) form"))
+    symmetry_mode() === :none || throw(
+        ArgumentError(
+            "pxp_operators is :none only, got $(symmetry_mode()): σ^x does not conserve S^z, so " *
+            "the PXP model has no U(1) or SU(2) form",
+        ),
+    )
     q = local_space(:none)
     # `S^z` must be the spin-1/2 generator, not the Pauli matrix, or `P = 1/2 - S^z` is not a
     # projector at all (`P² ≠ P`) and every blockade in the model is silently wrong.
     Mz = Matrix(q.Sz.RMTs[1])
-    (maximum(abs.(sort(real.(diag(Mz))) .- [-0.5, 0.5])) < 1e-12 &&
-     maximum(abs.(Mz .- Diagonal(diag(Mz)))) < 1e-12) || throw(ErrorException(
-        "pxp_operators: :none S^z came back as $Mz, expected diagonal with eigenvalues ±1/2. " *
-        "`P = 1/2 - S^z` is only the |∘⟩ projector for that normalisation."))
+    (
+        maximum(abs.(sort(real.(diag(Mz))) .- [-0.5, 0.5])) < 1e-12 &&
+        maximum(abs.(Mz .- Diagonal(diag(Mz)))) < 1e-12
+    ) || throw(
+        ErrorException(
+            "pxp_operators: :none S^z came back as $Mz, expected diagonal with eigenvalues ±1/2. " *
+            "`P = 1/2 - S^z` is only the |∘⟩ projector for that normalisation.",
+        ),
+    )
     P = to_concrete(0.5 * q.I - q.Sz)               # projector on |∘⟩ = the S^z = -1/2 state
     X = to_concrete(2.0 * sx_operator())            # σ^x = 2 S^x -- see the docstring
     MX = Matrix(X.RMTs[1])
-    maximum(abs.(MX .- [0.0 1.0; 1.0 0.0])) < 1e-12 || throw(ErrorException(
-        "pxp_operators: built X = $MX, expected σ^x = [0 1; 1 0]. A non-symmetric X makes the " *
-        "PXP MPO non-Hermitian and `exp(-iHt)` non-unitary; ‖ψ‖ then grows without anything " *
-        "throwing (measured 3.95 after 20 steps at L=8)."))
+    maximum(abs.(MX .- [0.0 1.0; 1.0 0.0])) < 1e-12 || throw(
+        ErrorException(
+            "pxp_operators: built X = $MX, expected σ^x = [0 1; 1 0]. A non-symmetric X makes the " *
+            "PXP MPO non-Hermitian and `exp(-iHt)` non-unitary; ‖ψ‖ then grows without anything " *
+            "throwing (measured 3.95 after 20 steps at L=8).",
+        ),
+    )
     return (; I = q.I, P = P, X = X)
 end
 
@@ -59,13 +70,13 @@ function pxp_mpo(L::Int; Omega::Float64 = 1.0)
     W = 4
 
     Ws = Any[]
-    for i in 1:L
+    for i = 1:L
         tl, tr = "W,$(i - 1)", "W,$i"
-        Iid  = _mpo_block(ops.I, i, tl, tr, :none)
+        Iid = _mpo_block(ops.I, i, tl, tr, :none)
         Pblk = _mpo_block(ops.P, i, tl, tr, :none)
         Xblk = _mpo_block(ops.X, i, tl, tr, :none)
         Znil = to_concrete(0.0 * Iid)
-        mat  = Matrix{Any}(nothing, W, W)
+        mat = Matrix{Any}(nothing, W, W)
 
         i < L && (mat[1, 1] = Iid)                                  # stay `id`
         i > 1 && (mat[W, W] = Iid)                                  # stay `done`
@@ -99,7 +110,7 @@ language of the model rather than of the spin chain. Both are `:none`/`:U1` prod
 bond dimension 1, which is the entire difficulty: the integrator has to build every bit of the
 rank it will ever need out of a state that has none.
 """
-z2_state(L::Int) = product_state([isodd(i) ? :up : :down for i in 1:L])
+z2_state(L::Int) = product_state([isodd(i) ? :up : :down for i = 1:L])
 
 """
     zk_state(L, k) -> SymMPS
@@ -114,9 +125,10 @@ state); `k = 3` weaker but visible; `k = 0` no revivals, the control.
 integrator must build its own rank.
 """
 function zk_state(L::Int, k::Int)
-    k == 1 && throw(ArgumentError(
-        "zk_state: k=1 is all-up, which violates the Rydberg blockade on every bond"))
+    k == 1 && throw(
+        ArgumentError("zk_state: k=1 is all-up, which violates the Rydberg blockade on every bond"),
+    )
     k < 0 && throw(ArgumentError("zk_state: k must be >= 0, got $k"))
     k == 0 && return product_state(fill(:down, L))
-    return product_state([(i - 1) % k == 0 ? :up : :down for i in 1:L])
+    return product_state([(i - 1) % k == 0 ? :up : :down for i = 1:L])
 end

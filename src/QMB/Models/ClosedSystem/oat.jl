@@ -21,7 +21,7 @@ would be the `(S^z_ℓ)^2` term already absorbed into [`oat_energy_shift`](@ref)
 function oat_couplings(L::Int)
     L >= 2 || throw(ArgumentError("oat_couplings needs L >= 2, got $L"))
     J = zeros(Float64, L, L)
-    for i in 1:(L - 1), j in (i + 1):L
+    for i = 1:(L-1), j = (i+1):L
         J[i, j] = 1.0
     end
     return J
@@ -51,9 +51,12 @@ O(L); [`pair_mpo`](@ref) builds the charged transport block and the operator sta
 """
 function oat_mpo(L::Int; chi::Float64 = 1.0)
     L >= 2 || throw(ArgumentError("oat_mpo needs L >= 2, got $L"))
-    symmetry_mode() === :SU2 && throw(ArgumentError(
-        "oat_mpo needs a rank-2 Sz, which SU(2) does not have -- run OAT under :none " *
-        "(the mode that can also hold the x-polarised state and measure S^x)"))
+    symmetry_mode() === :SU2 && throw(
+        ArgumentError(
+            "oat_mpo needs a rank-2 Sz, which SU(2) does not have -- run OAT under :none " *
+            "(the mode that can also hold the x-polarised state and measure S^x)",
+        ),
+    )
     # `:Z2`'s `S^z` is rank 3, which the self-loop cannot carry -- see the docstring.
     symmetry_mode() === :Z2 && return oat_mpo_pairs(L; chi = chi)
     q = local_space()
@@ -111,12 +114,15 @@ silent, so the guard runs once at the entry point. `:Z2` works because H is even
 spin flip, which is diagonal in the sigma^x basis of `z2_ising.jl`.
 """
 function _require_sx_measurable(what::AbstractString)
-    symmetry_mode() in (:none, :Z2) || throw(ArgumentError(
-        "$what needs symmetry_mode() to be :none or :Z2, got $(symmetry_mode()). The OAT " *
-        "initial state ⊗|→⟩ has weight in EVERY total-Sz sector and the observable S^x_tot " *
-        "is charge-raising, so a U(1)/SU(2) run would report ⟨S^x_tot⟩ = 0 by symmetry rather " *
-        "than the collapse-and-revival signal. Call set_symmetry!(:Z2) for the paper's own " *
-        "symmetry, or set_symmetry!(:none) for the dense control."))
+    symmetry_mode() in (:none, :Z2) || throw(
+        ArgumentError(
+            "$what needs symmetry_mode() to be :none or :Z2, got $(symmetry_mode()). The OAT " *
+            "initial state ⊗|→⟩ has weight in EVERY total-Sz sector and the observable S^x_tot " *
+            "is charge-raising, so a U(1)/SU(2) run would report ⟨S^x_tot⟩ = 0 by symmetry rather " *
+            "than the collapse-and-revival signal. Call set_symmetry!(:Z2) for the paper's own " *
+            "symmetry, or set_symmetry!(:none) for the dense control.",
+        ),
+    )
 end
 
 """
@@ -141,15 +147,21 @@ function sx_operator()
         # -- measured. Every Z2 irrep is one-dimensional, so each block holds exactly one
         # number and `only` reads it whatever the block's rank happens to be.
         blocks = collect(Sx.RMTs)
-        (length(blocks) == 2 && all(length(R) == 1 for R in blocks)) || throw(ErrorException(
-            "sx_operator(:Z2): expected two single-entry sector blocks, got $(length(blocks)) " *
-            "of sizes $([size(R) for R in blocks]). The Z2 local space is built below Telum's " *
-            "IROP layer (z2_ising.jl) -- recalibrate `_z2_diag_op` before trusting any number."))
+        (length(blocks) == 2 && all(length(R) == 1 for R in blocks)) || throw(
+            ErrorException(
+                "sx_operator(:Z2): expected two single-entry sector blocks, got $(length(blocks)) " *
+                "of sizes $([size(R) for R in blocks]). The Z2 local space is built below Telum's " *
+                "IROP layer (z2_ising.jl) -- recalibrate `_z2_diag_op` before trusting any number.",
+            ),
+        )
         # Sorted, so the check does not depend on which charge sector Telum lists first.
         got = sort([only(R) for R in blocks])
-        maximum(abs.(got .- [-0.5, 0.5])) < 1e-12 || throw(ErrorException(
-            "sx_operator(:Z2): built S^x with eigenvalues $got, expected ±1/2. `X` is meant " *
-            "to be `diag(+1,-1)` in the sigma^x basis, i.e. `2 S^x`."))
+        maximum(abs.(got .- [-0.5, 0.5])) < 1e-12 || throw(
+            ErrorException(
+                "sx_operator(:Z2): built S^x with eigenvalues $got, expected ±1/2. `X` is meant " *
+                "to be `diag(+1,-1)` in the sigma^x basis, i.e. `2 S^x`.",
+            ),
+        )
         return Sx
     end
     q = local_space(:none)
@@ -158,10 +170,13 @@ function sx_operator()
     # `_dense_up_index` fixes which index is up; S^x is off-diagonal either way, so the check is
     # basis-order independent as written.
     want = [0.0 0.5; 0.5 0.0]
-    maximum(abs.(M .- want)) < 1e-12 || throw(ErrorException(
-        "sx_operator: built S^x = $M, expected $want. Telum's :none Sp/Sm normalisation has " *
-        "changed -- recalibrate the (Sm - Sp)/√2 combination against the measured matrices " *
-        "before trusting any OAT number."))
+    maximum(abs.(M .- want)) < 1e-12 || throw(
+        ErrorException(
+            "sx_operator: built S^x = $M, expected $want. Telum's :none Sp/Sm normalisation has " *
+            "changed -- recalibrate the (Sm - Sp)/√2 combination against the measured matrices " *
+            "before trusting any OAT number.",
+        ),
+    )
     return Sx
 end
 
@@ -185,7 +200,7 @@ function x_polarized_state(L::Int)
     symmetry_mode() === :Z2 && return ising_polarised_state(L)
     up = product_state(fill(:up, L))
     dn = product_state(fill(:down, L))
-    ts = Any[to_concrete((1 / sqrt(2)) * (up[i] + dn[i])) for i in 1:L]
+    ts = Any[to_concrete((1 / sqrt(2)) * (up[i] + dn[i])) for i = 1:L]
     return SymMPS(ts, L)
 end
 
@@ -200,7 +215,7 @@ profile costs one sweep. It CANONICALISES `psi` (a gauge change, not a state cha
 """
 function sx_profile(psi::SymMPS)
     Sx = sx_operator()
-    return [real(site_expval(psi, j, Sx)) for j in 1:length(psi)]
+    return [real(site_expval(psi, j, Sx)) for j = 1:length(psi)]
 end
 
 """

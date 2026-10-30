@@ -20,11 +20,15 @@ shrinks with L.
 function ising_bond_gates(psi::SymMPS; J::Float64 = 1.0, h::Float64 = 1.0)
     L = length(psi)
     L >= 2 || throw(ArgumentError("ising_bond_gates needs at least two sites, got $L"))
-    return Any[ising_bond_gate(psi[i].inds[2], psi[i + 1].inds[2];
-                               J = J,
-                               hl = h / (i == 1 ? 1 : 2),
-                               hr = h / (i == L - 1 ? 1 : 2))
-               for i in 1:(L - 1)]
+    return Any[
+        ising_bond_gate(
+            psi[i].inds[2],
+            psi[i+1].inds[2];
+            J = J,
+            hl = h / (i == 1 ? 1 : 2),
+            hr = h / (i == L - 1 ? 1 : 2),
+        ) for i = 1:(L-1)
+    ]
 end
 
 """
@@ -35,17 +39,17 @@ end
 `hl`/`hr` are this bond's SHARE of the on-site field, not the field itself -- see
 [`ising_bond_gates`](@ref), which computes the shares.
 """
-function ising_bond_gate(site_l, site_r; J::Float64 = 1.0,
-                         hl::Float64 = 0.5, hr::Float64 = 0.5)
+function ising_bond_gate(site_l, site_r; J::Float64 = 1.0, hl::Float64 = 0.5, hr::Float64 = 0.5)
     tl, tr = _site_tag(site_l), _site_tag(site_r)
-    tl == tr && throw(ArgumentError(
-        "the two sites of a bond need distinct itags, both are '$tl'"))
+    tl == tr && throw(ArgumentError("the two sites of a bond need distinct itags, both are '$tl'"))
     q = ising_local_space()
 
-    pair(A, B) = to_concrete(permutedims(
-        contract(_retag_site(A, tl), (3,), _retag_site(B, tr)', (3,)), (1, 4, 2, 3)))
-    outer(A, B) = to_concrete(permutedims(
-        contract(_retag_site(A, tl), (), _retag_site(B, tr), ()), (1, 3, 2, 4)))
+    pair(A, B) = to_concrete(
+        permutedims(contract(_retag_site(A, tl), (3,), _retag_site(B, tr)', (3,)), (1, 4, 2, 3)),
+    )
+    outer(A, B) = to_concrete(
+        permutedims(contract(_retag_site(A, tl), (), _retag_site(B, tr), ()), (1, 3, 2, 4)),
+    )
 
     # Under :Z2 the flip is rank-3 (its op leg carries the charge), so Z⊗Z is the op-leg
     # contraction; under :none it is a plain matrix and the same operator is an outer product.
@@ -68,20 +72,24 @@ dimension 2, so there is no charge to filter on, only a basis index.
 function ising_product_state(dirs::Vector{Symbol})
     L = length(dirs)
     L >= 1 || throw(ArgumentError("ising_product_state needs at least one site"))
-    all(d -> d in (:plus, :minus), dirs) || throw(ArgumentError(
-        "each entry must be :plus or :minus, got $(filter(d -> !(d in (:plus, :minus)), dirs))"))
+    all(d -> d in (:plus, :minus), dirs) || throw(
+        ArgumentError(
+            "each entry must be :plus or :minus, got $(filter(d -> !(d in (:plus, :minus)), dirs))",
+        ),
+    )
     q = ising_local_space()
     z2 = symmetry_mode() === :Z2
 
     tensors = Any[]
     prev = (getvac(q.I, ("L,0", "L,1")), 2)
-    for i in 1:L
+    for i = 1:L
         F = to_concrete(getIdentity(prev, (q.I, 1); itag = "L,$(i + 1)"))
         F = to_concrete(setitag(F, 2, "S,$i"))
         A = if z2
             target = dirs[i] === :plus ? _Z2_Q0 : _Z2_Q1
-            B = to_concrete(getsub(F, 2, s -> s == target ? Colon() : nothing;
-                                   preserve_space = true))
+            B = to_concrete(
+                getsub(F, 2, s -> s == target ? Colon() : nothing; preserve_space = true),
+            )
             present = Set(ql[3] for ql in B.qlabels)
             to_concrete(getsub(B, 3, s -> s in present ? Colon() : nothing))
         else
@@ -112,8 +120,7 @@ ising_polarised_state(L::Int) = ising_product_state(fill(:plus, L))
 `(L ÷ 2) mod 2`. Gives a light cone under a TFIM quench in the same way the Heisenberg domain
 wall does.
 """
-ising_kink_state(L::Int) =
-    ising_product_state([i <= L ÷ 2 ? :plus : :minus for i in 1:L])
+ising_kink_state(L::Int) = ising_product_state([i <= L ÷ 2 ? :plus : :minus for i = 1:L])
 
 """
     x_profile(psi) -> Vector{Float64}
@@ -124,5 +131,4 @@ WHY NOT `<Z_j>`: it is identically zero in any Z2-symmetric state, because `Z` c
 charge and so has no diagonal matrix element at all. That is the symmetry, not a limitation --
 the order parameter has to be probed with the CORRELATOR `<Z_i Z_j>`, never a single site.
 """
-x_profile(psi::SymMPS) =
-    [real(site_expval(psi, j, ising_local_space().X)) for j in 1:length(psi)]
+x_profile(psi::SymMPS) = [real(site_expval(psi, j, ising_local_space().X)) for j = 1:length(psi)]

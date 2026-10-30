@@ -17,11 +17,13 @@ orthogonal to every other bond's, so the variance is the sum of the squared flip
 function _product_variance(twoms, twoS)
     s = twoS / 2
     r(m) = s * (s + 1) - m * (m + 1)
-    return sum(r(twoms[b] / 2) * r(-twoms[b + 1] / 2) + r(-twoms[b] / 2) * r(twoms[b + 1] / 2)
-               for b in 1:(length(twoms) - 1)) / 4
+    return sum(
+        r(twoms[b] / 2) * r(-twoms[b+1] / 2) + r(-twoms[b] / 2) * r(twoms[b+1] / 2) for
+        b = 1:(length(twoms)-1)
+    ) / 4
 end
 
-_wall(L, twoS) = [i <= L ÷ 2 ? twoS : -twoS for i in 1:L]
+_wall(L, twoS) = [i <= L ÷ 2 ? twoS : -twoS for i = 1:L]
 
 @testset "T7.0: the two XX models" begin
     set_symmetry!(:U1)
@@ -39,8 +41,8 @@ _wall(L, twoS) = [i <= L ÷ 2 ? twoS : -twoS for i in 1:L]
             @test mpo_variance(psi, mpo) ≈ _product_variance(twoms, twoS) atol = 1e-12
         end
         # Var_0(H_s) = J^2 s^2 on the L = 16 domain wall: only the central bond acts
-        @test mpo_variance(spin_domain_wall_state(16, twoS), spin_xx_mpo(16, twoS)) ≈
-              (twoS / 2)^2 atol = 1e-12
+        @test mpo_variance(spin_domain_wall_state(16, twoS), spin_xx_mpo(16, twoS)) ≈ (twoS / 2)^2 atol =
+            1e-12
         @test_throws ArgumentError sector_product_state(q, [((twoS + 2,),)])
     end
     # s = 1/2 is the package's own chain and state
@@ -48,10 +50,11 @@ _wall(L, twoS) = [i <= L ÷ 2 ? twoS : -twoS for i in 1:L]
     chain_length = 8
     xx_reference = xxz_mpo(chain_length; J = 1.0, delta = 0.0)
     psi = neel_state(chain_length)
-    for _ in 1:3
+    for _ = 1:3
         cbe_bug_step!(psi, xx_reference, ComplexF64(-0.2im); maxdim = 64)
     end
     @test maximum(bond_dims(psi)) > 1                     # the comparison state is entangled
     @test mpo_energy(psi, spin_xx_mpo(chain_length, 1)) ≈ mpo_energy(psi, xx_reference) atol = 1e-12
-    @test mpo_variance(psi, spin_xx_mpo(chain_length, 1)) ≈ mpo_variance(psi, xx_reference) atol = 1e-12
+    @test mpo_variance(psi, spin_xx_mpo(chain_length, 1)) ≈ mpo_variance(psi, xx_reference) atol =
+        1e-12
 end

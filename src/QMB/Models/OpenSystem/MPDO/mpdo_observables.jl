@@ -18,9 +18,9 @@ function _mpdo_walk(rho::SymMPS, ls::LiouvilleSpace, cov::AbstractVector)
     L = length(rho)
     length(cov) == L || throw(DimensionMismatch("need one covector per site"))
     env = nothing                                      # label => row vector over the link
-    for i in 1:L
+    for i = 1:L
         A = to_concrete(rho[i])
-        new = Dict{Any, Vector{ComplexF64}}()
+        new = Dict{Any,Vector{ComplexF64}}()
         for (k, ql) in pairs(A.qlabels)
             cl, s, cr = ql
             R = _rmt3(A.RMTs[k])
@@ -33,7 +33,7 @@ function _mpdo_walk(rho::SymMPS, ls::LiouvilleSpace, cov::AbstractVector)
             end
             gs = ls.members[s]
             t = zeros(ComplexF64, dl, dr)
-            for p in 1:dp
+            for p = 1:dp
                 w = cov[i][gs[p]]
                 iszero(w) || (t .+= w .* @view R[:, p, :])
             end
@@ -51,12 +51,11 @@ multiplicity dimension per abelian symmetry (rank `QD + N`), and may be a `DiagR
 _rmt3(R) = (X = Array(R); reshape(X, size(X, 1), size(X, 2), size(X, 3)))
 
 "`vec(I)` as a Liouville covector: picks the diagonal `|a><a|` entries."
-_lv_trace_cov(ls::LiouvilleSpace) =
-    ComplexF64[a == b ? 1 : 0 for a in 1:ls.d for b in 1:ls.d]
+_lv_trace_cov(ls::LiouvilleSpace) = ComplexF64[a == b ? 1 : 0 for a = 1:ls.d for b = 1:ls.d]
 
 "`Tr(O rho_site)` as a Liouville covector: `sum_ab O[b,a] rho[a,b]`."
 _lv_op_cov(ls::LiouvilleSpace, O::AbstractMatrix) =
-    ComplexF64[O[b, a] for a in 1:ls.d for b in 1:ls.d]
+    ComplexF64[O[b, a] for a = 1:ls.d for b = 1:ls.d]
 
 "`Tr rho` of an MPDO."
 mpdo_trace(rho::SymMPS, ls::LiouvilleSpace) =
@@ -69,7 +68,7 @@ mpdo_trace(rho::SymMPS, ls::LiouvilleSpace) =
 `d x d` matrix); NOT divided when `normalise = false`.
 """
 function mpdo_expect(rho::SymMPS, ls::LiouvilleSpace, ops::AbstractDict; normalise::Bool = true)
-    cov = [haskey(ops, j) ? _lv_op_cov(ls, ops[j]) : _lv_trace_cov(ls) for j in 1:length(rho)]
+    cov = [haskey(ops, j) ? _lv_op_cov(ls, ops[j]) : _lv_trace_cov(ls) for j = 1:length(rho)]
     v = _mpdo_walk(rho, ls, cov)
     return normalise ? v / mpdo_trace(rho, ls) : v
 end
@@ -87,13 +86,14 @@ function mpdo_rdm(rho::SymMPS, ls::LiouvilleSpace, sites::AbstractVector{<:Integ
     tr = mpdo_trace(rho, ls)
     out = zeros(ComplexF64, d^k, d^k)
     for ia in CartesianIndices(ntuple(_ -> d, k)), ib in CartesianIndices(ntuple(_ -> d, k))
-        ops = Dict{Int, Matrix{Float64}}()
+        ops = Dict{Int,Matrix{Float64}}()
         for (m, j) in pairs(sites)
-            E = zeros(d, d); E[ib[m], ia[m]] = 1.0         # Tr(|b><a| rho) = rho[a, b]
+            E = zeros(d, d)
+            E[ib[m], ia[m]] = 1.0         # Tr(|b><a| rho) = rho[a, b]
             ops[j] = E
         end
-        a = sum((ia[m] - 1) * d^(k - m) for m in 1:k) + 1
-        b = sum((ib[m] - 1) * d^(k - m) for m in 1:k) + 1
+        a = sum((ia[m] - 1) * d^(k - m) for m = 1:k) + 1
+        b = sum((ib[m] - 1) * d^(k - m) for m = 1:k) + 1
         out[a, b] = mpdo_expect(rho, ls, ops; normalise = false) / tr
     end
     return out
@@ -111,19 +111,18 @@ function mpdo_dense(rho::SymMPS, ls::LiouvilleSpace)
     D = d^2
     env = nothing                                      # label => (nacc x dlink) amplitudes
     nacc = 1
-    for i in 1:L
+    for i = 1:L
         A = to_concrete(rho[i])
-        new = Dict{Any, Matrix{ComplexF64}}()
+        new = Dict{Any,Matrix{ComplexF64}}()
         for (k, ql) in pairs(A.qlabels)
             cl, s, cr = ql
             R = _rmt3(A.RMTs[k])
             dl, dp, dr = size(R)
-            E = env === nothing ? ones(ComplexF64, 1, dl) :
-                (haskey(env, cl) ? env[cl] : continue)
+            E = env === nothing ? ones(ComplexF64, 1, dl) : (haskey(env, cl) ? env[cl] : continue)
             acc = get!(new, cr, zeros(ComplexF64, nacc * D, dr))
-            for p in 1:dp
+            for p = 1:dp
                 g = ls.members[s][p]
-                rows = ((0:(nacc - 1)) .* D) .+ g
+                rows = ((0:(nacc-1)) .* D) .+ g
                 acc[rows, :] .+= E * R[:, p, :]
             end
         end
@@ -132,9 +131,10 @@ function mpdo_dense(rho::SymMPS, ls::LiouvilleSpace)
     end
     v = sum(sum(m; dims = 2)[:, 1] for m in values(env))
     rhoD = zeros(ComplexF64, d^L, d^L)
-    for idx in 1:(D^L)
+    for idx = 1:(D^L)
         gs = reverse(digits(idx - 1; base = D, pad = L)) .+ 1        # site 1 most significant
-        ka = 1; kb = 1
+        ka = 1
+        kb = 1
         for g in gs
             a, b = liouville_pair(d, g)
             ka = (ka - 1) * d + a
@@ -172,11 +172,15 @@ function mpdo_checks(rho::SymMPS, ls::LiouvilleSpace; dense::Bool = length(rho) 
     if dense
         R = mpdo_dense(rho, ls) / tr
         H = (R + R') / 2
-        return (trace = tr, herm = norm(R - R') / max(norm(R), eps()),
-                min_eig = minimum(eigvals(Hermitian(H))), local_only = false)
+        return (
+            trace = tr,
+            herm = norm(R - R') / max(norm(R), eps()),
+            min_eig = minimum(eigvals(Hermitian(H))),
+            local_only = false,
+        )
     end
     herm, mn = 0.0, Inf
-    for j in 1:(length(rho) - 1)
+    for j = 1:(length(rho)-1)
         R = mpdo_rdm(rho, ls, [j, j + 1])
         herm = max(herm, norm(R - R') / max(norm(R), eps()))
         mn = min(mn, minimum(eigvals(Hermitian((R + R') / 2))))

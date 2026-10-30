@@ -8,10 +8,10 @@
 # Only s = 1/2 has a free-fermion closed form; the s = 3 references are sector ED and converged MPS runs.
 
 "The nearest-neighbour coupling matrix `w` on the bonds `bonds` (strict upper triangle)."
-function _nn_couplings(L::Int, w::Number, bonds = 1:(L - 1))
+function _nn_couplings(L::Int, w::Number, bonds = 1:(L-1))
     M = zeros(typeof(w), L, L)
     for b in bonds
-        M[b, b + 1] = w
+        M[b, b+1] = w
     end
     return M
 end
@@ -21,8 +21,8 @@ end
 `S^-_i S^+_{i+1} / 2`, APPLIED by `pair_mpo` as their transposes (the `liouville.jl` header), i.e.
 the other one. The sum `H_s` is symmetric and does not see it; `spin_current_mpo` does.
 """
-_spin_xx_vertices(q) = [PairVertex(q.Sp, to_concrete(q.Sp'), 1.0),
-                        PairVertex(q.Sm, to_concrete(q.Sm'), 1.0)]
+_spin_xx_vertices(q) =
+    [PairVertex(q.Sp, to_concrete(q.Sp'), 1.0), PairVertex(q.Sm, to_concrete(q.Sm'), 1.0)]
 
 """
     spin_xx_mpo(L, twoS; J = 1.0) -> MPO
@@ -49,8 +49,12 @@ function spin_current_mpo(L::Int, twoS::Int, b::Int; J::Float64 = 1.0)
     # ⛔ `j_b` is imaginary ANTISYMMETRIC, so the transpose `pair_mpo` applies is `-j_b`: `+w` goes
     # on the vertex that APPLIES `S^+_b S^-_{b+1}`, which is `(Sm, Sm')`. Measured (hq24a, L = 4
     # against dense): `+w` on `(Sp, Sp')` gave `-j_b` exactly, and evolved as `exp(+i tau j_b)`.
-    return pair_mpo(L, [_nn_couplings(L, -w, b:b), _nn_couplings(L, w, b:b)],
-                    _spin_xx_vertices(q); Iloc = q.I)
+    return pair_mpo(
+        L,
+        [_nn_couplings(L, -w, b:b), _nn_couplings(L, w, b:b)],
+        _spin_xx_vertices(q);
+        Iloc = q.I,
+    )
 end
 
 """
@@ -60,9 +64,12 @@ end
 `L`. At `twoS = 1` it is `domain_wall_state(L)`.
 """
 spin_domain_wall_state(L::Int, twoS::Int; eltype::Type{<:Number} = ComplexF64) =
-    sector_product_state(spin_space(twoS), [(((i <= L ÷ 2 ? twoS : -twoS),),) for i in 1:L];
-                         eltype = eltype)
+    sector_product_state(
+        spin_space(twoS),
+        [(((i <= L ÷ 2 ? twoS : -twoS),),) for i = 1:L];
+        eltype = eltype,
+    )
 
 "`<S^z_i>` on every site of a spin-`twoS/2` chain."
 spin_sz_profile(psi::SymMPS, twoS::Int) =
-    [real(site_expval(psi, j, spin_space(twoS).Sz)) for j in 1:length(psi)]
+    [real(site_expval(psi, j, spin_space(twoS).Sz)) for j = 1:length(psi)]

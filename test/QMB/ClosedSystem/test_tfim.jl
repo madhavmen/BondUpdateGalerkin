@@ -18,15 +18,15 @@ using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
 function _tfim_dense_ref(L::Int; J::Float64 = 1.0, h::Float64 = 1.0)
     D = 2^L
     H = zeros(ComplexF64, D, D)
-    for s in 0:(D - 1)
+    for s = 0:(D-1)
         d = 0.0
-        for i in 0:(L - 1)
+        for i = 0:(L-1)
             d += ((s >> i) & 1) == 0 ? 1.0 : -1.0
         end
-        H[s + 1, s + 1] = -h * d
-        for i in 0:(L - 2)
+        H[s+1, s+1] = -h * d
+        for i = 0:(L-2)
             t = s ⊻ (1 << i) ⊻ (1 << (i + 1))
-            H[t + 1, s + 1] += -J
+            H[t+1, s+1] += -J
         end
     end
     return H
@@ -39,12 +39,13 @@ function _x_product_dense(dirs::Vector{Symbol})
     for (i, d) in enumerate(dirs)
         d === :minus && (s |= 1 << (i - 1))
     end
-    v[s + 1] = 1.0
+    v[s+1] = 1.0
     return v
 end
 
 "`dirs` with the spins on sites `i` and `i + 1` flipped: what one `Z_i Z_{i+1}` term does."
-_flip_pair(dirs, i) = [j in (i, i + 1) ? (d === :plus ? :minus : :plus) : d for (j, d) in enumerate(dirs)]
+_flip_pair(dirs, i) =
+    [j in (i, i + 1) ? (d === :plus ? :minus : :plus) : d for (j, d) in enumerate(dirs)]
 
 @testset "tfim_mpo" begin
     L, J, h = 6, 1.0, 0.7
@@ -52,10 +53,12 @@ _flip_pair(dirs, i) = [j in (i, i + 1) ? (d === :plus ? :minus : :plus) : d for 
 
     # ⛔ ASYMMETRIC STATES ARE THE POINT. A state symmetric under reversal is a fixed point of a
     # MIRRORED site convention, so it passes whether or not the two orderings agree.
-    cases = ["polarised"  => fill(:plus, L),
-             "kink"       => [i <= L ÷ 2 ? :plus : :minus for i in 1:L],
-             "asymmetric" => [:plus, :minus, :minus, :plus, :minus, :plus],
-             "one flip"   => [i == 2 ? :minus : :plus for i in 1:L]]
+    cases = [
+        "polarised" => fill(:plus, L),
+        "kink" => [i <= L ÷ 2 ? :plus : :minus for i = 1:L],
+        "asymmetric" => [:plus, :minus, :minus, :plus, :minus, :plus],
+        "one flip" => [i == 2 ? :minus : :plus for i = 1:L],
+    ]
 
     @testset "the operator, under $sym" for sym in (:none, :Z2)
         set_symmetry!(sym)
@@ -67,7 +70,7 @@ _flip_pair(dirs, i) = [j in (i, i + 1) ? (d === :plus ? :minus : :plus) : d for 
 
         for (name, dirs) in cases
             psi = ising_product_state(dirs)
-            v   = _x_product_dense(dirs)
+            v = _x_product_dense(dirs)
             @test real(mpo_energy(copy(psi), W)) ≈ real(dot(v, HD * v)) atol = 1e-10
         end
 
@@ -79,19 +82,19 @@ _flip_pair(dirs, i) = [j in (i, i + 1) ? (d === :plus ? :minus : :plus) : d for 
         # THE COUPLING. Every energy above is blind to it (`<s|Z_i Z_{i+1}|s> = 0` on a sigma^x
         # product state), so read it off the matrix elements between a state and the state with
         # one adjacent pair flipped: exactly `-J`, and zero for a pair the operator cannot reach.
-        for (name, dirs) in cases, bond in 1:(L - 1)
+        for (name, dirs) in cases, bond = 1:(L-1)
             flipped = _flip_pair(dirs, bond)
             element = mpo_matrix_element(ising_product_state(flipped), W, ising_product_state(dirs))
             @test element ≈ dot(_x_product_dense(flipped), HD * _x_product_dense(dirs)) atol = 1e-10
         end
-        far_flip = [j in (1, 3) ? :minus : :plus for j in 1:L]       # sites 1 and 3: no ZZ term
-        @test abs(mpo_matrix_element(ising_product_state(far_flip), W,
-                                     ising_polarised_state(L))) < 1e-12
+        far_flip = [j in (1, 3) ? :minus : :plus for j = 1:L]       # sites 1 and 3: no ZZ term
+        @test abs(mpo_matrix_element(ising_product_state(far_flip), W, ising_polarised_state(L))) <
+              1e-12
     end
 
     @testset "the two symmetries describe one operator" begin
         # Same numbers, different block structure. A gap here is charge bookkeeping, not physics.
-        e = Dict{Symbol, Vector{Float64}}()
+        e = Dict{Symbol,Vector{Float64}}()
         for sym in (:none, :Z2)
             set_symmetry!(sym)
             W = tfim_mpo(L; J = J, h = h)

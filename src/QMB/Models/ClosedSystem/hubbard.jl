@@ -11,7 +11,7 @@
 # Telum's own spinful-fermion space (`FermionSOptions(1, charge, spin)`, dimension 4). It carries the
 # fermionic signs: the intra-site Jordan-Wigner string sits in the annihilators, and the site parity Z
 # carries the inter-site part. Mode order hub_mode(i,s) = 2(i-1)+s matches hubbard_aa_exact.jl.
-const _HUB4_SPACES = Dict{Symbol, Any}()
+const _HUB4_SPACES = Dict{Symbol,Any}()
 
 """
     hub4_space(sym = symmetry_mode()) -> NamedTuple
@@ -23,13 +23,17 @@ Fused d = 4 spinful-fermion local space, built once per mode and cached. Returns
 """
 function hub4_space(sym::Symbol = symmetry_mode())
     haskey(_HUB4_SPACES, sym) && return _HUB4_SPACES[sym]
-    sym === :SU2 && throw(ArgumentError(
-        "hub4_space has no :SU2 form -- the experiment's spin-resolved CDW start state is not " *
-        "representable in a total-spin basis. Use :U1 (charge x spin) or :none."))
+    sym === :SU2 && throw(
+        ArgumentError(
+            "hub4_space has no :SU2 form -- the experiment's spin-resolved CDW start state is not " *
+            "representable in a total-spin basis. Use :U1 (charge x spin) or :none.",
+        ),
+    )
     sym === :Z2 && throw(ArgumentError("hub4_space has no :Z2 form"))
-    opts = sym === :U1   ? FermionSOptions(1, :U1, :U1, nothing) :
-           sym === :none ? FermionSOptions(1, nothing, nothing, nothing) :
-           throw(ArgumentError("symmetry must be :U1 or :none, got $sym"))
+    opts =
+        sym === :U1 ? FermionSOptions(1, :U1, :U1, nothing) :
+        sym === :none ? FermionSOptions(1, nothing, nothing, nothing) :
+        throw(ArgumentError("symmetry must be :U1 or :none, got $sym"))
     _HUB4_SPACES[sym] = getLocalSpace(opts, ("s", "s", "op"))
     return _HUB4_SPACES[sym]
 end
@@ -47,11 +51,11 @@ function hub4_basis_index(q)
     nd = diag(Matrix(to_concrete(lock(q.Fd', 2) * q.Fd).RMTs[1]))
     length(nu) == 4 || error("hub4_basis_index: local dimension $(length(nu)), expected 4")
     find(a, b) = begin
-        hits = findall(k -> isapprox(nu[k], a; atol = 1e-10) &&
-                            isapprox(nd[k], b; atol = 1e-10), 1:4)
+        hits = findall(k -> isapprox(nu[k], a; atol = 1e-10) && isapprox(nd[k], b; atol = 1e-10), 1:4)
         length(hits) == 1 || error(
             "hub4_basis_index: (n↑,n↓)=($a,$b) matched $(length(hits)) of 4 basis states; " *
-            "n↑ = $nu, n↓ = $nd -- the local space is not the expected Hubbard site")
+            "n↑ = $nu, n↓ = $nd -- the local space is not the expected Hubbard site",
+        )
         only(hits)
     end
     return (; empty = find(0, 0), up = find(1, 0), down = find(0, 1), both = find(1, 1))
@@ -62,15 +66,15 @@ end
 # (`n_up - n_down`), so the four states are four distinct one-dimensional sectors. ONE TUPLE PER
 # SYMMETRY (`charge_symmops`/`spin_symmops` weights are `(w,)`): `((-1, 0),)` matches no leg.
 const HUB4_EMPTY = ((-1,), (0,))
-const HUB4_UP    = ((0,), (1,))
-const HUB4_DOWN  = ((0,), (-1,))
-const HUB4_BOTH  = ((1,), (0,))
+const HUB4_UP = ((0,), (1,))
+const HUB4_DOWN = ((0,), (-1,))
+const HUB4_BOTH = ((1,), (0,))
 
 hub4_sector(occ::Symbol) =
     occ === :empty ? HUB4_EMPTY :
-    occ === :up    ? HUB4_UP    :
-    occ === :down  ? HUB4_DOWN  :
-    occ === :both  ? HUB4_BOTH  :
+    occ === :up ? HUB4_UP :
+    occ === :down ? HUB4_DOWN :
+    occ === :both ? HUB4_BOTH :
     throw(ArgumentError("occupation must be :empty, :up, :down or :both, got $occ"))
 
 """
@@ -93,20 +97,27 @@ function hub4_product_state(occ::Vector{Symbol})
 
     tensors = Any[]
     prev = (getvac(q.I, ("L,0", "L,1")), 2)
-    for i in 1:L
+    for i = 1:L
         F = to_concrete(getIdentity(prev, (q.I, 1); itag = "L,$(i + 1)"))
         F = to_concrete(setitag(F, 2, "S,$i"))
         A = if sym === :none
-            k = getfield(idx, occ[i] === :empty ? :empty : occ[i] === :up ? :up :
-                              occ[i] === :down ? :down : occ[i] === :both ? :both :
-                              throw(ArgumentError("bad occupation $(occ[i]) at site $i")))
+            k = getfield(
+                idx,
+                occ[i] === :empty ? :empty :
+                occ[i] === :up ? :up :
+                occ[i] === :down ? :down :
+                occ[i] === :both ? :both :
+                throw(ArgumentError("bad occupation $(occ[i]) at site $i")),
+            )
             to_concrete(getsub(F, 3, s -> k))
         else
             target = hub4_sector(occ[i])
             B = getsub(F, 2, s -> s == target ? Colon() : nothing; preserve_space = true)
             B = to_concrete(B)
-            isempty(B.qlabels) && error("hub4_product_state: site $i sector $target matches " *
-                "none of the site leg's labels $(first.(F.spaces[2]))")
+            isempty(B.qlabels) && error(
+                "hub4_product_state: site $i sector $target matches " *
+                "none of the site leg's labels $(first.(F.spaces[2]))",
+            )
             present = Set(ql[3] for ql in B.qlabels)
             to_concrete(getsub(B, 3, s -> s in present ? Colon() : nothing))
         end
@@ -133,8 +144,8 @@ channel and gives a smooth but wrong imbalance decay.
 function _hub4_channels(q)
     chans = Any[]
     for A in (q.Fu, q.Fd)
-        ZA  = to_concrete(lock(q.Z, 1) * A)          # Z · f4σ   (opens channel A)
-        Ad  = to_concrete(A')                        # f4σ†      (closes channel A)
+        ZA = to_concrete(lock(q.Z, 1) * A)          # Z · f4σ   (opens channel A)
+        Ad = to_concrete(A')                        # f4σ†      (closes channel A)
         AdZ = to_concrete(A' * lock(q.Z, 2))         # f4σ† · Z  (opens channel B)
         push!(chans, (_hub4_half(ZA, :left), _hub4_half(Ad, :right)))
         push!(chans, (_hub4_half(AdZ, :left), _hub4_half(to_concrete(A), :right)))
@@ -175,17 +186,28 @@ Virtual dimension 6 (id, four hopping channels, done), independent of `L`, `U` a
 The field sits in the id -> done slot, so it must survive both boundary reductions. That corner is
 zeroed by a field-free MPO at i = 1 and i = L, which would silently remove the potential at the ends.
 """
-function hubbard_aa_mpo_d4(L::Int; J::Union{Real, AbstractVector{<:Real}} = 1.0,
-                           Delta::Float64 = 0.0, U::Float64 = 0.0, phi::Float64 = 0.0,
-                           beta::Float64 = 532 / 738,
-                           Vup::Union{Nothing, AbstractVector{<:Real}} = nothing,
-                           Vdn::Union{Nothing, AbstractVector{<:Real}} = nothing)
+function hubbard_aa_mpo_d4(
+    L::Int;
+    J::Union{Real,AbstractVector{<:Real}} = 1.0,
+    Delta::Float64 = 0.0,
+    U::Float64 = 0.0,
+    phi::Float64 = 0.0,
+    beta::Float64 = 532 / 738,
+    Vup::Union{Nothing,AbstractVector{<:Real}} = nothing,
+    Vdn::Union{Nothing,AbstractVector{<:Real}} = nothing,
+)
     L >= 2 || throw(ArgumentError("hubbard_aa_mpo_d4 needs L >= 2, got $L"))
     Jb = J isa Real ? fill(Float64(J), L - 1) : collect(Float64, J)
-    length(Jb) == L - 1 || throw(DimensionMismatch("hubbard_aa_mpo_d4: $(length(Jb)) hoppings for $(L - 1) bonds"))
+    length(Jb) == L - 1 ||
+        throw(DimensionMismatch("hubbard_aa_mpo_d4: $(length(Jb)) hoppings for $(L - 1) bonds"))
     for V in (Vup, Vdn)
-        V === nothing || length(V) == L || throw(DimensionMismatch(
-            "hubbard_aa_mpo_d4: $(length(V)) on-site potentials for $L sites"))
+        V === nothing ||
+            length(V) == L ||
+            throw(
+                DimensionMismatch(
+                    "hubbard_aa_mpo_d4: $(length(V)) on-site potentials for $L sites",
+                ),
+            )
     end
     sym = symmetry_mode()
     q = hub4_space(sym)
@@ -202,12 +224,12 @@ function hubbard_aa_mpo_d4(L::Int; J::Union{Real, AbstractVector{<:Real}} = 1.0,
     # The quasiperiodic potential. `i` is the PHYSICAL site index, and both species see the same
     # `h_i` -- the potential is spin-independent, which is what makes the doublon fraction a
     # meaningful initial-state parameter rather than a field effect.
-    h = [Delta * cos(2π * beta * i + phi) for i in 1:L]
+    h = [Delta * cos(2π * beta * i + phi) for i = 1:L]
 
     Ws = Any[]
-    for i in 1:L
+    for i = 1:L
         tl, tr = "W,$(i - 1)", "W,$i"
-        Iid  = _mpo_block(q.I, i, tl, tr, :none)
+        Iid = _mpo_block(q.I, i, tl, tr, :none)
         Znil = to_concrete(0.0 * Iid)
 
         # ── under :none every slot filled, then overwritten ──
@@ -229,10 +251,12 @@ function hubbard_aa_mpo_d4(L::Int; J::Union{Real, AbstractVector{<:Real}} = 1.0,
         mat[1, ncol] = _mpo_block(onsite, i, tl, tr, :none)
 
         for (t, (open_op, close_op)) in enumerate(chans)
-            i < L && (mat[1, 1 + t] = _mpo_block(open_op, i, tl, tr,
-                                                 _side(open_op, :left)))
-            i > 1 && (mat[1 + t, ncol] = to_concrete(-Jb[i - 1] *
-                          _mpo_block(close_op, i, tl, tr, _side(close_op, :right))))
+            i < L && (mat[1, 1+t] = _mpo_block(open_op, i, tl, tr, _side(open_op, :left)))
+            i > 1 && (
+                mat[1+t, ncol] = to_concrete(
+                    -Jb[i-1] * _mpo_block(close_op, i, tl, tr, _side(close_op, :right)),
+                )
+            )
         end
 
         if i == 1
@@ -259,10 +283,10 @@ function hub4_current_mpo(L::Int, b::Int, s::Int; J::Real = 1.0)
     1 <= b <= L - 1 || throw(ArgumentError("bond must be in 1:$(L - 1), got $b"))
     s in (0, 1) || throw(ArgumentError("spin must be 0 (up) or 1 (down), got $s"))
     q = hub4_space()
-    chans = _hub4_channels(q)[(2s + 1):(2s + 2)]
+    chans = _hub4_channels(q)[(2s+1):(2s+2)]
     w = (ComplexF64(0, -J), ComplexF64(0, J))
     Ws = Any[]
-    for i in 1:L
+    for i = 1:L
         tl, tr = "W,$(i - 1)", "W,$i"
         W = if i == b
             mat = Matrix{Any}(nothing, 1, 2)
@@ -312,9 +336,9 @@ first check that the state was built as intended, and the one that `⟨H⟩` can
 """
 function hub4_imbalance(psi::SymMPS)
     L = length(psi)
-    ns = [hub4_density(psi, i) for i in 1:L]
-    ne = sum(ns[i] for i in 2:2:L; init = 0.0)
-    no = sum(ns[i] for i in 1:2:L; init = 0.0)
+    ns = [hub4_density(psi, i) for i = 1:L]
+    ne = sum(ns[i] for i = 2:2:L; init = 0.0)
+    no = sum(ns[i] for i = 1:2:L; init = 0.0)
     tot = ne + no
     return tot <= 0 ? NaN : (ne - no) / tot
 end
@@ -330,8 +354,8 @@ singly-occupied sites alternate `:up`/`:down` rather than being random, so the t
 balanced to within one atom instead of O(√L). See `benchmarks/mbl_scars.jl`.
 """
 function hub4_cdw_occupations(L::Int; doublon_frac::Float64 = 0.34, seed::Int = 1)
-    0.0 <= doublon_frac <= 1.0 || throw(ArgumentError(
-        "doublon_frac must be in [0,1], got $doublon_frac"))
+    0.0 <= doublon_frac <= 1.0 ||
+        throw(ArgumentError("doublon_frac must be in [0,1], got $doublon_frac"))
     iseven(L) || throw(ArgumentError("hub4_cdw_occupations needs even L, got $L"))
     occupied = collect(2:2:L)
     ndbl = round(Int, doublon_frac * length(occupied))
