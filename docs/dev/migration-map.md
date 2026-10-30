@@ -31,6 +31,8 @@ Every file of BUG-Julia `b155550` (tag `pre-bondupdategalerkin`) with its dispos
 
 Split rows now state the default: names a row does not list go to its first destination.
 
+**Dropped (decided 30 October 2026):** `sector_report` and `sector_report_right` in `BondUpdateBUG/sectors.jl` are broken at `b155550`: commit `3024066` removed their helper `_complement_basis`, so they throw `UndefVarError`. Their only other callers are diagnostic scripts that are not copied. They and their 6 tests in `test_sectors.jl` are left out when `sectors.jl` moves.
+
 ## Test files
 
 The `target` column of the index holds the per-file map. The grouping:
