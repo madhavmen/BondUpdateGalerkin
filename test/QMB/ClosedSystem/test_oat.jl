@@ -38,7 +38,7 @@ end
     @test bond_dims(psi) == ones(Int, L - 1)              # the paper's "an MPS with D = 1"
     @test norm(psi) ≈ 1.0 atol = 1e-12
     @test sx_profile(copy(psi)) ≈ fill(0.5, L) atol = 1e-12
-    @test total_sx(copy(psi)) ≈ oat_total_sx(L, 0.0) atol = 1e-12
+    @test total_sx(copy(psi)) ≈ L / 2 atol = 1e-12         # S^x_tot(0) = (L/2) cos^(L-1)(0)
     @test all(abs.([sz_expectation(copy(psi), j) for j in 1:L]) .< 1e-12)
 
     # `S^x`, not `-i S^y`: the sign trap named in `sx_operator`'s docstring, checked on a state
