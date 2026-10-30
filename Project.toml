@@ -6,6 +6,7 @@ authors = ["Madhav Menon"]
 [deps]
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 LurCGT = "4f3ab192-95b7-495a-a0ca-04b4b33dd828"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Telum = "206e1281-4cfe-4f93-80c6-84968ba7c8d5"
 
 [sources]
@@ -14,6 +15,7 @@ Telum = {path = "deps/Telum"}
 
 [compat]
 Aqua = "0.8"
+JSON = "0.21, 1"
 LinearAlgebra = "1"
 LurCGT = "1"
 Random = "1"
@@ -23,8 +25,8 @@ julia = "1.11"
 
 [extras]
 Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
-Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Aqua", "Random", "Test"]
+test = ["Aqua", "JSON", "Test"]
