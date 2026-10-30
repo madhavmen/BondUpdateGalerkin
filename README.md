@@ -1,6 +1,7 @@
 # BondUpdateGalerkin
 
-Rank-adaptive basis-update-and-Galerkin (BUG) time integration for quantum many-body matrix product states and quantics tensor trains (QTT), with one shared numerical engine.
+A Basis Update Galerkin scheme that is developed in such a way that contains Randomised Controlled Bond Expansion, General P order integration scheme
+and parallelization of full K/L/S solves.
 
 **Status:** package skeleton. Code is being migrated from the BUG-Julia research repository following [docs/dev/implementation_plan.md](docs/dev/implementation_plan.md), which also contains the target layout (Section 2) and the file-by-file move map (Section 8).
 
