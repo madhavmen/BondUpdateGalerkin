@@ -14,22 +14,32 @@ an unboosted holdout and widens only the sectors it names ([`_target_sectors!`](
 On the legacy path (`alloc === nothing`) this is exactly `_range_find`. A resource bound (`wcap`,
 `ncap`) or an exhausted target stops the loop with the test failed, never silently.
 """
-function _certified_range(draw, wleg::Int, select, qleg::Int, project, sketch, side::Symbol,
-                          w0::Int, wcap::Int, ncap::Int,
-                          alloc::Union{Nothing, BasisAllocation},
-                          ledger::Union{Nothing, AdaptiveLedger};
-                          # A SEPARATE DISTRIBUTION ONLY IN TESTS: UT06 cripples the sketch to
-                          # miss a sector, and the audit must not share the crippling.
-                          holdout = w -> draw(w, nothing),
-                          # Thin search: Test B, not the numerical rank, decides the width.
-                          # The adaptive preselection runs at `stol_pre = 0`, so the SVD cut fires only at numerical rank (about
-                          # chi), which made every probe full width.
-                          # `thin = true` draws one pass per width and widens only when the holdout fails; `thin = false` is the old A/B.
-                          thin::Bool = false)
+function _certified_range(
+    draw,
+    wleg::Int,
+    select,
+    qleg::Int,
+    project,
+    sketch,
+    side::Symbol,
+    w0::Int,
+    wcap::Int,
+    ncap::Int,
+    alloc::Union{Nothing,BasisAllocation},
+    ledger::Union{Nothing,AdaptiveLedger};
+    # A SEPARATE DISTRIBUTION ONLY IN TESTS: UT06 cripples the sketch to
+    # miss a sector, and the audit must not share the crippling.
+    holdout = w -> draw(w, nothing),
+    # Thin search: Test B, not the numerical rank, decides the width.
+    # The adaptive preselection runs at `stol_pre = 0`, so the SVD cut fires only at numerical rank (about
+    # chi), which made every probe full width.
+    # `thin = true` draws one pass per width and widens only when the holdout fails; `thin = false` is the old A/B.
+    thin::Bool = false,
+)
     alloc === nothing &&
         return _range_find(w -> draw(w, nothing), wleg, select, qleg, w0, wcap, ncap)
 
-    boost = Dict{Any, Int}()
+    boost = Dict{Any,Int}()
     last = Ref{Any}(nothing)       # the last sketch drawn, for its per-sector widths
     lastw = Ref(w0)                # ...and the base width it was asked for
     function drawn(w)
@@ -42,8 +52,9 @@ function _certified_range(draw, wleg::Int, select, qleg::Int, project, sketch, s
     end
     width_of() = last[] === nothing ? 0 : leg_dim(last[], wleg)
     # One pass at width `w` (its own cap is `w`), or the full widening.
-    search(w) = thin ? _range_find(drawn, wleg, select, qleg, w, min(w, wcap), ncap) :
-                       _range_find(drawn, wleg, select, qleg, w, wcap, ncap)
+    search(w) =
+        thin ? _range_find(drawn, wleg, select, qleg, w, min(w, wcap), ncap) :
+        _range_find(drawn, wleg, select, qleg, w, wcap, ncap)
 
     Q, err, n = search(w0)
     prev = -1
@@ -60,8 +71,8 @@ function _certified_range(draw, wleg::Int, select, qleg::Int, project, sketch, s
         ok = ind <= alloc.sample
         capped = width >= wcap || n >= ncap
         if ok || capped || width <= prev
-            ledger === nothing || _record_sample!(ledger, side, ind, per, hcols, last[],
-                                                  wleg, alloc)
+            ledger === nothing ||
+                _record_sample!(ledger, side, ind, per, hcols, last[], wleg, alloc)
             ok && return (Q, err, n)
             if ledger !== nothing
                 _unmet!(ledger, :sample)
@@ -106,20 +117,34 @@ complement/isometry split, 0.5 for the TDVP callers and 1.0 for the DMRG and CBE
 MATLAB reference rejects a pure complement; `sulz_cap` caps the total at 2r (off by default);
 `preselect_only` skips the final selection.
 """
-function cbe_expand(f::BondFrame, h::XXZChain, i::Int,
-                    lch::ChannelSet, rch::ChannelSet;
-                    share_ht::Union{Nothing, Bool} = nothing,
-                    # ⛔ ACCEPTED ONLY TO REFUSE IT WITH A SENTENCE THAT SAYS WHY. `fold_omega`
-                    # is implemented for the MPO path only; without this the term-list caller
-                    # gets a `MethodError: no method matching cbe_expand(::BondFrame, ::Function,
-                    # ::Function; fold_omega=true)` raised inside the two-argument method, which
-                    # names neither the flag's restriction nor the caller that set it.
-                    fold_omega::Bool = false, kwargs...)
-    fold_omega && throw(ArgumentError(
-        "fold_omega is implemented for the MPO path only; this is the term-list (XXZChain) " *
-        "expansion. Build the Hamiltonian as an MPO, or leave fold_omega = false."))
-    return cbe_expand(f,
-                      _sketch_closures(f,
-                          () -> apply_h_two_site(frame_theta(f), h, i, lch, rch);
-                          share = share_ht === nothing ? true : share_ht)...; kwargs...)
+function cbe_expand(
+    f::BondFrame,
+    h::XXZChain,
+    i::Int,
+    lch::ChannelSet,
+    rch::ChannelSet;
+    share_ht::Union{Nothing,Bool} = nothing,
+    # ⛔ ACCEPTED ONLY TO REFUSE IT WITH A SENTENCE THAT SAYS WHY. `fold_omega`
+    # is implemented for the MPO path only; without this the term-list caller
+    # gets a `MethodError: no method matching cbe_expand(::BondFrame, ::Function,
+    # ::Function; fold_omega=true)` raised inside the two-argument method, which
+    # names neither the flag's restriction nor the caller that set it.
+    fold_omega::Bool = false,
+    kwargs...,
+)
+    fold_omega && throw(
+        ArgumentError(
+            "fold_omega is implemented for the MPO path only; this is the term-list (XXZChain) " *
+            "expansion. Build the Hamiltonian as an MPO, or leave fold_omega = false.",
+        ),
+    )
+    return cbe_expand(
+        f,
+        _sketch_closures(
+            f,
+            () -> apply_h_two_site(frame_theta(f), h, i, lch, rch);
+            share = share_ht === nothing ? true : share_ht,
+        )...;
+        kwargs...,
+    )
 end

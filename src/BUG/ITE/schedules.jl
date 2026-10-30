@@ -19,10 +19,10 @@ function log_panel_steps(beta_max::Real, P::Int; per_panel::Int = 4)
     beta_max > 0 || throw(ArgumentError("beta_max must be positive, got $beta_max"))
     P >= 1 || throw(ArgumentError("log_panel_steps needs P >= 1, got $P"))
     per_panel >= 1 || throw(ArgumentError("per_panel must be >= 1, got $per_panel"))
-    edges = vcat(0.0, [Float64(beta_max) / 2.0^(P - j) for j in 1:P])
+    edges = vcat(0.0, [Float64(beta_max) / 2.0^(P - j) for j = 1:P])
     steps = Float64[]
-    for j in 1:P
-        append!(steps, fill((edges[j + 1] - edges[j]) / per_panel, per_panel))
+    for j = 1:P
+        append!(steps, fill((edges[j+1] - edges[j]) / per_panel, per_panel))
     end
     return steps
 end

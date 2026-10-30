@@ -33,12 +33,30 @@ struct TwoSiteSketchOp
     counters::KernelCounters
 end
 
-function TwoSiteSketchOp(f::BondFrame, mpo::MPO, i::Int, lenv::MPOLink, renv::MPOLink;
-                         adjoint::Bool = false, version::Int = 0,
-                         counters::KernelCounters = KernelCounters())
+function TwoSiteSketchOp(
+    f::BondFrame,
+    mpo::MPO,
+    i::Int,
+    lenv::MPOLink,
+    renv::MPOLink;
+    adjoint::Bool = false,
+    version::Int = 0,
+    counters::KernelCounters = KernelCounters(),
+)
     core = adjoint ? to_concrete(f.S0 * f.V0) : to_concrete(f.U0 * f.S0)
-    return TwoSiteSketchOp(mpo, i, lenv, renv, f.U0, f.V0, core, adjoint, symmetry_mode(),
-                           version, counters)
+    return TwoSiteSketchOp(
+        mpo,
+        i,
+        lenv,
+        renv,
+        f.U0,
+        f.V0,
+        core,
+        adjoint,
+        symmetry_mode(),
+        version,
+        counters,
+    )
 end
 
 """
@@ -47,11 +65,16 @@ end
 `Y[] = X Om` (or `X' Om` for `op.adjoint`), unprojected, streamed through the MPO channels.
 """
 function apply_two_site_sketch!(Y::Base.RefValue, Om, op::TwoSiteSketchOp)
-    op.symmetry === symmetry_mode() || throw(ErrorException(
-        "TwoSiteSketchOp was built under $(op.symmetry), the active symmetry is $(symmetry_mode())"))
-    Z, dt, db = _measure(() -> op.adjoint ?
-        _stream_right(op.U0, op.core, op.mpo, op.bond, op.lenv, op.renv, Om) :
-        _stream_left(op.core, op.V0, op.mpo, op.bond, op.lenv, op.renv, Om))
+    op.symmetry === symmetry_mode() || throw(
+        ErrorException(
+            "TwoSiteSketchOp was built under $(op.symmetry), the active symmetry is $(symmetry_mode())",
+        ),
+    )
+    Z, dt, db = _measure(
+        () ->
+            op.adjoint ? _stream_right(op.U0, op.core, op.mpo, op.bond, op.lenv, op.renv, Om) :
+            _stream_left(op.core, op.V0, op.mpo, op.bond, op.lenv, op.renv, Om),
+    )
     kc = op.counters
     kc.n_stream += 1
     kc.n_stream_cols += leg_dim(Om, op.adjoint ? 3 : 1)
@@ -93,11 +116,17 @@ TEST/DEBUG ONLY (plan T2.5 "full-DD exact tiny reference"): `P_L^D X P_R^D Om` (
 or `P_R^D X' P_L^D Om` (`:right`) through the MATERIALISED `H Theta` and the project-first
 closures of `_sketch_closures`. Never on the production path.
 """
-function dd_reference_sketch(f::BondFrame, mpo::MPO, i::Int, lenv::MPOLink, renv::MPOLink,
-                             Om, side::Symbol)
+function dd_reference_sketch(
+    f::BondFrame,
+    mpo::MPO,
+    i::Int,
+    lenv::MPOLink,
+    renv::MPOLink,
+    Om,
+    side::Symbol,
+)
     skl, skr = _sketch_closures(f, () -> apply_h_two_site(frame_theta(f), mpo, i, lenv, renv))
-    return side === :left ? skl(perp_component_right(f.V0, Om)) :
-                            skr(perp_component(f.U0, Om))
+    return side === :left ? skl(perp_component_right(f.V0, Om)) : skr(perp_component(f.U0, Om))
 end
 
 # ── T2.3: probes in the discarded space only ──────────────────────────────────────────────
@@ -112,8 +141,15 @@ projects the complete fused basis instead. Returns `nothing` when there is no di
 Unlike `sector_graded_sketch(...; comp_ratio = 1.0)`, a short complement is not topped up from the
 kept space.
 """
-function _dd_probe(frame, side::Symbol, w::Int; rng::AbstractRNG, boost = nothing,
-                   exact::Bool = false, kc::KernelCounters = KernelCounters())
+function _dd_probe(
+    frame,
+    side::Symbol,
+    w::Int;
+    rng::AbstractRNG,
+    boost = nothing,
+    exact::Bool = false,
+    kc::KernelCounters = KernelCounters(),
+)
     a, b = side === :left ? (1, 2) : (2, 3)
     F = fusion_basis(frame, a, b; tag = "cbeG")
     dfull, dT = _frame_sector_dims(frame, side, F, "_dd_probe")
@@ -160,8 +196,8 @@ function _thin_qr(Y, fl::Int, ref::TLIndex, tag::AbstractString, thr::Float64)
     QD = length(Y.inds)
     syms = symm(Y)
     ydir = Y.inds[fl].dir
-    others = Tuple(l for l in 1:QD if l != fl)
-    groups = Dict{Any, Vector{Int}}()
+    others = Tuple(l for l = 1:QD if l != fl)
+    groups = Dict{Any,Vector{Int}}()
     order = Any[]
     for k in eachindex(Y.qlabels)
         Y.isdefined[k] || continue
@@ -177,12 +213,17 @@ function _thin_qr(Y, fl::Int, ref::TLIndex, tag::AbstractString, thr::Float64)
         ks = groups[q]
         rmt1 = Y.RMTs[ks[1]]
         nd = ndims(rmt1)
-        all(size(rmt1, l) == 1 for l in (QD + 1):nd) || throw(ArgumentError(
-            "_thin_qr: sector multiplicity axes are not trivial -- non-abelian blocks"))
-        perm = (others..., fl, ((QD + 1):nd)...)
+        all(size(rmt1, l) == 1 for l = (QD+1):nd) || throw(
+            ArgumentError(
+                "_thin_qr: sector multiplicity axes are not trivial -- non-abelian blocks",
+            ),
+        )
+        perm = (others..., fl, ((QD+1):nd)...)
         dfl = size(rmt1, fl)
-        mats = [_block_matrix(Y.RMTs[k], perm, prod(size(Y.RMTs[k], l) for l in others), dfl)
-                for k in ks]
+        mats = [
+            _block_matrix(Y.RMTs[k], perm, prod(size(Y.RMTs[k], l) for l in others), dfl) for
+            k in ks
+        ]
         M = reduce(vcat, mats)
         size(M, 1) == 0 && continue
         F = qr(M, ColumnNorm())
@@ -195,8 +236,8 @@ function _thin_qr(Y, fl::Int, ref::TLIndex, tag::AbstractString, thr::Float64)
         for (k, Mk) in zip(ks, mats)
             nr = size(Mk, 1)
             sz = size(Y.RMTs[k])
-            blk = reshape(Qm[(row + 1):(row + nr), :],
-                          (map(l -> sz[l], others)..., r, sz[(QD + 1):nd]...))
+            blk =
+                reshape(Qm[(row+1):(row+nr), :], (map(l -> sz[l], others)..., r, sz[(QD+1):nd]...))
             row += nr
             push!(keep, k)
             push!(newR, permutedims(blk, invperm(collect(perm))))
@@ -238,8 +279,8 @@ orthonormalisation (`_preselect_*` at `stol = 0`, no ranking) is used and report
 function _dd_select(frame, Z, side::Symbol, kc::KernelCounters)
     left = side === :left
     if symmetry_mode() === :SU2
-        (Q, _), dt, db = _measure(() -> left ? _preselect_left(frame, Z, 0.0) :
-                                               _preselect_right(frame, Z, 0.0))
+        (Q, _), dt, db =
+            _measure(() -> left ? _preselect_left(frame, Z, 0.0) : _preselect_right(frame, Z, 0.0))
         kc.t_qr += dt
         kc.b_qr += db
         kc.n_qr += 1
@@ -255,10 +296,12 @@ function _dd_select(frame, Z, side::Symbol, kc::KernelCounters)
     ny <= _CBE_EPS * max(nz, 1.0) && return (nothing, :householder)
     ref = frame.inds[fl]
     tag = left ? _TAG_DD_L : _TAG_DD_R
-    Q, dt, db = _measure(() -> begin
-        Q1 = _thin_qr(Y, fl, ref, tag, _CBE_EPS * max(nz, ny))
-        Q1 === nothing ? nothing : _thin_qr(perp(frame, Q1), fl, ref, tag, _REORTH_KEEP)
-    end)
+    Q, dt, db = _measure(
+        () -> begin
+            Q1 = _thin_qr(Y, fl, ref, tag, _CBE_EPS * max(nz, ny))
+            Q1 === nothing ? nothing : _thin_qr(perp(frame, Q1), fl, ref, tag, _REORTH_KEEP)
+        end,
+    )
     kc.t_qr += dt
     kc.b_qr += db
     kc.n_qr += 1
@@ -289,16 +332,28 @@ once and its action cached; a failed check draws a fresh holdout before promotin
 Statuses: `:met`; `:work_limited` (`wcap` or `ncap` reached); `:basis_limited` (a pass added no
 direction); `:empty` (no discarded space). Every continuing pass adds a direction, so the loop ends.
 """
-function _dd_controller(frame, side::Symbol, draw, sketch, project, w0::Int, wcap::Int,
-                        ncap::Int, alloc::BasisAllocation, ledger::Union{Nothing, AdaptiveLedger};
-                        kc::KernelCounters = KernelCounters(), s::Int = _DD_HOLDOUT,
-                        audit::Bool = false, holdout = w -> draw(w, nothing),
-                        trace::Union{Nothing, Vector} = nothing)
+function _dd_controller(
+    frame,
+    side::Symbol,
+    draw,
+    sketch,
+    project,
+    w0::Int,
+    wcap::Int,
+    ncap::Int,
+    alloc::BasisAllocation,
+    ledger::Union{Nothing,AdaptiveLedger};
+    kc::KernelCounters = KernelCounters(),
+    s::Int = _DD_HOLDOUT,
+    audit::Bool = false,
+    holdout = w -> draw(w, nothing),
+    trace::Union{Nothing,Vector} = nothing,
+)
     left = side === :left
     fl, wleg = left ? (3, 1) : (1, 3)
     tags = frame.inds[fl].itags
     aug, Q, n, streamed = frame, nothing, 0, 0
-    boost = Dict{Any, Int}()
+    boost = Dict{Any,Int}()
     function absorb!(Z)
         Qn, _ = _dd_select(aug, Z, side, kc)
         Qn === nothing && return 0
@@ -360,8 +415,9 @@ function _dd_controller(frame, side::Symbol, draw, sketch, project, w0::Int, wca
         end
         n += added
         if added == 0
-            ledger === nothing || (_record_sample!(ledger, side, ind, per, hcols, last, wleg,
-                                                   alloc); _unmet!(ledger, :sample))
+            ledger === nothing ||
+                (_record_sample!(ledger, side, ind, per, hcols, last, wleg, alloc);
+                _unmet!(ledger, :sample))
             return (Q, :basis_limited)
         end
         h = hnew
@@ -383,11 +439,11 @@ and one trace entry per call (`bond`, `side`, `branch`, `ell`, `s`, `retries`, `
 bond). Locked, since the two half-sweeps may run concurrently.
 """
 mutable struct DDMemory
-    accepted::Dict{Tuple{Symbol, Int}, Int}
+    accepted::Dict{Tuple{Symbol,Int},Int}
     trace::Vector{NamedTuple}
     lock::ReentrantLock
 end
-DDMemory() = DDMemory(Dict{Tuple{Symbol, Int}, Int}(), NamedTuple[], ReentrantLock())
+DDMemory() = DDMemory(Dict{Tuple{Symbol,Int},Int}(), NamedTuple[], ReentrantLock())
 
 _dd_predict(mem::DDMemory, side::Symbol, i::Int) =
     lock(() -> get(mem.accepted, (side, i), nothing), mem.lock)
@@ -418,11 +474,28 @@ Arm D3 of plan §1.2A, on the same `X = mat(F(psi))`, frames and DD-QR kernels a
    columns appended, with a fresh holdout, until met, `wcap` streamed columns or `cap` directions
    (`:work_limited`), or a pass adds nothing (`:basis_limited`).
 """
-function _dd_hybrid(frame, opp, side::Symbol, draw, sketch, sketch_adj, exhaust_opp, exhaust_self,
-                    project, w0::Int, wcap::Int, cap::Int, m::Int, n::Int,
-                    alloc::BasisAllocation, ledger::Union{Nothing, AdaptiveLedger};
-                    pred::Union{Nothing, Int}, rng::AbstractRNG,
-                    kc::KernelCounters = KernelCounters(), s::Int = _DD_HOLDOUT)
+function _dd_hybrid(
+    frame,
+    opp,
+    side::Symbol,
+    draw,
+    sketch,
+    sketch_adj,
+    exhaust_opp,
+    exhaust_self,
+    project,
+    w0::Int,
+    wcap::Int,
+    cap::Int,
+    m::Int,
+    n::Int,
+    alloc::BasisAllocation,
+    ledger::Union{Nothing,AdaptiveLedger};
+    pred::Union{Nothing,Int},
+    rng::AbstractRNG,
+    kc::KernelCounters = KernelCounters(),
+    s::Int = _DD_HOLDOUT,
+)
     left = side === :left
     fl, wleg = left ? (3, 1) : (1, 3)
     oside = left ? :right : :left
@@ -443,8 +516,18 @@ function _dd_hybrid(frame, opp, side::Symbol, draw, sketch, sketch_adj, exhaust_
     end
     ell = clamp(pred === nothing ? w0 : pred + _dd_oversample(pred), 1, max(wcap, 1))
     retry = max(ell ÷ 2, s)
-    rec(branch, st, retries) = (side = side, branch = branch, ell = ell, s = s, retries = retries,
-                                m = m, n = n, added = nq, streamed = streamed, status = st)
+    rec(branch, st, retries) = (
+        side = side,
+        branch = branch,
+        ell = ell,
+        s = s,
+        retries = retries,
+        m = m,
+        n = n,
+        added = nq,
+        streamed = streamed,
+        status = st,
+    )
 
     if ell + s + retry >= min(m, n)
         if n <= 2m
@@ -497,7 +580,7 @@ function _dd_hybrid(frame, opp, side::Symbol, draw, sketch, sketch_adj, exhaust_
         retries += 1
         if added == 0
             ledger === nothing || (_record_sample!(ledger, side, ind, per, hcols, blk, wleg, alloc);
-                                   _unmet!(ledger, :sample))
+            _unmet!(ledger, :sample))
             return (Q, :basis_limited, rec(:sampled, :basis_limited, retries))
         end
     end
@@ -525,7 +608,7 @@ function _trim_by_weight(Q, B, side::Symbol, n::Int)
     leg_dim(Q, left ? 3 : 1) <= n && return Q
     U = svd(B, left ? (1,) : (3,), _TAG_W, _TAG_WR; cutoff = 0.0, Nkeep = n).U    # (g, k)
     return left ? to_concrete(contract(Q, (3,), U, (1,))) :     # (link, site, k)
-                  to_concrete(contract(U, (1,), Q, (1,)))       # (k, site, link)
+           to_concrete(contract(U, (1,), Q, (1,)))       # (k, site, link)
 end
 
 """
@@ -545,21 +628,33 @@ probe of width `l` through the same DD projection, streamed kernel and QR, no ho
 written to `dd_memory` (a [`DDMemory`](@ref); `nothing` = no predictor); `:adaptive` is D1; `:off`
 adds nothing (the no-CBE control).
 """
-function dd_cbe_expand(f::BondFrame, mpo::MPO, i::Int, lenv::MPOLink, renv::MPOLink,
-                       side::Symbol; alloc::Union{Nothing, BasisAllocation} = nothing,
-                       ledger::Union{Nothing, AdaptiveLedger} = nothing,
-                       workcap::Int = 0, growth::Float64 = ADAPTIVE_GROWTH,
-                       exact::Bool = false,
-                       rng::AbstractRNG = MersenneTwister(0x5EED),
-                       kc::KernelCounters = KernelCounters(), version::Int = 0,
-                       holdout_width::Int = _DD_HOLDOUT, audit::Bool = false,
-                       cap_order::Symbol = :sector, dd_width::Int = 0,
-                       dd_policy::Symbol = :adaptive, dd_memory = nothing)
+function dd_cbe_expand(
+    f::BondFrame,
+    mpo::MPO,
+    i::Int,
+    lenv::MPOLink,
+    renv::MPOLink,
+    side::Symbol;
+    alloc::Union{Nothing,BasisAllocation} = nothing,
+    ledger::Union{Nothing,AdaptiveLedger} = nothing,
+    workcap::Int = 0,
+    growth::Float64 = ADAPTIVE_GROWTH,
+    exact::Bool = false,
+    rng::AbstractRNG = MersenneTwister(0x5EED),
+    kc::KernelCounters = KernelCounters(),
+    version::Int = 0,
+    holdout_width::Int = _DD_HOLDOUT,
+    audit::Bool = false,
+    cap_order::Symbol = :sector,
+    dd_width::Int = 0,
+    dd_policy::Symbol = :adaptive,
+    dd_memory = nothing,
+)
     side in (:left, :right) || throw(ArgumentError("side must be :left or :right"))
-    cap_order in (:sector, :weight) || throw(ArgumentError(
-        "cap_order must be :sector or :weight, got $cap_order"))
-    dd_policy in (:adaptive, :hybrid, :off) || throw(ArgumentError(
-        "dd_policy must be :adaptive, :hybrid or :off, got $dd_policy"))
+    cap_order in (:sector, :weight) ||
+        throw(ArgumentError("cap_order must be :sector or :weight, got $cap_order"))
+    dd_policy in (:adaptive, :hybrid, :off) ||
+        throw(ArgumentError("dd_policy must be :adaptive, :hybrid or :off, got $dd_policy"))
     # `:off` -- the no-CBE control of plan §1.2A (the frame then grows by local Krylov alone)
     dd_policy === :off && return CBEExpansion(f.U0, f.V0, 0, 0, 0.0, 0.0)
     left = side === :left
@@ -571,10 +666,11 @@ function dd_cbe_expand(f::BondFrame, mpo::MPO, i::Int, lenv::MPOLink, renv::MPOL
     none() = CBEExpansion(U0, V0, 0, 0, 0.0, 0.0)
 
     # The fused local dimension, as `cbe_expand` reads it (SU(2) counts multiplets).
-    fused(t, a, b) = symmetry_mode() === :SU2 ?
-        sum(d for (_, d) in reachable_sectors(t, a, b); init = 0) : leg_dim(t, a) * leg_dim(t, b)
+    fused(t, a, b) =
+        symmetry_mode() === :SU2 ? sum(d for (_, d) in reachable_sectors(t, a, b); init = 0) :
+        leg_dim(t, a) * leg_dim(t, b)
     full_self = left ? fused(U0, 1, 2) : fused(V0, 2, 3)
-    full_opp  = left ? fused(V0, 2, 3) : fused(U0, 1, 2)
+    full_opp = left ? fused(V0, 2, 3) : fused(U0, 1, 2)
     cap = full_self - r
     wbind = false
     if alloc !== nothing && workcap > 0
@@ -589,10 +685,10 @@ function dd_cbe_expand(f::BondFrame, mpo::MPO, i::Int, lenv::MPOLink, renv::MPOL
     wcap = exact ? w0 : full_opp
     (alloc !== nothing && workcap > 0 && !exact) && (wcap = min(wcap, workcap))
 
-    draw(w, b) = exact ? _dd_probe(opp, oside, w; rng = rng, exact = true, kc = kc) :
-                         _dd_probe(opp, oside, w; rng = rng, boost = b, kc = kc)
-    op = TwoSiteSketchOp(f, mpo, i, lenv, renv; adjoint = !left, version = version,
-                         counters = kc)
+    draw(w, b) =
+        exact ? _dd_probe(opp, oside, w; rng = rng, exact = true, kc = kc) :
+        _dd_probe(opp, oside, w; rng = rng, boost = b, kc = kc)
+    op = TwoSiteSketchOp(f, mpo, i, lenv, renv; adjoint = !left, version = version, counters = kc)
     out = Ref{Any}(nothing)
     sketch(Om) = (apply_two_site_sketch!(out, Om, op); out[])
     project = left ? (X -> perp_component(U0, X)) : (X -> perp_component_right(V0, X))
@@ -607,39 +703,93 @@ function dd_cbe_expand(f::BondFrame, mpo::MPO, i::Int, lenv::MPOLink, renv::MPOL
         blk === nothing || ledger === nothing || (ledger.n_probes += leg_dim(blk, wleg))
         (Qf, Qf === nothing ? 0 : leg_dim(Qf, fl))
     elseif alloc === nothing || exact
-        Qr, _, nr = _certified_range(draw, wleg, select, fl, project, sketch, side, w0, wcap,
-                                     cap, nothing, ledger)
+        Qr, _, nr = _certified_range(
+            draw,
+            wleg,
+            select,
+            fl,
+            project,
+            sketch,
+            side,
+            w0,
+            wcap,
+            cap,
+            nothing,
+            ledger,
+        )
         (Qr, nr)
     elseif dd_policy === :hybrid
-        opA = TwoSiteSketchOp(f, mpo, i, lenv, renv; adjoint = left, version = version,
-                              counters = kc)
+        opA = TwoSiteSketchOp(f, mpo, i, lenv, renv; adjoint = left, version = version, counters = kc)
         outA = Ref{Any}(nothing)
         # anonymous: a named local function inside a branch is hoisted to the whole method
         sketch_adj = Om -> (apply_two_site_sketch!(outA, Om, opA); outA[])
         exhaust_opp = () -> _dd_probe(opp, oside, 0; rng = rng, exact = true, kc = kc)
         exhaust_self = () -> _dd_probe(frame, side, 0; rng = rng, exact = true, kc = kc)
         pred = dd_memory === nothing ? nothing : _dd_predict(dd_memory, side, i)
-        Qh, _, rec = _dd_hybrid(frame, opp, side, draw, sketch, sketch_adj, exhaust_opp,
-                                exhaust_self, project, w0, wcap, cap, full_self - r,
-                                full_opp - r, alloc, ledger; pred = pred, rng = rng, kc = kc,
-                                s = holdout_width)
+        Qh, _, rec = _dd_hybrid(
+            frame,
+            opp,
+            side,
+            draw,
+            sketch,
+            sketch_adj,
+            exhaust_opp,
+            exhaust_self,
+            project,
+            w0,
+            wcap,
+            cap,
+            full_self - r,
+            full_opp - r,
+            alloc,
+            ledger;
+            pred = pred,
+            rng = rng,
+            kc = kc,
+            s = holdout_width,
+        )
         nh = Qh === nothing ? 0 : leg_dim(Qh, fl)
         dd_memory === nothing || _dd_remember!(dd_memory, side, i, nh, merge((bond = i,), rec))
         (Qh, nh)
     else
-        Qc, _ = _dd_controller(frame, side, draw, sketch, project, w0, wcap, cap, alloc,
-                               ledger; kc = kc, s = holdout_width, audit = audit)
+        Qc, _ = _dd_controller(
+            frame,
+            side,
+            draw,
+            sketch,
+            project,
+            w0,
+            wcap,
+            cap,
+            alloc,
+            ledger;
+            kc = kc,
+            s = holdout_width,
+            audit = audit,
+        )
         (Qc, Qc === nothing ? 0 : leg_dim(Qc, fl))
     end
     Q === nothing && return none()
     if n > cap
         Q = if cap_order === :weight
             # B = Q' M exactly: the opposite sketch applied to the `n` directions themselves
-            opT = TwoSiteSketchOp(f, mpo, i, lenv, renv; adjoint = left, version = version,
-                                  counters = kc)
+            opT = TwoSiteSketchOp(
+                f,
+                mpo,
+                i,
+                lenv,
+                renv;
+                adjoint = left,
+                version = version,
+                counters = kc,
+            )
             B = (apply_two_site_sketch!(out, Q, opT); out[])
-            _trim_by_weight(Q, left ? perp_component_right(V0, B) : perp_component(U0, B),
-                            side, cap)
+            _trim_by_weight(
+                Q,
+                left ? perp_component_right(V0, B) : perp_component(U0, B),
+                side,
+                cap,
+            )
         else
             _trim_total(Q, fl, cap)
         end
@@ -655,8 +805,8 @@ function dd_cbe_expand(f::BondFrame, mpo::MPO, i::Int, lenv::MPOLink, renv::MPOL
     ledger === nothing || (ledger.n_selected += nq)
     grown = to_concrete(oplus([frame, to_concrete(setitag(Q, fl, frame.inds[fl].itags))], (fl,)))
     return left ?
-        CBEExpansion(_check_frame(grown, :left, "dd_cbe_expand U_ex"), V0, nq, 0, 0.0, 0.0) :
-        CBEExpansion(U0, _check_frame(grown, :right, "dd_cbe_expand V_ex"), 0, nq, 0.0, 0.0)
+           CBEExpansion(_check_frame(grown, :left, "dd_cbe_expand U_ex"), V0, nq, 0, 0.0, 0.0) :
+           CBEExpansion(U0, _check_frame(grown, :right, "dd_cbe_expand V_ex"), 0, nq, 0.0, 0.0)
 end
 
 """

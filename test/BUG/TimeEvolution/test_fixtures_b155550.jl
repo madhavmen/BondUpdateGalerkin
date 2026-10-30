@@ -41,7 +41,8 @@ step_status(info) = hasproperty(info, :ledger) ? String(budget_status(info.ledge
         info =
             midpoint ? cbe_bug_midpoint_step!(psi, hamiltonian, ComplexF64(-im * time_step)) :
             cbe_bug_step!(psi, hamiltonian, ComplexF64(-im * time_step); order = order)
-        exact_sz = xx_free_fermion_sz(chain_length, step * time_step; J = 1.0, occupied = 1:2:chain_length)
+        exact_sz =
+            xx_free_fermion_sz(chain_length, step * time_step; J = 1.0, occupied = 1:2:chain_length)
         sz = sz_profile(psi)
         @test maximum(abs.(sz .- Float64.(frozen_row["sz"]))) <= 1e-5
         @test maximum(abs.(sz .- exact_sz)) <= 2 * frozen_row["err_exact"] + 1e-6
@@ -63,10 +64,12 @@ end
         @test sqrt(real(overlap(psi, psi))) ≈ frozen_row["norm"] atol = 1e-8
     end
     final_state = dense_state(psi)
-    frozen_state = ComplexF64.(frozen["final_state"]["re"]) .+ im .* ComplexF64.(frozen["final_state"]["im"])
+    frozen_state =
+        ComplexF64.(frozen["final_state"]["re"]) .+ im .* ComplexF64.(frozen["final_state"]["im"])
     exact_state =
-        exp(-im * steps * time_step * Matrix(dense_heisenberg(chain_length; J = 1.0, delta = 0.0))) *
-        dense_state(neel_state(chain_length))
+        exp(
+            -im * steps * time_step * Matrix(dense_heisenberg(chain_length; J = 1.0, delta = 0.0)),
+        ) * dense_state(neel_state(chain_length))
     @test norm(final_state - frozen_state) <= 1e-5 * norm(frozen_state)
     @test norm(final_state - exact_state) / norm(exact_state) <= 2 * frozen["err_dense"] + 1e-6
     set_symmetry!(:U1)

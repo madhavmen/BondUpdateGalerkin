@@ -9,7 +9,7 @@ using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
 function mps_sum(a::SymMPS, b::SymMPS)
     L = length(a)
     ts = Any[]
-    for i in 1:L
+    for i = 1:L
         dims = i == 1 ? (3,) : (i == L ? (1,) : (1, 3))
         push!(ts, to_concrete(oplus(a[i], b[i], dims)))
     end
@@ -20,8 +20,10 @@ end
 # multiple of the identity. Hermitian iff every scale is real. Its exponential
 # is known in closed form, which gives expv an exact reference to hit -- and,
 # unlike `A = c*I`, it spans a Krylov space of dimension > 1.
-sector_parts(v) = [(s, getsub(v, 3, q -> q == s ? Colon() : nothing; preserve_space = true))
-                   for (s, _) in v.spaces[3]]
+sector_parts(v) = [
+    (s, getsub(v, 3, q -> q == s ? Colon() : nothing; preserve_space = true)) for
+    (s, _) in v.spaces[3]
+]
 
 diag_apply(scale) = v -> to_concrete(reduce(+, (scale(s) * p for (s, p) in sector_parts(v))))
 diag_exact(scale, tau, v) =
@@ -59,8 +61,7 @@ diag_exact(scale, tau, v) =
     # Everything above terminates after a single Lanczos step, so none of it
     # actually exercises the recurrence.
 
-    ent = mps_sum(product_state([:up, :down, :up, :down]),
-                  product_state([:down, :up, :up, :down]))
+    ent = mps_sum(product_state([:up, :down, :up, :down]), product_state([:down, :up, :up, :down]))
     canonical!(ent, 1)
     fe = bond_frame(ent, 1)
     xe = to_concrete(fe.U0 * fe.S0)
@@ -159,7 +160,7 @@ end
     zs = vcat(-(10.0 .^ range(-3, 8; length = 60)), 0.0)
     for m in (:trapezoid, :radau2, :radau3)
         @test all(abs(root_stability(m, z)) <= 1 + 1e-14 for z in zs)          # z <= 0
-        @test all(abs(root_stability(m, 1im * y)) <= 1 + 1e-12 for y in -50:0.5:50)
+        @test all(abs(root_stability(m, 1im * y)) <= 1 + 1e-12 for y = -50:0.5:50)
         q = root_order(m)
         e(z) = abs(root_stability(m, z) - exp(z))
         @test log2(e(-0.1) / e(-0.05)) ≈ q + 1 atol = 0.25                      # order q

@@ -53,8 +53,7 @@ end
 `H Theta` sketched from the right, with `Om` in `V0`'s layout. A standalone call rebuilds
 `H*Theta`; sweeps use the cached closures.
 """
-sketch_h_left(f::BondFrame, h::XXZChain, i::Int,
-              lch::ChannelSet, rch::ChannelSet, Om) =
+sketch_h_left(f::BondFrame, h::XXZChain, i::Int, lch::ChannelSet, rch::ChannelSet, Om) =
     first(_sketch_closures(f, () -> apply_h_two_site(frame_theta(f), h, i, lch, rch)))(Om)
 
 """
@@ -64,8 +63,7 @@ Mirror of [`sketch_h_left`](@ref): the right matricization of `(H Theta) P_perp^
 `P_perp^R = I - V0' V0`, sketched from the left. `Om` carries `U0`'s layout
 `(link_l, site_l, g)` and the result is `(g, site_r, link_r)`.
 """
-sketch_h_right(f::BondFrame, h::XXZChain, i::Int,
-               lch::ChannelSet, rch::ChannelSet, Om) =
+sketch_h_right(f::BondFrame, h::XXZChain, i::Int, lch::ChannelSet, rch::ChannelSet, Om) =
     last(_sketch_closures(f, () -> apply_h_two_site(frame_theta(f), h, i, lch, rch)))(Om)
 
 # ── the sector-graded Gaussian sketch (`GaussRandMat`, `RSVDpreBE0SiQS.m:557`) ──
@@ -80,8 +78,15 @@ ever touched.
 """
 function _randomize_like(F, rng::AbstractRNG)
     T = eltype(F) <: Complex ? eltype(F) : ComplexF64
-    return TLArray(symm(F), copy(F.qlabels), copy(F.wmatdata), copy(F.wmatinfo),
-                   [randn(rng, T, size(r)) for r in F.RMTs], F.inds, F.spaces)
+    return TLArray(
+        symm(F),
+        copy(F.qlabels),
+        copy(F.wmatdata),
+        copy(F.wmatinfo),
+        [randn(rng, T, size(r)) for r in F.RMTs],
+        F.inds,
+        F.spaces,
+    )
 end
 
 """
@@ -108,7 +113,7 @@ created: Test B targets a sector by its residual, and a residual can never name 
 fusion forbids, but the guard keeps that true by construction instead of by argument.
 """
 function _boost!(cols::Dict, boost, cap::Dict)
-    left = Dict{Any, Int}()
+    left = Dict{Any,Int}()
     for (q, b) in boost
         haskey(cap, q) || continue
         have = get(cols, q, 0)
@@ -145,37 +150,41 @@ The selection half of controlled bond expansion, with the H-action supplied as t
 The gate path and the environment path share this selection code. The keywords are internal
 settings of the callers (DMRG, TDVP-CBE, the gate path), not a public API.
 """
-function cbe_expand(f::BondFrame, skl, skr;
-                    # Concrete internal defaults (the TDVP-CBE baselines' fixed-count selection); callers that need
-                    # other values pass them.
-                    dex::Int = 0,
-                    growth::Float64 = 2.0,
-                    dover::Union{Nothing, Int} = nothing,
-                    comp_ratio::Union{Float64, Nothing} = 0.5,
-                    sulz_cap::Bool = false,
-                    rmax::Int = 0,
-                    preselect_only::Bool = false,
-                    exact::Bool = false,
-                    stol_pre::Float64 = 1e-10,
-                    stol_fnl::Float64 = 1e-13,
-                    # The step's allocation and ledger. `nothing` is the LEGACY path: fixed
-                    # counts, no residual tests, exactly the historical selection. An
-                    # allocation switches on Tests A/B and the rank comes off the spectrum.
-                    alloc::Union{Nothing, BasisAllocation} = nothing,
-                    ledger::Union{Nothing, AdaptiveLedger} = nothing,
-                    workcap::Int = 0,
-                    # Adaptive path only (`alloc !== nothing`): Test B sets the sketch width --
-                    # see `_certified_range(...; thin)`. `false` is the old full-rank widening.
-                    thin_search::Bool = true,
-                    rng::AbstractRNG = MersenneTwister(0x5EED))
+function cbe_expand(
+    f::BondFrame,
+    skl,
+    skr;
+    # Concrete internal defaults (the TDVP-CBE baselines' fixed-count selection); callers that need
+    # other values pass them.
+    dex::Int = 0,
+    growth::Float64 = 2.0,
+    dover::Union{Nothing,Int} = nothing,
+    comp_ratio::Union{Float64,Nothing} = 0.5,
+    sulz_cap::Bool = false,
+    rmax::Int = 0,
+    preselect_only::Bool = false,
+    exact::Bool = false,
+    stol_pre::Float64 = 1e-10,
+    stol_fnl::Float64 = 1e-13,
+    # The step's allocation and ledger. `nothing` is the LEGACY path: fixed
+    # counts, no residual tests, exactly the historical selection. An
+    # allocation switches on Tests A/B and the rank comes off the spectrum.
+    alloc::Union{Nothing,BasisAllocation} = nothing,
+    ledger::Union{Nothing,AdaptiveLedger} = nothing,
+    workcap::Int = 0,
+    # Adaptive path only (`alloc !== nothing`): Test B sets the sketch width --
+    # see `_certified_range(...; thin)`. `false` is the old full-rank widening.
+    thin_search::Bool = true,
+    rng::AbstractRNG = MersenneTwister(0x5EED),
+)
     U0, V0 = f.U0, f.V0
     r = f.old_rank
     none() = CBEExpansion(U0, V0, 0, 0, 0.0, 0.0)
 
     # Room to expand per side: the fused local dimension minus the frame's rank. Abelian charges use the
     # product of leg dimensions (exact there); SU(2) counts multiplets, so it must ask `reachable_sectors`.
-    fused_dim(t, a, b) = symmetry_mode() === :SU2 ?
-        sum(d for (_, d) in reachable_sectors(t, a, b); init = 0) :
+    fused_dim(t, a, b) =
+        symmetry_mode() === :SU2 ? sum(d for (_, d) in reachable_sectors(t, a, b); init = 0) :
         leg_dim(t, a) * leg_dim(t, b)
     room_l = fused_dim(U0, 1, 2) - r
     room_r = fused_dim(V0, 2, 3) - r
@@ -208,8 +217,9 @@ function cbe_expand(f::BondFrame, skl, skr;
     end
     (cap_l <= 0 && cap_r <= 0) && return none()      # both frames already complete
 
-    npre = preselect_only ? max(budget, 1) :
-           dover === nothing ? ceil(Int, 1.2 * budget) : budget + dover
+    npre =
+        preselect_only ? max(budget, 1) :
+        dover === nothing ? ceil(Int, 1.2 * budget) : budget + dover
     # The probe for the LEFT expansion lives on the RIGHT frame's fused space and vice versa,
     # so that is where each side's width ceiling comes from. Widening past it buys nothing:
     # `sector_graded_sketch` caps every sector at its own dimension and simply returns fewer
@@ -219,9 +229,9 @@ function cbe_expand(f::BondFrame, skl, skr;
     # ── preselection: sketch H from each side, project off the frame ──
     # The probe goes on `H Theta`'s opposite leg, so the expanded side stays exact; `exact = true` uses
     # the complete fused basis (plain CBE) and makes the probe settings inert.
-    probe(frame, side, w, boost) = exact ? full_local_basis(frame, side) :
-                                   sector_graded_sketch(frame, side, w; boost = boost,
-                                                        comp_ratio = comp_ratio, rng = rng)
+    probe(frame, side, w, boost) =
+        exact ? full_local_basis(frame, side) :
+        sector_graded_sketch(frame, side, w; boost = boost, comp_ratio = comp_ratio, rng = rng)
     # An explicit `dover` pins the width, and `exact` has no width to pin -- the probe is the
     # complete basis, so there is nothing to widen and the first pass already sees everything.
     wcap_l, wcap_r = dover === nothing && !exact ? (full_r, full_l) : (npre, npre)
@@ -238,19 +248,41 @@ function cbe_expand(f::BondFrame, skl, skr;
     alloc_b = exact ? nothing : alloc
 
     QL, err_l, njl = if cap_l > 0
-        _certified_range((w, b) -> probe(V0, :right, w, b), 1,
-                         Y -> _preselect_left(U0, skl(Y), stol_pre), 3,
-                         X -> perp_component(U0, X), skl, :left,
-                         npre, wcap_l, cap_l, alloc_b, ledger; thin = thin_search)
+        _certified_range(
+            (w, b) -> probe(V0, :right, w, b),
+            1,
+            Y -> _preselect_left(U0, skl(Y), stol_pre),
+            3,
+            X -> perp_component(U0, X),
+            skl,
+            :left,
+            npre,
+            wcap_l,
+            cap_l,
+            alloc_b,
+            ledger;
+            thin = thin_search,
+        )
     else
         (nothing, 0.0, 0)
     end
 
     QR, err_r, njr = if cap_r > 0
-        _certified_range((w, b) -> probe(U0, :left, w, b), 3,
-                         Y -> _preselect_right(V0, skr(Y), stol_pre), 1,
-                         X -> perp_component_right(V0, X), skr, :right,
-                         npre, wcap_r, cap_r, alloc_b, ledger; thin = thin_search)
+        _certified_range(
+            (w, b) -> probe(U0, :left, w, b),
+            3,
+            Y -> _preselect_right(V0, skr(Y), stol_pre),
+            1,
+            X -> perp_component_right(V0, X),
+            skr,
+            :right,
+            npre,
+            wcap_r,
+            cap_r,
+            alloc_b,
+            ledger;
+            thin = thin_search,
+        )
     else
         (nothing, 0.0, 0)
     end
@@ -262,8 +294,8 @@ function cbe_expand(f::BondFrame, skl, skr;
     # candidate directions that cleared `stol_pre` in the preselection SVD, and the per-side
     # cap is the hard local limit (plus an explicit `dex`/`sulz_cap` when one was asked for).
     dex_l, dex_r = min(njl, cap_l), min(njr, cap_r)
-    ledger === nothing || ((wbind_l && njl >= cap_l) || (wbind_r && njr >= cap_r)) &&
-        (ledger.workcap_reached = true)
+    ledger === nothing ||
+        ((wbind_l && njl >= cap_l) || (wbind_r && njr >= cap_r)) && (ledger.workcap_reached = true)
 
     # ── final selection: rank the candidates by their weight in H Theta ──
     # Per side, as the reference's directional CBE does: the joint ranking is used only where it can
@@ -282,17 +314,22 @@ function cbe_expand(f::BondFrame, skl, skr;
                 # Test A: keep the fewest ranked directions whose discarded weight fits the bond's `tol_basis`
                 # share; a shortfall is reported, not hidden.
                 if alloc !== nothing
-                    k, tail = _tail_rank(resj.kept_list, alloc.scale, alloc.tail, joint;
-                                         base = _sq_weight(resj.trunc_list))
+                    k, tail = _tail_rank(
+                        resj.kept_list,
+                        alloc.scale,
+                        alloc.tail,
+                        joint;
+                        base = _sq_weight(resj.trunc_list),
+                    )
                     if ledger !== nothing
                         ledger.max_tail = max(ledger.max_tail, tail)
                         tail <= alloc.tail || _unmet!(ledger, :tail)
                     end
                     if k < joint
                         joint = k
-                        resj = k > 0 ?
-                               svd(UMU, (1,); Nkeep = k, cutoff = stol_fnl, get_lists = true) :
-                               nothing
+                        resj =
+                            k > 0 ? svd(UMU, (1,); Nkeep = k, cutoff = stol_fnl, get_lists = true) :
+                            nothing
                         err_fnl = resj === nothing ? 0.0 : _trunc_weight(resj)
                     end
                     # THE TAIL RANK MUST BIND BOTH SIDES, not just the joint rotation. The
@@ -310,12 +347,24 @@ function cbe_expand(f::BondFrame, skl, skr;
     # the opposite side's full local basis (only on such bonds).
     oneL = alloc !== nothing && !preselect_only && njl > 0 && resj === nothing && dex_l > 0
     oneR = alloc !== nothing && !preselect_only && njr > 0 && resj === nothing && dex_r > 0
-    UL = oneL ? _one_sided_tail(to_concrete(contract(QL', (1, 2),
-                                                     skl(full_local_basis(V0, :right)), (1, 2))),
-                                alloc, dex_l, stol_fnl, ledger) : nothing
-    UR = oneR ? _one_sided_tail(to_concrete(contract(QR', (2, 3),
-                                                     skr(full_local_basis(U0, :left)), (2, 3))),
-                                alloc, dex_r, stol_fnl, ledger) : nothing
+    UL =
+        oneL ?
+        _one_sided_tail(
+            to_concrete(contract(QL', (1, 2), skl(full_local_basis(V0, :right)), (1, 2))),
+            alloc,
+            dex_l,
+            stol_fnl,
+            ledger,
+        ) : nothing
+    UR =
+        oneR ?
+        _one_sided_tail(
+            to_concrete(contract(QR', (2, 3), skr(full_local_basis(U0, :left)), (2, 3))),
+            alloc,
+            dex_r,
+            stol_fnl,
+            ledger,
+        ) : nothing
 
     TLC = if njl == 0
         nothing
@@ -343,8 +392,8 @@ function cbe_expand(f::BondFrame, skl, skr;
     TRC = _guarded_block(V0, TRC, :right)
 
     if ledger !== nothing
-        ledger.n_selected += (TLC === nothing ? 0 : leg_dim(TLC, 3)) +
-                             (TRC === nothing ? 0 : leg_dim(TRC, 1))
+        ledger.n_selected +=
+            (TLC === nothing ? 0 : leg_dim(TLC, 3)) + (TRC === nothing ? 0 : leg_dim(TRC, 1))
     end
 
     (TLC === nothing && TRC === nothing) && return CBEExpansion(U0, V0, 0, 0, err_pre, 0.0)
@@ -353,14 +402,12 @@ function cbe_expand(f::BondFrame, skl, skr;
     U_ex, n_l = if TLC === nothing
         (U0, 0)
     else
-        (to_concrete(oplus([U0, to_concrete(setitag(TLC, 3, ltag))], (3,))),
-         leg_dim(TLC, 3))
+        (to_concrete(oplus([U0, to_concrete(setitag(TLC, 3, ltag))], (3,))), leg_dim(TLC, 3))
     end
     V_ex, n_r = if TRC === nothing
         (V0, 0)
     else
-        (to_concrete(oplus([V0, to_concrete(setitag(TRC, 1, rtag))], (1,))),
-         leg_dim(TRC, 1))
+        (to_concrete(oplus([V0, to_concrete(setitag(TRC, 1, rtag))], (1,))), leg_dim(TRC, 1))
     end
 
     # No rotation of the expanded frame: an expansion is lossless, and rank grows only where the state
@@ -371,14 +418,22 @@ function cbe_expand(f::BondFrame, skl, skr;
         lim = 2 * rm
         leg_dim(U_ex, 3) <= lim || error(
             "CBE expansion broke the global Sulz bound on the left: " *
-            "$(leg_dim(U_ex, 3)) > 2*rmax = $lim")
+            "$(leg_dim(U_ex, 3)) > 2*rmax = $lim",
+        )
         leg_dim(V_ex, 1) <= lim || error(
             "CBE expansion broke the global Sulz bound on the right: " *
-            "$(leg_dim(V_ex, 1)) > 2*rmax = $lim")
+            "$(leg_dim(V_ex, 1)) > 2*rmax = $lim",
+        )
     end
 
-    return CBEExpansion(_check_frame(U_ex, :left, "cbe_expand U_ex"),
-                        _check_frame(V_ex, :right, "cbe_expand V_ex"), n_l, n_r, err_pre, err_fnl)
+    return CBEExpansion(
+        _check_frame(U_ex, :left, "cbe_expand U_ex"),
+        _check_frame(V_ex, :right, "cbe_expand V_ex"),
+        n_l,
+        n_r,
+        err_pre,
+        err_fnl,
+    )
 end
 
 """
@@ -393,16 +448,18 @@ domain wall, panel, bug4): `cbe_expand V_ex` held 10 directions in a sector of l
 S^z = 0 sector of 252 (d50f_rad3 17346774, radau3, 1e-3); the closure frontier's Krylov enrichment
 then refused the frame and the runs crashed (it1r 17345037, 17345039).
 """
-_guarded_block(frame, C, side::Symbol) =
-    _cap_to_local_room(frame, side === :left ? _reortho_left(frame, C) :
-                                               _reortho_right(frame, C), side)
+_guarded_block(frame, C, side::Symbol) = _cap_to_local_room(
+    frame,
+    side === :left ? _reortho_left(frame, C) : _reortho_right(frame, C),
+    side,
+)
 
 "Keep at most `n` columns of `Q` on `leg`, walking sectors in Telum's order."
 function _trim_total(Q, leg::Int, n::Int)
     n <= 0 && return nothing
     leg_dim(Q, leg) <= n && return Q
     left = n
-    keep = Dict{Any, Int}()
+    keep = Dict{Any,Int}()
     for (q, d) in Q.spaces[leg]
         keep[q] = min(d, left)
         left -= keep[q]
@@ -421,16 +478,13 @@ end
 # CARRY them (O(1) per bond) instead of rebuilding a stack (O(L) per bond). These wrappers
 # keep the stack-indexed call sites -- the tests, and anything not sweeping -- unchanged.
 
-sketch_h_left(f::BondFrame, h::XXZChain, i::Int,
-              lenv::LeftEnvStack, renv::RightEnvStack, Om) =
+sketch_h_left(f::BondFrame, h::XXZChain, i::Int, lenv::LeftEnvStack, renv::RightEnvStack, Om) =
     sketch_h_left(f, h, i, left_channels(lenv, i), right_channels(renv, i + 2), Om)
 
-sketch_h_right(f::BondFrame, h::XXZChain, i::Int,
-               lenv::LeftEnvStack, renv::RightEnvStack, Om) =
+sketch_h_right(f::BondFrame, h::XXZChain, i::Int, lenv::LeftEnvStack, renv::RightEnvStack, Om) =
     sketch_h_right(f, h, i, left_channels(lenv, i), right_channels(renv, i + 2), Om)
 
-cbe_expand(f::BondFrame, h::XXZChain, i::Int,
-           lenv::LeftEnvStack, renv::RightEnvStack; kwargs...) =
+cbe_expand(f::BondFrame, h::XXZChain, i::Int, lenv::LeftEnvStack, renv::RightEnvStack; kwargs...) =
     cbe_expand(f, h, i, left_channels(lenv, i), right_channels(renv, i + 2); kwargs...)
 
 """
@@ -448,8 +502,8 @@ function sketch_bond_left(f::BondFrame, gate, Om)
     _check_gate(f, gate)
     tl, tr = f.site_l.itags, f.site_r.itags
     HT = apply_gate(gate, frame_theta(f), tl, tr)       # (link_l, site_l, site_r, link_r)
-    c  = contract(f.U0', (1, 2), HT, (1, 2))            # (bond, site_r, link_r)
-    A  = to_concrete(HT - to_concrete!(contract(f.U0, (3,), c, (1,))))
+    c = contract(f.U0', (1, 2), HT, (1, 2))            # (bond, site_r, link_r)
+    A = to_concrete(HT - to_concrete!(contract(f.U0, (3,), c, (1,))))
     return to_concrete!(contract(A, (3, 4), Om', (2, 3)))          # (link_l, site_l, g)
 end
 
@@ -463,9 +517,9 @@ function sketch_bond_right(f::BondFrame, gate, Om)
     _check_gate(f, gate)
     tl, tr = f.site_l.itags, f.site_r.itags
     HT = apply_gate(gate, frame_theta(f), tl, tr)
-    c  = contract(HT, (3, 4), f.V0', (2, 3))            # (link_l, site_l, bond)
-    A  = to_concrete(HT - to_concrete!(contract(c, (3,), f.V0, (1,))))
-    Y  = contract(A, (1, 2), Om', (1, 2))               # (site_r, link_r, g)
+    c = contract(HT, (3, 4), f.V0', (2, 3))            # (link_l, site_l, bond)
+    A = to_concrete(HT - to_concrete!(contract(c, (3,), f.V0, (1,))))
+    Y = contract(A, (1, 2), Om', (1, 2))               # (site_r, link_r, g)
     return to_concrete(permutedims(Y, (3, 1, 2)))       # (g, site_r, link_r)
 end
 
@@ -479,10 +533,12 @@ unchanged -- this is the same selection with different sketch closures.
 The sketch probes the PROJECTOR (`P_perp (H Theta)`), which is the only path; there is no
 `project_first` switch any more.
 """
-cbe_expand_bond(f::BondFrame, gate; kwargs...) =
-    cbe_expand(f,
-               Om -> sketch_bond_left(f, gate, Om),
-               Om -> sketch_bond_right(f, gate, Om); kwargs...)
+cbe_expand_bond(f::BondFrame, gate; kwargs...) = cbe_expand(
+    f,
+    Om -> sketch_bond_left(f, gate, Om),
+    Om -> sketch_bond_right(f, gate, Om);
+    kwargs...,
+)
 
 # ── from src/RSVDCBEBondUpdate/expansion/cbe_bond_update.jl ──
 
@@ -499,19 +555,23 @@ One CBE-basis Galerkin update on the bond `f` snapshots, a drop-in for
 keywords forward to `cbe_expand`. `s_iters = 1` is one expansion then Lanczos, `n > 1` repeats
 the expansion, `-g <= 0` uses [`_expanding_krylov`](@ref) with `g` growth passes.
 """
-function cbe_bond_update(f::BondFrame, gate, tau::ComplexF64;
-                         maxdim::Int = 200,
-                         trunc_thresh::Float64 = 1e-14,
-                         s_tau::Union{Nothing, ComplexF64} = nothing,
-                         expand::Bool = true,
-                         maxiter::Int = 30,
-                         tol::Float64 = 1e-15,
-                         s_iters::Int = 1,
-                         iter_tol::Float64 = 1e-12,
-                         s_reorth::Bool = false,
-                         s_probe::Symbol = :residual,
-                         rng::AbstractRNG = MersenneTwister(0x5EED),
-                         expand_kwargs...)
+function cbe_bond_update(
+    f::BondFrame,
+    gate,
+    tau::ComplexF64;
+    maxdim::Int = 200,
+    trunc_thresh::Float64 = 1e-14,
+    s_tau::Union{Nothing,ComplexF64} = nothing,
+    expand::Bool = true,
+    maxiter::Int = 30,
+    tol::Float64 = 1e-15,
+    s_iters::Int = 1,
+    iter_tol::Float64 = 1e-12,
+    s_reorth::Bool = false,
+    s_probe::Symbol = :residual,
+    rng::AbstractRNG = MersenneTwister(0x5EED),
+    expand_kwargs...,
+)
     tau_s = s_tau === nothing ? tau : s_tau
     tl, tr = f.site_l.itags, f.site_r.itags
     theta0 = frame_theta(f)
@@ -529,8 +589,8 @@ function cbe_bond_update(f::BondFrame, gate, tau::ComplexF64;
     # The Galerkin step in a GIVEN basis. Note `S_start` is rebuilt from `theta0` every time it
     # is called -- see the loop below for why that is the whole correctness argument.
     function galerkin(U_aug, V_aug)
-        S_start = to_concrete!(contract(contract(U_aug', (1, 2), theta0, (1, 2)),
-                                       (2, 3), V_aug', (2, 3)))
+        S_start =
+            to_concrete!(contract(contract(U_aug', (1, 2), theta0, (1, 2)), (2, 3), V_aug', (2, 3)))
         function apply_s(x)
             nmv[] += 1
             theta = to_concrete((U_aug * x) * V_aug)
@@ -538,8 +598,15 @@ function cbe_bond_update(f::BondFrame, gate, tau::ComplexF64;
             proj = contract(U_aug', (1, 2), evolved, (1, 2))
             return to_concrete!(contract(proj, (2, 3), V_aug', (2, 3)))
         end
-        return expv(apply_s, tau_s, S_start; hermitian = true, maxiter = maxiter,
-                    tol = tol, reorth = s_reorth)
+        return expv(
+            apply_s,
+            tau_s,
+            S_start;
+            hermitian = true,
+            maxiter = maxiter,
+            tol = tol,
+            reorth = s_reorth,
+        )
     end
 
     U_aug, V_aug = f.U0, f.V0
@@ -552,8 +619,17 @@ function cbe_bond_update(f::BondFrame, gate, tau::ComplexF64;
         # ── GROWTH INSIDE THE LANCZOS ────────────────────────────────────────────────
         # `s_iters <= 0` selects the expanding-basis solver; see `_expanding_krylov`.
         U_aug, V_aug, S_new, info = _expanding_krylov(
-            f, applyH, expand_at, Propagate(tau_s), theta0, nmv;
-            maxiter = maxiter, tol = tol, grow_iters = -s_iters, probe = s_probe)
+            f,
+            applyH,
+            expand_at,
+            Propagate(tau_s),
+            theta0,
+            nmv;
+            maxiter = maxiter,
+            tol = tol,
+            grow_iters = -s_iters,
+            probe = s_probe,
+        )
         err_pre, err_fnl = info.err_pre, info.err_fnl
         n_iter, iter_weight = info.n_grow, info.beta_final
     else
@@ -561,7 +637,7 @@ function cbe_bond_update(f::BondFrame, gate, tau::ComplexF64;
         # Each pass recomputes the budget from the current rank, compounding the growth schedule;
         # `galerkin` always starts from the original `theta0`, so the exponential is applied once.
         probe = f
-        for k in 1:s_iters
+        for k = 1:s_iters
             ex = expand_at(probe)
             U_prev, V_prev = U_aug, V_aug
             U_aug, V_aug = ex.U_ex, ex.V_ex
@@ -578,20 +654,31 @@ function cbe_bond_update(f::BondFrame, gate, tau::ComplexF64;
         end
     end
 
-    res = svd(S_new, (1,); cutoff = max(trunc_thresh, 1e-14), Nkeep = maxdim,
-              get_lists = true)
+    res = svd(S_new, (1,); cutoff = max(trunc_thresh, 1e-14), Nkeep = maxdim, get_lists = true)
     tag = f.link_mid.itags
-    left_core  = to_concrete(setitag(to_concrete(U_aug * res.U), 3, tag))
+    left_core = to_concrete(setitag(to_concrete(U_aug * res.U), 3, tag))
     right_core = to_concrete(setitag(to_concrete((res.S * res.Vd) * V_aug), 1, tag))
 
     svals = [s for (s, _, _, _) in res.kept_list]
-    return (; left_core, right_core, U_aug, V_aug, S_new,
-            n_new_k = leg_dim(U_aug, 3) - f.old_rank,
-            n_new_l = leg_dim(V_aug, 1) - f.old_rank,
-            keep = leg_dim(left_core, 3),
-            aug_k = leg_dim(U_aug, 3), aug_l = leg_dim(V_aug, 1),
-            svals, discarded = _trunc_weight(res),
-            err_pre, err_fnl, n_matvec = nmv[], n_iter, iter_weight)
+    return (;
+        left_core,
+        right_core,
+        U_aug,
+        V_aug,
+        S_new,
+        n_new_k = leg_dim(U_aug, 3) - f.old_rank,
+        n_new_l = leg_dim(V_aug, 1) - f.old_rank,
+        keep = leg_dim(left_core, 3),
+        aug_k = leg_dim(U_aug, 3),
+        aug_l = leg_dim(V_aug, 1),
+        svals,
+        discarded = _trunc_weight(res),
+        err_pre,
+        err_fnl,
+        n_matvec = nmv[],
+        n_iter,
+        iter_weight,
+    )
 end
 
 """
@@ -602,20 +689,28 @@ Lanczos for `exp(tau*H_eff)` whose basis grows with the Krylov space: before `H`
 or `grow_iters` passes have run. Full reorthogonalisation is required because the projected
 operator changes at every growth pass.
 """
-function _expanding_krylov(f::BondFrame, applyH, expand, solver::SStepSolver, theta0, nmv;
-                           maxiter::Int, tol::Float64, grow_iters::Int,
-                           probe::Symbol = :residual)
-    project(U, V, th) = to_concrete!(contract(contract(U', (1, 2), th, (1, 2)),
-                                             (2, 3), V', (2, 3)))
+function _expanding_krylov(
+    f::BondFrame,
+    applyH,
+    expand,
+    solver::SStepSolver,
+    theta0,
+    nmv;
+    maxiter::Int,
+    tol::Float64,
+    grow_iters::Int,
+    probe::Symbol = :residual,
+)
+    project(U, V, th) = to_concrete!(contract(contract(U', (1, 2), th, (1, 2)), (2, 3), V', (2, 3)))
 
     # Embed a core from the (Uo,Vo) basis into (Un,Vn) by computed overlaps (robust to a rotation by the
     # orthonormality guard); the overlaps are built once per growth pass, not per stored vector.
-    embed_ops(Uo, Vo, Un, Vn) =
-        (to_concrete!(contract(Un', (1, 2), Uo, (1, 2))),         # PL (new_l, old_l)
-         to_concrete!(contract(Vo, (2, 3), Vn', (2, 3))))         # PR (old_r, new_r)
+    embed_ops(Uo, Vo, Un, Vn) = (
+        to_concrete!(contract(Un', (1, 2), Uo, (1, 2))),         # PL (new_l, old_l)
+        to_concrete!(contract(Vo, (2, 3), Vn', (2, 3))),
+    )         # PR (old_r, new_r)
 
-    embed_with(PL, PR, S) =
-        to_concrete!(contract(contract(PL, (2,), S, (1,)), (2,), PR, (1,)))
+    embed_with(PL, PR, S) = to_concrete!(contract(contract(PL, (2,), S, (1,)), (2,), PR, (1,)))
 
     U, V = f.U0, f.V0
     S0 = project(U, V, theta0)
@@ -624,9 +719,12 @@ function _expanding_krylov(f::BondFrame, applyH, expand, solver::SStepSolver, th
     # `value = NaN` is NOT decoration: every other exit carries it (the Ritz value for
     # `LowestEigen`), and a caller that reads `info.value` -- the ground-state solve does --
     # would hit an UndefVarError on this branch if the field were simply absent here.
-    beta0 == 0 && return (U, V, S0,
-                          (; err_pre, err_fnl, n_grow, beta_final = 0.0, ranks = Int[],
-                             value = NaN))
+    beta0 == 0 && return (
+        U,
+        V,
+        S0,
+        (; err_pre, err_fnl, n_grow, beta_final = 0.0, ranks = Int[], value = NaN),
+    )
 
     basis = Any[to_concrete((1.0 / beta0) * S0)]
     alpha, betas, ranks = Float64[], Float64[], Int[leg_dim(U, 3)]
@@ -634,7 +732,7 @@ function _expanding_krylov(f::BondFrame, applyH, expand, solver::SStepSolver, th
 
     image = nothing        # the PREVIOUS iteration's output, H*v_{k-1}, before orthogonalisation
 
-    for it in 1:maxiter
+    for it = 1:maxiter
         # ── step 0: grow the basis around the probe ──
         # `:residual` (default) probes with the orthonormal Lanczos vector; `:image` uses `H v_{k-1}` and
         # measured no different. The Lanczos recurrence itself is unchanged.
@@ -662,8 +760,8 @@ function _expanding_krylov(f::BondFrame, applyH, expand, solver::SStepSolver, th
         a = real(tensor_inner(basis[it], w))
         push!(alpha, a)
         w = to_concrete(w + (-a) * basis[it])
-        it > 1 && (w = to_concrete(w + (-betas[it - 1]) * basis[it - 1]))
-        for _pass in 1:2, u in basis
+        it > 1 && (w = to_concrete(w + (-betas[it-1]) * basis[it-1]))
+        for _pass = 1:2, u in basis
             w = to_concrete(w - tensor_inner(u, w) * u)
         end
 
@@ -683,7 +781,7 @@ function _expanding_krylov(f::BondFrame, applyH, expand, solver::SStepSolver, th
     # is identical either way.
     coeff, value = _reduce_krylov(solver, alpha, betas, beta0)
     S = to_concrete(coeff[1] * basis[1])
-    for k in 2:length(coeff)
+    for k = 2:length(coeff)
         S = to_concrete(S + coeff[k] * basis[k])
     end
     return (U, V, S, (; err_pre, err_fnl, n_grow, beta_final = b_last, ranks, value))
@@ -710,9 +808,18 @@ end
 `f` with frames and core replaced, so the next sketch probes the evolved state. `old_rank` is the
 larger frame rank, so `room` stays a lower bound on each side.
 """
-_reframe(f::BondFrame, U, S, V) =
-    BondFrame(U, S, V, f.link_l, f.site_l, f.link_mid, f.site_r, f.link_r,
-              max(leg_dim(U, 3), leg_dim(V, 1)), f.link_mid_space)
+_reframe(f::BondFrame, U, S, V) = BondFrame(
+    U,
+    S,
+    V,
+    f.link_l,
+    f.site_l,
+    f.link_mid,
+    f.site_r,
+    f.link_r,
+    max(leg_dim(U, 3), leg_dim(V, 1)),
+    f.link_mid_space,
+)
 
 cbe_bond_update(f::BondFrame, gate, tau::Number; kwargs...) =
     cbe_bond_update(f, gate, ComplexF64(tau); kwargs...)
@@ -727,13 +834,11 @@ cbe_bond_update(f::BondFrame, gate, tau::Number; kwargs...) =
 environments. ⚠ A standalone call rebuilds `H*Theta`; inside a sweep the shared cache in
 [`_sketch_closures`](@ref) is what runs."
 sketch_h_left(f::BondFrame, mpo::MPO, i::Int, lenv::MPOLink, renv::MPOLink, Om) =
-    first(_sketch_closures(f,
-        () -> apply_h_two_site(frame_theta(f), mpo, i, lenv, renv)))(Om)
+    first(_sketch_closures(f, () -> apply_h_two_site(frame_theta(f), mpo, i, lenv, renv)))(Om)
 
 "Mirror of [`sketch_h_left`](@ref) on MPO environments."
 sketch_h_right(f::BondFrame, mpo::MPO, i::Int, lenv::MPOLink, renv::MPOLink, Om) =
-    last(_sketch_closures(f,
-        () -> apply_h_two_site(frame_theta(f), mpo, i, lenv, renv)))(Om)
+    last(_sketch_closures(f, () -> apply_h_two_site(frame_theta(f), mpo, i, lenv, renv)))(Om)
 
 # ── from src/RSVDCBEBondUpdate/operators/mpo_fold.jl ──
 
@@ -755,9 +860,8 @@ instead of applied to a finished `H*Theta`.
 return the DISCARDED-space component, i.e. with `P_perp` already applied -- identical to
 [`_sketch_closures`](@ref)'s output.
 """
-function _fold_sketch_closures(f::BondFrame, mpo::MPO, i::Int,
-                               lenv::MPOLink, renv::MPOLink)
-    W1, W2 = mpo[i], mpo[i + 1]
+function _fold_sketch_closures(f::BondFrame, mpo::MPO, i::Int, lenv::MPOLink, renv::MPOLink)
+    W1, W2 = mpo[i], mpo[i+1]
     # ⚠ `Theta` IS SHARED, `H*Theta` IS NOT. `frame_theta` is `U0*S0*V0` -- an `O(chi^2 d^2)`
     # object the frame already implies, with no `H` in it. Rebuilding it per call would be pure
     # waste; caching the thing this function exists NOT to build would defeat the purpose.
@@ -840,29 +944,43 @@ The bond expansion at bond `i`, driven by MPO environments.
 contraction instead of building `H*Theta`. ⚠ It makes `share_ht` MEANINGLESS -- there is no
 shared object to cache -- so passing both is refused rather than silently ignoring one.
 """
-function cbe_expand(f::BondFrame, mpo::MPO, i::Int,
-                    lenv::MPOLink, renv::MPOLink;
-                    # ⛔ `nothing`, NOT `true`, SO "NOT PASSED" IS DISTINGUISHABLE FROM "PASSED
-                    # true". With a `Bool` default the contradiction check below cannot fire at
-                    # all -- `share_ht` is a NAMED kwarg, so it never appears in `kwargs...` and
-                    # `haskey(kwargs, :share_ht)` is false even when the caller passed it. That
-                    # is a guard that reads as protection and provides none.
-                    share_ht::Union{Nothing, Bool} = nothing,
-                    fold_omega::Bool = false, kwargs...)
+function cbe_expand(
+    f::BondFrame,
+    mpo::MPO,
+    i::Int,
+    lenv::MPOLink,
+    renv::MPOLink;
+    # ⛔ `nothing`, NOT `true`, SO "NOT PASSED" IS DISTINGUISHABLE FROM "PASSED
+    # true". With a `Bool` default the contradiction check below cannot fire at
+    # all -- `share_ht` is a NAMED kwarg, so it never appears in `kwargs...` and
+    # `haskey(kwargs, :share_ht)` is false even when the caller passed it. That
+    # is a guard that reads as protection and provides none.
+    share_ht::Union{Nothing,Bool} = nothing,
+    fold_omega::Bool = false,
+    kwargs...,
+)
     if fold_omega
         # ⛔ REFUSE THE CONTRADICTION RATHER THAN RESOLVING IT. A caller who sets `fold_omega`
         # alone is asserting nothing about sharing and is not warned; a caller who ALSO passes
         # `share_ht` explicitly believes something false about the run they are about to time,
         # and silently honouring one of the two is how a benchmark reports the wrong arm.
-        share_ht === nothing || throw(ArgumentError(
-            "fold_omega = true never forms H*Theta, so there is nothing for share_ht to " *
-            "share; pass one or the other"))
+        share_ht === nothing || throw(
+            ArgumentError(
+                "fold_omega = true never forms H*Theta, so there is nothing for share_ht to " *
+                "share; pass one or the other",
+            ),
+        )
         return cbe_expand(f, _fold_sketch_closures(f, mpo, i, lenv, renv)...; kwargs...)
     end
-    return cbe_expand(f,
-                      _sketch_closures(f,
-                          () -> apply_h_two_site(frame_theta(f), mpo, i, lenv, renv);
-                          share = share_ht === nothing ? true : share_ht)...; kwargs...)
+    return cbe_expand(
+        f,
+        _sketch_closures(
+            f,
+            () -> apply_h_two_site(frame_theta(f), mpo, i, lenv, renv);
+            share = share_ht === nothing ? true : share_ht,
+        )...;
+        kwargs...,
+    )
 end
 
 # ── from src/RSVDCBEBondUpdate/expansion/bond_expansion.jl ──
@@ -904,17 +1022,20 @@ function expand_bond!(psi::SymMPS, mpo::MPO, i::Int, dir::Symbol, lch, rch; exkw
     dir in (:right, :left) || throw(ArgumentError("dir must be :right or :left, got $dir"))
     L = length(psi)
     1 <= i <= L - 1 || throw(ArgumentError("bond must be in 1:$(L - 1), got $i"))
-    psi.center in (i, i + 1) || throw(ArgumentError(
-        "expand_bond! needs the orthogonality centre on site $i or $(i + 1), " *
-        "found it on $(psi.center)"))
+    psi.center in (i, i + 1) || throw(
+        ArgumentError(
+            "expand_bond! needs the orthogonality centre on site $i or $(i + 1), " *
+            "found it on $(psi.center)",
+        ),
+    )
 
     dim_in = leg_dim(psi[i], 3)
-    f  = _frame_from(psi[i], psi[i + 1])
+    f = _frame_from(psi[i], psi[i+1])
     ex = cbe_expand(f, mpo, i, lch, rch; exkw...)
 
     if dir === :right
         _absorb_right!(psi, i, ex.V_ex)              # psi[i+1] = V_ex, centre -> i
-        env = push_right_channels(rch, mpo, psi[i + 1], i + 1)
+        env = push_right_channels(rch, mpo, psi[i+1], i + 1)
         n_new = ex.n_new_r
     else
         _absorb_left!(psi, i, ex.U_ex)               # psi[i] = U_ex, centre -> i+1
@@ -922,8 +1043,7 @@ function expand_bond!(psi::SymMPS, mpo::MPO, i::Int, dir::Symbol, lch, rch; exkw
         n_new = ex.n_new_l
     end
 
-    return env, BondExpansionInfo(i, dir, dim_in, leg_dim(psi[i], 3), n_new,
-                                  ex.err_pre, ex.err_fnl)
+    return env, BondExpansionInfo(i, dir, dim_in, leg_dim(psi[i], 3), n_new, ex.err_pre, ex.err_fnl)
 end
 
 # ── the local eigensolve the DMRG sweep needs ──
@@ -941,8 +1061,14 @@ bound, because the subspace is fixed.
 `reorth = true` is the default: without it the recurrence loses orthogonality silently, giving a Ritz
 value below the true eigenvalue that looks like better convergence.
 """
-function lanczos_lowest(apply, x; maxiter::Int = 30, tol::Float64 = 1e-13,
-                        restol::Float64 = 1e-10, reorth::Bool = true)
+function lanczos_lowest(
+    apply,
+    x;
+    maxiter::Int = 30,
+    tol::Float64 = 1e-13,
+    restol::Float64 = 1e-10,
+    reorth::Bool = true,
+)
     xc = to_concrete(ComplexF64(1.0) * x)
     beta0 = norm(xc)
     beta0 == 0 && throw(ArgumentError("lanczos_lowest: start vector has zero norm"))
@@ -958,7 +1084,7 @@ function lanczos_lowest(apply, x; maxiter::Int = 30, tol::Float64 = 1e-13,
     w = to_concrete(w + (-a) * v)
 
     coeff, value = _reduce_krylov(LowestEigen(), alpha, betas, beta0)
-    for _ in 2:maxiter
+    for _ = 2:maxiter
         b = norm(w)
         b < tol && break
         push!(betas, b)
@@ -967,9 +1093,9 @@ function lanczos_lowest(apply, x; maxiter::Int = 30, tol::Float64 = 1e-13,
         w = apply(v)
         a = real(tensor_inner(v, w))
         push!(alpha, a)
-        w = w + (-a) * v + (-b) * basis[end - 1]
+        w = w + (-a) * v + (-b) * basis[end-1]
         if reorth
-            for _pass in 1:2, u in basis
+            for _pass = 1:2, u in basis
                 w = w - tensor_inner(u, w) * u
             end
         end
@@ -981,7 +1107,7 @@ function lanczos_lowest(apply, x; maxiter::Int = 30, tol::Float64 = 1e-13,
     end
 
     out = to_concrete(coeff[1] * basis[1])
-    for k in 2:length(coeff)
+    for k = 2:length(coeff)
         out = to_concrete(out + coeff[k] * basis[k])
     end
     n = norm(out)
@@ -1016,14 +1142,23 @@ local space (no projector in the probe), through the production sketch closures 
 shared or folded -- and Test B's per-sector unbiased normalisation (`_sample_residual`). An
 estimate, not a bound.
 """
-function sampled_leak(::DDQRExpansion, f::BondFrame, skl, skr, side::Symbol, n::Int,
-                      rng::AbstractRNG)
+function sampled_leak(
+    ::DDQRExpansion,
+    f::BondFrame,
+    skl,
+    skr,
+    side::Symbol,
+    n::Int,
+    rng::AbstractRNG,
+)
     if side === :left
         draw = w -> sector_graded_sketch(f.V0, :right, w; comp_ratio = nothing, rng = rng)
-        return first(_sample_residual(nothing, Y -> perp_component(f.U0, Y), skl, draw, n,
-                                      1, :left))
+        return first(
+            _sample_residual(nothing, Y -> perp_component(f.U0, Y), skl, draw, n, 1, :left),
+        )
     end
     draw = w -> sector_graded_sketch(f.U0, :left, w; comp_ratio = nothing, rng = rng)
-    return first(_sample_residual(nothing, Y -> perp_component_right(f.V0, Y), skr, draw, n,
-                                  3, :right))
+    return first(
+        _sample_residual(nothing, Y -> perp_component_right(f.V0, Y), skr, draw, n, 3, :right),
+    )
 end

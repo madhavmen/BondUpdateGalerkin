@@ -48,7 +48,7 @@ strategy's settings (`exkw`), the work ceiling,
 the `krylov_reuse` and `krylov_depth` ablations, the states the trial space must contain (`keep_states`) and the
 `krylov_recycle` cache (`nothing` when off), which round 1 fills.
 """
-struct _HalfSweepCtx{M, E, A, X <: BasisExpansion, K, S, R}
+struct _HalfSweepCtx{M,E,A,X<:BasisExpansion,K,S,R}
     mpo::M
     tau::ComplexF64
     eshift::E
@@ -68,11 +68,33 @@ Time one bond expansion into the half-sweep's own accumulator: `side`'s frame gr
 strategy (`expand_frame`; DD-QR CBE by default, plan T2.4) into the bond's own `ledger`; `nn[i]`
 records what it admitted.
 """
-function _expand_bond!(acc::_HalfAcc, cx::_HalfSweepCtx, nn, f, i, lch, rch, side::Symbol,
-                       ledger, rng)
+function _expand_bond!(
+    acc::_HalfAcc,
+    cx::_HalfSweepCtx,
+    nn,
+    f,
+    i,
+    lch,
+    rch,
+    side::Symbol,
+    ledger,
+    rng,
+)
     t0 = time_ns()
-    ex = expand_frame(cx.expansion, f, cx.mpo, i, lch, rch, side; cx.exkw..., ledger = ledger,
-                      rng = rng, kc = acc.kc, version = i)
+    ex = expand_frame(
+        cx.expansion,
+        f,
+        cx.mpo,
+        i,
+        lch,
+        rch,
+        side;
+        cx.exkw...,
+        ledger = ledger,
+        rng = rng,
+        kc = acc.kc,
+        version = i,
+    )
     acc.tcbe += (time_ns() - t0) / 1e9
     acc.epre = max(acc.epre, ex.err_pre)
     acc.efnl = max(acc.efnl, ex.err_fnl)
@@ -158,25 +180,44 @@ function _half_left!(psiL, W, expanded, nn, acc::_HalfAcc, hledger, rng, cx::_Ha
     C = nothing
     kcar = Any[nothing for _ in cx.keep_states]   # each kept state's carry, `(b_i, link)`
     held = 0                          # frames this sweep has accumulated, running total
-    for i in 1:c
+    for i = 1:c
         K = C === nothing ? psiL[i] : to_concrete!(contract(C, (2,), psiL[i], (1,)))
-        _fr = (t0 = time_ns(); f = _frame_from(K, psiL[i + 1]);
-               acc.tframe += (time_ns() - t0) / 1e9; f)
+        _fr = (t0 = time_ns();
+        f = _frame_from(K, psiL[i+1]);
+        acc.tframe += (time_ns() - t0) / 1e9;
+        f)
         bondlg = AdaptiveLedger()                               # this bond's own ledger (§8)
-        ex = _expand_bond!(acc, cx, nn, _fr, i, lch, right_channels(rstack, i + 2), :left,
-                           bondlg, rng)
+        ex = _expand_bond!(
+            acc,
+            cx,
+            nn,
+            _fr,
+            i,
+            lch,
+            right_channels(rstack, i + 2),
+            :left,
+            bondlg,
+            rng,
+        )
         _peak!(acc, held + _state_stored(psiL), ex.U_ex, ex.V_ex)
         # ── STAGE 3 (plan §4): THE FRAME GROWS FROM `U_ex` BY TESTS C/D ─────────────────
         # The CBE frame is KEPT (old directions verbatim, CBE directions reused) and a Krylov
         # direction is appended only when its weighted residual outside the frame matters.
-        M    = to_concrete!(contract(psiL[i + 1], (2, 3), ex.V_ex', (2, 3)))
-        Kex  = to_concrete!(contract(K, (3,), M, (1,)))
+        M = to_concrete!(contract(psiL[i+1], (2, 3), ex.V_ex', (2, 3)))
+        Kex = to_concrete!(contract(K, (3,), M, (1,)))
         rch1 = push_right_channels(right_channels(rstack, i + 2), mpo, ex.V_ex, i + 1)
-        H1   = OneSiteOp(shift_h(one_site_h(mpo, i, lch, rch1), cx.eshift), i, acc.kc)
-        tk0  = time_ns()
-        Wkry, kst = _krylov_enrich(Kex, x -> (acc.nmv += 1; apply_one_site(H1, x)),
-                                   cx.krylov_reuse ? ex.U_ex : _fr.U0, :left, cx.tau, cx.alloc;
-                                   workcap = cx.wcap, fixed_depth = cx.krylov_depth)
+        H1 = OneSiteOp(shift_h(one_site_h(mpo, i, lch, rch1), cx.eshift), i, acc.kc)
+        tk0 = time_ns()
+        Wkry, kst = _krylov_enrich(
+            Kex,
+            x -> (acc.nmv += 1; apply_one_site(H1, x)),
+            cx.krylov_reuse ? ex.U_ex : _fr.U0,
+            :left,
+            cx.tau,
+            cx.alloc;
+            workcap = cx.wcap,
+            fixed_depth = cx.krylov_depth,
+        )
         cx.krylov_reuse || (Wkry = _merge_frame(Wkry, ex.U_ex, :left))
         _recycle_store!(cx.recycle, :left, i, kst, ex.V_ex, cx.alloc.krylov)
         acc.tkry += (time_ns() - tk0) / 1e9
@@ -185,8 +226,10 @@ function _half_left!(psiL, W, expanded, nn, acc::_HalfAcc, hledger, rng, cx::_Ha
         W[i] = to_concrete(setitag(Wkry, 3, _tagW(i)))
         # Union every kept state first: a later union widens `W[i]`, so a carry taken before it
         # would hold a stale bond leg.
-        KXs = [kcar[t] === nothing ? X[i] : to_concrete!(contract(kcar[t], (2,), X[i], (1,)))
-               for (t, X) in pairs(cx.keep_states)]
+        KXs = [
+            kcar[t] === nothing ? X[i] : to_concrete!(contract(kcar[t], (2,), X[i], (1,))) for
+            (t, X) in pairs(cx.keep_states)
+        ]
         for KX in KXs
             W[i] = _union_left(W[i], KX)
         end
@@ -231,32 +274,41 @@ function _half_right!(psiR, Z, expanded, nn, acc::_HalfAcc, hledger, rng, cx::_H
     D = nothing
     kcar = Any[nothing for _ in cx.keep_states]   # each kept state's carry, `(link, b_j)`
     held = 0
-    for j in (L - 1):-1:c
-        B = D === nothing ? psiR[j + 1] :
-            to_concrete!(contract(psiR[j + 1], (3,), D, (1,)))
-        _fr = (t0 = time_ns(); f = _frame_from(psiR[j], B);
-               acc.tframe += (time_ns() - t0) / 1e9; f)
+    for j = (L-1):-1:c
+        B = D === nothing ? psiR[j+1] : to_concrete!(contract(psiR[j+1], (3,), D, (1,)))
+        _fr = (t0 = time_ns();
+        f = _frame_from(psiR[j], B);
+        acc.tframe += (time_ns() - t0) / 1e9;
+        f)
         bondlg = AdaptiveLedger()                               # this bond's own ledger (§8)
-        ex = _expand_bond!(acc, cx, nn, _fr, j, left_channels(lstack, j), rch, :right,
-                           bondlg, rng)
+        ex = _expand_bond!(acc, cx, nn, _fr, j, left_channels(lstack, j), rch, :right, bondlg, rng)
         _peak!(acc, held + _state_stored(psiR), ex.U_ex, ex.V_ex)
         # Row mirror of the left sweep's Stage 3; see the comment there.
-        M    = to_concrete!(contract(ex.U_ex', (1, 2), psiR[j], (1, 2)))  # (b_L, link_j)
-        Bex  = to_concrete!(contract(M, (2,), B, (1,)))
+        M = to_concrete!(contract(ex.U_ex', (1, 2), psiR[j], (1, 2)))  # (b_L, link_j)
+        Bex = to_concrete!(contract(M, (2,), B, (1,)))
         lch1 = push_left_channels(left_channels(lstack, j), mpo, ex.U_ex, j)
-        H1   = OneSiteOp(shift_h(one_site_h(mpo, j + 1, lch1, rch), cx.eshift), j, acc.kc)
-        tk0  = time_ns()
-        Zkry, kst = _krylov_enrich(Bex, x -> (acc.nmv += 1; apply_one_site(H1, x)),
-                                   cx.krylov_reuse ? ex.V_ex : _fr.V0, :right, cx.tau, cx.alloc;
-                                   workcap = cx.wcap, fixed_depth = cx.krylov_depth)
+        H1 = OneSiteOp(shift_h(one_site_h(mpo, j + 1, lch1, rch), cx.eshift), j, acc.kc)
+        tk0 = time_ns()
+        Zkry, kst = _krylov_enrich(
+            Bex,
+            x -> (acc.nmv += 1; apply_one_site(H1, x)),
+            cx.krylov_reuse ? ex.V_ex : _fr.V0,
+            :right,
+            cx.tau,
+            cx.alloc;
+            workcap = cx.wcap,
+            fixed_depth = cx.krylov_depth,
+        )
         cx.krylov_reuse || (Zkry = _merge_frame(Zkry, ex.V_ex, :right))
         _recycle_store!(cx.recycle, :right, j, kst, ex.U_ex, cx.alloc.krylov)
         acc.tkry += (time_ns() - tk0) / 1e9
         _record_krylov!(bondlg, kst, cx.alloc)
         _peak!(acc, held + _state_stored(psiR), Zkry)
         Z[j] = to_concrete(setitag(Zkry, 1, _tagZ(j)))
-        BXs = [kcar[t] === nothing ? X[j + 1] : to_concrete!(contract(X[j + 1], (3,), kcar[t], (1,)))
-               for (t, X) in pairs(cx.keep_states)]
+        BXs = [
+            kcar[t] === nothing ? X[j+1] : to_concrete!(contract(X[j+1], (3,), kcar[t], (1,)))
+            for (t, X) in pairs(cx.keep_states)
+        ]
         for BX in BXs                  # all unions before any carry, as on the left
             Z[j] = _union_right(Z[j], BX)
         end

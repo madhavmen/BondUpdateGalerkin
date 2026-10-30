@@ -42,7 +42,7 @@ Base.@kwdef struct CBEBugOptions
     exact::Bool = false
     seed::UInt = 0x5EED
     record_magnetisation::Bool = false
-    observe::Union{Nothing, Function} = nothing
+    observe::Union{Nothing,Function} = nothing
 end
 # ── PART II: CBE as the basis update of the gate-based bond_update_bug ──
 # The three modes differ only in the operator posed to `_expanding_krylov` and in the S-step solver;
@@ -91,8 +91,7 @@ struct LowestEigen <: SStepSolver end
 eigenvalue to report.
 """
 _reduce_krylov(p::Propagate, alpha, betas, beta0) =
-    (ComplexF64[beta0 * c for c in hermitian_tridiagonal_exp_coeffs(alpha, betas, p.tau)],
-     NaN)
+    (ComplexF64[beta0 * c for c in hermitian_tridiagonal_exp_coeffs(alpha, betas, p.tau)], NaN)
 
 function _reduce_krylov(::LowestEigen, alpha, betas, beta0)
     # `beta0` is deliberately UNUSED: the propagator carries the state's norm through the
@@ -115,8 +114,11 @@ end
 "Check `gate` is tagged for the bond `f` describes, as `apply_gate` does for `theta`."
 function _check_gate(f::BondFrame, gate)
     tl, tr = f.site_l.itags, f.site_r.itags
-    (gate.inds[1].itags == tl && gate.inds[2].itags == tr) || throw(ArgumentError(
-        "gate is tagged for ($(gate.inds[1].itags), $(gate.inds[2].itags)), " *
-        "bond frame carries ($tl, $tr)"))
+    (gate.inds[1].itags == tl && gate.inds[2].itags == tr) || throw(
+        ArgumentError(
+            "gate is tagged for ($(gate.inds[1].itags), $(gate.inds[2].itags)), " *
+            "bond frame carries ($tl, $tr)",
+        ),
+    )
     return nothing
 end

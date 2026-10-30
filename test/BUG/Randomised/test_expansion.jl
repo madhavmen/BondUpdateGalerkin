@@ -39,8 +39,7 @@ _mklist(sigmas, degs = ones(Int, length(sigmas))) =
 
     @testset "the retained rank is monotone in the allowance" begin
         list = _mklist([1.0, 0.5, 0.2, 0.05, 0.01, 1e-3])
-        ks = [first(RC._tail_rank(list, 1.0, a, 6))
-              for a in (1e-6, 1e-3, 1e-2, 0.1, 0.5, 2.0)]
+        ks = [first(RC._tail_rank(list, 1.0, a, 6)) for a in (1e-6, 1e-3, 1e-2, 0.1, 0.5, 2.0)]
         # A looser budget can never demand MORE rank.
         @test issorted(ks; rev = true)
         @test ks[1] == 6        # unmeetable: nothing may be discarded
@@ -95,8 +94,15 @@ end
     mpo = xxz_mpo(2; J = 1.0, delta = 0.0)
     psi = product_state([:up, :down])
     t = 0.3
-    info = cbe_bug_step!(psi, mpo, -im * t; tol_basis = 1e-10, tol_trunc = 1e-14,
-                         tol_expv = 1e-13, maxdim = 4)
+    info = cbe_bug_step!(
+        psi,
+        mpo,
+        -im * t;
+        tol_basis = 1e-10,
+        tol_trunc = 1e-14,
+        tol_expv = 1e-13,
+        maxdim = 4,
+    )
     @test info.record.policy === :dd_qr_streamed
     a = abs(overlap(product_state([:up, :down]), psi)) / norm(psi)
     b = abs(overlap(product_state([:down, :up]), psi)) / norm(psi)

@@ -25,8 +25,7 @@ end
 `H_eff` at site `j`. `lenv` must sit on link `j` and `renv` on link `j+1` -- the same
 convention the channel-path method of this function uses.
 """
-one_site_h(mpo::MPO, j::Int, lenv::MPOLink, renv::MPOLink) =
-    MPOOneSiteH(lenv.E, mpo[j], renv.E)
+one_site_h(mpo::MPO, j::Int, lenv::MPOLink, renv::MPOLink) = MPOOneSiteH(lenv.E, mpo[j], renv.E)
 
 one_site_h(mpo::MPO, j::Int, lenv::MPOLeftEnvStack, renv::MPORightEnvStack) =
     one_site_h(mpo, j, left_channels(lenv, j), right_channels(renv, j + 1))
@@ -87,8 +86,7 @@ link_r)` -- an MPS tensor's layout in each case -- so this is one more step of E
 with the frame in place of a state tensor, and needs no separate code.
 """
 zero_site_h(mpo::MPO, i::Int, lenv::MPOLink, renv::MPOLink, U_ex, V_ex) =
-    MPOZeroSiteH(_mpo_left_step(lenv.E, U_ex, mpo[i]),
-                 _mpo_right_step(renv.E, V_ex, mpo[i + 1]))
+    MPOZeroSiteH(_mpo_left_step(lenv.E, U_ex, mpo[i]), _mpo_right_step(renv.E, V_ex, mpo[i+1]))
 
 """
     apply_zero_site(H0::MPOZeroSiteH, S) -> TLArray
@@ -147,9 +145,9 @@ formed, and the intermediate is `bond_ex x bond_old`.
 function _absorb_left!(psi::SymMPS, i::Int, U_ex)
     tag = psi[i].inds[3].itags
     M = contract(U_ex', (1, 2), psi[i], (1, 2))        # (bond_ex, bond_old)
-    B = contract(M, (2,), psi[i + 1], (1,))            # (bond_ex, site_r, link_r)
-    psi[i]     = to_concrete(setitag(U_ex, 3, tag))
-    psi[i + 1] = to_concrete(setitag(B, 1, tag))
+    B = contract(M, (2,), psi[i+1], (1,))            # (bond_ex, site_r, link_r)
+    psi[i] = to_concrete(setitag(U_ex, 3, tag))
+    psi[i+1] = to_concrete(setitag(B, 1, tag))
     psi.center = i + 1
     return psi
 end
@@ -162,10 +160,10 @@ leaving the centre at `i`.
 """
 function _absorb_right!(psi::SymMPS, i::Int, V_ex)
     tag = psi[i].inds[3].itags
-    M = contract(psi[i + 1], (2, 3), V_ex', (2, 3))    # (bond_old, bond_ex)
+    M = contract(psi[i+1], (2, 3), V_ex', (2, 3))    # (bond_old, bond_ex)
     A = contract(psi[i], (3,), M, (1,))                # (link_l, site_l, bond_ex)
-    psi[i]     = to_concrete(setitag(A, 3, tag))
-    psi[i + 1] = to_concrete(setitag(V_ex, 1, tag))
+    psi[i] = to_concrete(setitag(A, 3, tag))
+    psi[i+1] = to_concrete(setitag(V_ex, 1, tag))
     psi.center = i
     return psi
 end
@@ -193,15 +191,23 @@ isometry: the K-sweep (psi canonical at 1) carries it in `left`, the L-sweep (ps
 in `right`.
 """
 function _frame_from(left, right)
-    res_l = svd(left,  (1, 2), "bU,L", "bU,R"; cutoff = 0.0)
-    res_r = svd(right, (1,),   "bV,L", "bV,R"; cutoff = 0.0)
+    res_l = svd(left, (1, 2), "bU,L", "bU,R"; cutoff = 0.0)
+    res_r = svd(right, (1,), "bV,L", "bV,R"; cutoff = 0.0)
     U0 = to_concrete(res_l.U)
     V0 = to_concrete(res_r.Vd)
     S0 = to_concrete(to_concrete(res_l.S * res_l.Vd) * to_concrete(res_r.U * res_r.S))
-    return BondFrame(U0, S0, V0,
-                     left.inds[1], left.inds[2], left.inds[3],
-                     right.inds[2], right.inds[3],
-                     leg_dim(U0, 3), copy(left.spaces[3]))
+    return BondFrame(
+        U0,
+        S0,
+        V0,
+        left.inds[1],
+        left.inds[2],
+        left.inds[3],
+        right.inds[2],
+        right.inds[3],
+        leg_dim(U0, 3),
+        copy(left.spaces[3]),
+    )
 end
 
 # ── the 0-site effective Hamiltonian ─────────────────────────────────────────
@@ -234,29 +240,27 @@ centre bond. `U_ex` carries `(link_l, site_l, bond)` and `V_ex` carries
 `(bond, site_r, link_r)` -- an MPS tensor's layout in each case -- so the same one-site
 recursions the environment stacks are built from apply unchanged.
 """
-function zero_site_h(h::XXZChain, i::Int, lch::ChannelSet, rch::ChannelSet,
-                     U_ex, V_ex)
+function zero_site_h(h::XXZChain, i::Int, lch::ChannelSet, rch::ChannelSet, U_ex, V_ex)
     terms = h.terms
     nt = length(terms)
 
     # Left: everything completed to the left of the centre bond, plus each half-term that
     # is still open there. A channel open at link i is closed by `term.right` at site i.
     dl = lch.done === ZERO ? ZERO : _left_step(lch.done, U_ex, nothing, i)
-    for t in 1:nt
+    for t = 1:nt
         lch.open[t] === ZERO && continue
         c = _left_step(lch.open[t], U_ex, terms[t].right, i)
         dl = _accum(dl, to_concrete(terms[t].coeff * c))
     end
-    ol = Any[_left_step(lch.id, U_ex, terms[t].left, i) for t in 1:nt]
+    ol = Any[_left_step(lch.id, U_ex, terms[t].left, i) for t = 1:nt]
 
-    dr = rch.done === ZERO ? ZERO :
-         _right_step(rch.done, V_ex, nothing, i + 1)
-    for t in 1:nt
+    dr = rch.done === ZERO ? ZERO : _right_step(rch.done, V_ex, nothing, i + 1)
+    for t = 1:nt
         rch.open[t] === ZERO && continue
         c = _right_step(rch.open[t], V_ex, terms[t].left, i + 1)
         dr = _accum(dr, to_concrete(terms[t].coeff * c))
     end
-    or = Any[_right_step(rch.id, V_ex, terms[t].right, i + 1) for t in 1:nt]
+    or = Any[_right_step(rch.id, V_ex, terms[t].right, i + 1) for t = 1:nt]
 
     return ZeroSiteH(dl, dr, ol, or, [t.coeff for t in terms])
 end
@@ -298,8 +302,11 @@ function apply_zero_site(H0::ZeroSiteH, S)
         end                                             # (bra_l, bra_r)
         add!(to_concrete(H0.coeffs[t] * _unprime(_unprime(to_concrete(out), 1), 2)))
     end
-    acc === nothing && throw(ArgumentError(
-        "apply_zero_site: the effective Hamiltonian has no contributions at this bond"))
+    acc === nothing && throw(
+        ArgumentError(
+            "apply_zero_site: the effective Hamiltonian has no contributions at this bond",
+        ),
+    )
     return acc
 end
 
@@ -310,7 +317,7 @@ _bug_root_link(L::Int) = max(1, min(L - 1, L ÷ 2))
 
 "Total stored elements of every tensor in the state -- block-sparse, so the honest size.
 (`tensor_elements` lives in baselines/tdvp2.jl; both callers resolve it at run time.)"
-_state_stored(psi::SymMPS) = sum(tensor_elements(psi[i]) for i in 1:length(psi); init = 0)
+_state_stored(psi::SymMPS) = sum(tensor_elements(psi[i]) for i = 1:length(psi); init = 0)
 
 # ── from src/RSVDCBEBondUpdate/baselines/tdvp2.jl ──
 
@@ -361,13 +368,12 @@ function apply_one_site(H1::OneSiteH, M)
     H1.done_r === ZERO || add!(_env_on_link(M, H1.done_r, 3))
     for (t, term) in enumerate(H1.terms)
         o = H1.open_l[t]
-        o === ZERO || add!(to_concrete(term.coeff *
-            _env_on_link(_apply_site_op(M, term.right, j), o, 1)))
+        o === ZERO ||
+            add!(to_concrete(term.coeff * _env_on_link(_apply_site_op(M, term.right, j), o, 1)))
         o = H1.open_r[t]
-        o === ZERO || add!(to_concrete(term.coeff *
-            _env_on_link(_apply_site_op(M, term.left, j), o, 3)))
+        o === ZERO ||
+            add!(to_concrete(term.coeff * _env_on_link(_apply_site_op(M, term.left, j), o, 3)))
     end
-    acc === nothing && throw(ArgumentError(
-        "apply_one_site: no contributions at site $j"))
+    acc === nothing && throw(ArgumentError("apply_one_site: no contributions at site $j"))
     return acc
 end

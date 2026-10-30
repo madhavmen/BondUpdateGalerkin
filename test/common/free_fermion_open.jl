@@ -45,23 +45,32 @@
 The generator `X` and source `G` of the covariance ODE `dC/dt = X C + C X' + G` for the
 boundary-driven XX chain. `mu = +1` pumps the site fully UP (gain only), `mu = -1` fully DOWN.
 """
-function xx_boundary_lyapunov(N::Int; J::Real = 1.0, B::Real = 0.0,
-                              eps_L::Real = 1.0, eps_R::Real = 1.0,
-                              mu_L::Real = 1.0, mu_R::Real = -1.0)
+function xx_boundary_lyapunov(
+    N::Int;
+    J::Real = 1.0,
+    B::Real = 0.0,
+    eps_L::Real = 1.0,
+    eps_R::Real = 1.0,
+    mu_L::Real = 1.0,
+    mu_R::Real = -1.0,
+)
     N >= 2 || throw(ArgumentError("need N >= 2, got $N"))
     (abs(mu_L) <= 1 && abs(mu_R) <= 1) ||
         throw(ArgumentError("mu must lie in [-1, 1]; got $mu_L, $mu_R"))
     h = zeros(Float64, N, N)
-    for k in 1:N
+    for k = 1:N
         h[k, k] = B
     end
-    for k in 1:(N - 1)
-        h[k, k + 1] = J
-        h[k + 1, k] = J
+    for k = 1:(N-1)
+        h[k, k+1] = J
+        h[k+1, k] = J
     end
-    g = zeros(Float64, N); l = zeros(Float64, N)
-    g[1] = eps_L * (1 + mu_L) / 2; l[1] = eps_L * (1 - mu_L) / 2
-    g[N] += eps_R * (1 + mu_R) / 2; l[N] += eps_R * (1 - mu_R) / 2
+    g = zeros(Float64, N)
+    l = zeros(Float64, N)
+    g[1] = eps_L * (1 + mu_L) / 2
+    l[1] = eps_L * (1 - mu_L) / 2
+    g[N] += eps_R * (1 + mu_R) / 2
+    l[N] += eps_R * (1 - mu_R) / 2
     X = im .* ComplexF64.(h) .- Diagonal(ComplexF64.(g .+ l)) ./ 2
     return Matrix(X), Matrix(Diagonal(ComplexF64.(g)))
 end
@@ -127,7 +136,7 @@ model exists to produce. It is also physically checkable: `mu_L = +1` pumps part
 left and `mu_R = -1` removes them at the right, so the current MUST be positive.
 """
 xx_boundary_current(C::AbstractMatrix; J::Real = 1.0) =
-    [-2 * J * imag(C[k, k + 1]) for k in 1:(size(C, 1) - 1)]
+    [-2 * J * imag(C[k, k+1]) for k = 1:(size(C, 1)-1)]
 
 """
     xx_boundary_current_check(N; kwargs...) -> Float64
@@ -158,15 +167,15 @@ function xx_open_generator(N::Int; gamma::Real = 0.0, kwargs...)
     X, G = xx_boundary_lyapunov(N; kwargs...)
     Id = Matrix{ComplexF64}(I, N, N)
     M = kron(Id, X) + kron(conj(X), Id)
-    for i in 1:N, j in 1:N
-        i == j || (M[(j - 1) * N + i, (j - 1) * N + i] -= gamma)
+    for i = 1:N, j = 1:N
+        i == j || (M[(j-1)*N+i, (j-1)*N+i] -= gamma)
     end
     return M, vec(G)
 end
 
 "The exact NESS covariance of [`xx_open_generator`](@ref): `M vec(C) + g = 0`."
 xx_open_ness(N::Int; kwargs...) = (Mg = xx_open_generator(N; kwargs...);
-                                   reshape(-(Mg[1] \ Mg[2]), N, N))
+reshape(-(Mg[1] \ Mg[2]), N, N))
 
 """
     xx_open_covariance(N, ts; C0 = nothing, kwargs...) -> Vector{Matrix{ComplexF64}}
@@ -179,7 +188,7 @@ function xx_open_covariance(N::Int, ts::AbstractVector{<:Real}; C0 = nothing, kw
     M, g = xx_open_generator(N; kwargs...)
     css = -(M \ g)
     c = vec(C0 === nothing ? Matrix{ComplexF64}(I, N, N) ./ 2 : ComplexF64.(C0)) .- css
-    props = Dict{Float64, Matrix{ComplexF64}}()
+    props = Dict{Float64,Matrix{ComplexF64}}()
     out = Matrix{ComplexF64}[]
     tprev = 0.0
     for t in ts
@@ -221,8 +230,12 @@ turnover tests far more than a normalisation.
 throws rather than silently returning the symmetric answer -- the failure mode would be a plausible
 number that is wrong by an O(1) factor.
 """
-function xx_boundary_current_published(; J::Real = 1.0, eps::Real = 1.0,
-                                       mu_L::Real = 1.0, mu_R::Real = -1.0)
+function xx_boundary_current_published(;
+    J::Real = 1.0,
+    eps::Real = 1.0,
+    mu_L::Real = 1.0,
+    mu_R::Real = -1.0,
+)
     return (mu_L - mu_R) * eps * J^2 / (4 * J^2 + eps^2)
 end
 
@@ -249,11 +262,13 @@ factors of two are the Majorana convention and are pinned against exact diagonal
 """
 function tfim_majorana_generator(L::Int; J::Real = 1.0, h::Real = 1.0)
     A = zeros(Float64, 2L, 2L)
-    for j in 1:L
-        A[2j - 1, 2j] = -2h; A[2j, 2j - 1] = +2h
+    for j = 1:L
+        A[2j-1, 2j] = -2h
+        A[2j, 2j-1] = +2h
     end
-    for j in 1:(L - 1)
-        A[2j, 2j + 1] = -2J; A[2j + 1, 2j] = +2J
+    for j = 1:(L-1)
+        A[2j, 2j+1] = -2J
+        A[2j+1, 2j] = +2J
     end
     return A
 end
@@ -277,7 +292,8 @@ function tfim_covariance(L::Int, t::Real, dirs::Vector{Symbol}; J::Real = 1.0, h
     G = zeros(Float64, 2L, 2L)
     for (j, d) in enumerate(dirs)
         s = d === :plus ? 1.0 : -1.0
-        G[2j - 1, 2j] = s; G[2j, 2j - 1] = -s
+        G[2j-1, 2j] = s
+        G[2j, 2j-1] = -s
     end
     R = exp(tfim_majorana_generator(L; J = J, h = h) * t)
     return R * G * transpose(R)
@@ -291,5 +307,5 @@ end
 """
 function tfim_x_profile(L::Int, t::Real, dirs::Vector{Symbol}; J::Real = 1.0, h::Real = 1.0)
     Gt = tfim_covariance(L, t, dirs; J = J, h = h)
-    return [Gt[2j - 1, 2j] for j in 1:L]
+    return [Gt[2j-1, 2j] for j = 1:L]
 end

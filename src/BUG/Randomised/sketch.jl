@@ -10,18 +10,23 @@ The CBE probe for one side of a bond, in the frame's layout (`:left` like `U0`, 
 `nothing` = an unprojected Gaussian). `boost` (sector => extra columns) is Test B's targeted
 widening. A saturated frame still returns its isometry half: it probes the opposite side.
 """
-function sector_graded_sketch(frame, side::Symbol, npre::Int;
-                              comp_ratio::Union{Float64, Nothing} = 0.5,
-                              rng::AbstractRNG = MersenneTwister(0x5EED),
-                              tag::AbstractString = "cbeG",
-                              boost = nothing)
+function sector_graded_sketch(
+    frame,
+    side::Symbol,
+    npre::Int;
+    comp_ratio::Union{Float64,Nothing} = 0.5,
+    rng::AbstractRNG = MersenneTwister(0x5EED),
+    tag::AbstractString = "cbeG",
+    boost = nothing,
+)
     side in (:left, :right) || throw(ArgumentError("side must be :left or :right"))
     # The ENDPOINTS ARE ALLOWED, and they are the interesting A/B: `1.0` is
     # complement-only (the pure discarded space), `0.0` isometry-only. An earlier version
     # demanded strict inequality and also floored both halves at one column, so
     # "complement only" silently still drew one kept-space column and could not be measured.
-    comp_ratio === nothing || 0.0 <= comp_ratio <= 1.0 || throw(ArgumentError(
-        "comp_ratio must be in [0, 1] or nothing, got $comp_ratio"))
+    comp_ratio === nothing ||
+        0.0 <= comp_ratio <= 1.0 ||
+        throw(ArgumentError("comp_ratio must be in [0, 1] or nothing, got $comp_ratio"))
     npre >= 1 || throw(ArgumentError("npre must be at least 1, got $npre"))
 
     fl = side === :left ? 3 : 1                       # the frame's bond leg
@@ -33,7 +38,7 @@ function sector_graded_sketch(frame, side::Symbol, npre::Int;
 
     F = fusion_basis(frame, a, b; tag = tag)
     dfull, dT = _frame_sector_dims(frame, side, F, "sector_graded_sketch")
-    dC    = Dict(q => max(dfull[q] - dT[q], 0) for q in keys(dfull))
+    dC = Dict(q => max(dfull[q] - dT[q], 0) for q in keys(dfull))
 
     # ── comp_ratio = nothing: a plain sector-graded Gaussian, no projector in the probe ──
     # The preselection still applies the exact `P_perp`, so orthogonality is unaffected.
@@ -131,8 +136,8 @@ holdout columns per sector.
 """
 function _sample_residual(Q, project, sketch, draw, nh::Int, wleg::Int, side::Symbol)
     side in (:left, :right) || throw(ArgumentError("side must be :left or :right"))
-    per = Dict{Any, Float64}()
-    cols = Dict{Any, Int}()
+    per = Dict{Any,Float64}()
+    cols = Dict{Any,Int}()
     nh >= 1 || return (0.0, per, cols)
     Om = draw(nh)
     Om === nothing && return (0.0, per, cols)
@@ -155,11 +160,14 @@ function _sample_residual(Q, project, sketch, draw, nh::Int, wleg::Int, side::Sy
     rleg = side === :left ? 3 : 1
     for (q, d) in R.spaces[rleg]
         n_q = get(cols, q, 0)
-        n_q > 0 || error("Test B: residual sector $q has no holdout column -- the sketch " *
-                         "did not preserve the probe's width labels, so the per-sector " *
-                         "normalisation would be wrong")
-        Rq = length(R.spaces[rleg]) == 1 ? R :
-             to_concrete(getsub(R, rleg, s -> s == q ? (1:d) : nothing))
+        n_q > 0 || error(
+            "Test B: residual sector $q has no holdout column -- the sketch " *
+            "did not preserve the probe's width labels, so the per-sector " *
+            "normalisation would be wrong",
+        )
+        Rq =
+            length(R.spaces[rleg]) == 1 ? R :
+            to_concrete(getsub(R, rleg, s -> s == q ? (1:d) : nothing))
         per[q] = norm(Rq)^2 / n_q
     end
     return (sqrt(sum(values(per); init = 0.0)), per, cols)
@@ -173,7 +181,7 @@ exceeds a fair `1/S` split of the allowance. Returns the number of sectors targe
 """
 function _target_sectors!(boost::Dict, per::Dict, Om, wleg::Int, alloc::BasisAllocation)
     isempty(per) && return 0
-    have = Om === nothing ? Dict{Any, Int}() : Dict{Any, Int}(q => d for (q, d) in Om.spaces[wleg])
+    have = Om === nothing ? Dict{Any,Int}() : Dict{Any,Int}(q => d for (q, d) in Om.spaces[wleg])
     share = alloc.sample^2 / length(per)
     n = 0
     for (q, s) in per
@@ -193,13 +201,18 @@ weights. Returns the left singular vectors of the smallest rank the tail test al
 coefficients that rotate the candidates onto their ranked directions), or `nothing` if no
 direction is needed. Weight cut by `kmax` counts toward the tail, as in the joint branch.
 """
-function _one_sided_tail(M, alloc::BasisAllocation, kmax::Int, stol::Float64,
-                         ledger::Union{Nothing, AdaptiveLedger})
+function _one_sided_tail(
+    M,
+    alloc::BasisAllocation,
+    kmax::Int,
+    stol::Float64,
+    ledger::Union{Nothing,AdaptiveLedger},
+)
     (length(M.qlabels) == 0 || norm(M) == 0) && return nothing
     res = svd(M, (1,); Nkeep = kmax, cutoff = stol, get_lists = true)
     nk = length(res.kept_list)
-    k, tail = _tail_rank(res.kept_list, alloc.scale, alloc.tail, nk;
-                         base = _sq_weight(res.trunc_list))
+    k, tail =
+        _tail_rank(res.kept_list, alloc.scale, alloc.tail, nk; base = _sq_weight(res.trunc_list))
     if ledger !== nothing
         ledger.max_tail = max(ledger.max_tail, tail)
         tail <= alloc.tail || _unmet!(ledger, :tail)
@@ -221,8 +234,16 @@ THE UNCERTAINTY BOUND. For a complex Gaussian column `||A w||^2 = sum_i s_i^2 |z
 half that of its square: `0.5 * sqrt(sum_q per_q^2 / n_q) / sum_q per_q`. An upper bound, tight
 for a rank-1 miss -- the case that matters, a single missed direction.
 """
-function _record_sample!(ledger::AdaptiveLedger, side::Symbol, ind::Float64, per::Dict,
-                         hcols::Dict, sketch, wleg::Int, alloc::BasisAllocation)
+function _record_sample!(
+    ledger::AdaptiveLedger,
+    side::Symbol,
+    ind::Float64,
+    per::Dict,
+    hcols::Dict,
+    sketch,
+    wleg::Int,
+    alloc::BasisAllocation,
+)
     ledger.max_sample = max(ledger.max_sample, ind)
     if side === :left
         ledger.max_sample_l = max(ledger.max_sample_l, ind)
@@ -231,11 +252,17 @@ function _record_sample!(ledger::AdaptiveLedger, side::Symbol, ind::Float64, per
     end
     tot = sum(values(per); init = 0.0)
     relunc = tot > 0 ? 0.5 * sqrt(sum(s^2 / hcols[q] for (q, s) in per; init = 0.0)) / tot : 0.0
-    push!(ledger.sample_log,
-          (side = side, est = ind, relunc = relunc,
-           per = Dict{Any, Float64}(q => alloc.scale * sqrt(s) for (q, s) in per),
-           holdout = copy(hcols),
-           sketch = sketch === nothing ? Dict{Any, Int}() :
-                    Dict{Any, Int}(q => d for (q, d) in sketch.spaces[wleg])))
+    push!(
+        ledger.sample_log,
+        (
+            side = side,
+            est = ind,
+            relunc = relunc,
+            per = Dict{Any,Float64}(q => alloc.scale * sqrt(s) for (q, s) in per),
+            holdout = copy(hcols),
+            sketch = sketch === nothing ? Dict{Any,Int}() :
+                     Dict{Any,Int}(q => d for (q, d) in sketch.spaces[wleg]),
+        ),
+    )
     return ledger
 end

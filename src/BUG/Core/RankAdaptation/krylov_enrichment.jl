@@ -49,20 +49,20 @@ decayed state, not to the start norm.
 function _kry_weight(Hm::Matrix{ComplexF64}, k::Int, tau::ComplexF64; state_seed::Bool = true)
     A = zeros(ComplexF64, k + 1, k + 1)
     A[1:k, 1:k] .= tau .* @view Hm[1:k, 1:k]
-    A[k + 1, k] = tau * Hm[k + 1, k]
+    A[k+1, k] = tau * Hm[k+1, k]
     Ak = @view A[1:k, 1:k]
-    norm(Ak + Ak') <= _KRY_SKEW_TOL * norm(Ak) && return abs(exp(A)[k + 1, 1])
+    norm(Ak + Ak') <= _KRY_SKEW_TOL * norm(Ak) && return abs(exp(A)[k+1, 1])
     # Non-unitary (imaginary time, Lindblad, no-jump loss): weigh relative to the state's own
     # growth `g = ||exp(tau*H_k) e_1||`, which is `exp(dbeta*|E|)` unshifted and overflows at large dbeta. The
     # shift `s` cancels in that ratio exactly.
     s = maximum(real, eigvals(A[1:k, 1:k]))
     E = exp(A - s * I)
-    state_seed && return abs(E[k + 1, 1]) / max(norm(@view E[1:k, 1]), floatmin(Float64))
+    state_seed && return abs(E[k+1, 1]) / max(norm(@view E[1:k, 1]), floatmin(Float64))
     # A closure frontier is not the state: it decays under the shifted generator, so dividing by its
     # own growth inflated its directions by `e^{dbeta h11}`, enough to block a converged step. Its
     # weight is the absolute one, `|E[k+1,1]| e^s`, in the shifted frame, which never under-weights
     # in imaginary time (the shift is the energy there).
-    w = abs(E[k + 1, 1])
+    w = abs(E[k+1, 1])
     return w == 0 ? 0.0 : exp(log(w) + s)
 end
 
@@ -78,19 +78,32 @@ sum -- the same guard `cbe_expand` applies to its own appended block.
 `room` is what the work ceiling still allows on the frame leg (plan §5): at most that many are
 appended, and `fits = false` reports that the allowance needed more.
 """
-function _extend_frame(Q, R, v, side::Symbol, weight::Float64, allowance::Float64;
-                       room::Int = typemax(Int))
+function _extend_frame(
+    Q,
+    R,
+    v,
+    side::Symbol,
+    weight::Float64,
+    allowance::Float64;
+    room::Int = typemax(Int),
+)
     legs = side === :left ? (1, 2) : (2, 3)
     cut = _rank_cut(0.0, v, norm(R))
     res = svd(R, legs, _TAG_K, _TAG_KR; cutoff = cut, get_lists = true)
     nk = length(res.kept_list)
-    k, tail = _tail_rank(res.kept_list, weight, allowance, min(nk, room);
-                         base = _sq_weight(res.trunc_list))
+    k, tail = _tail_rank(
+        res.kept_list,
+        weight,
+        allowance,
+        min(nk, room);
+        base = _sq_weight(res.trunc_list),
+    )
     fits = tail <= allowance
     k == 0 && return (Q, 0, fits)
     k < nk && (res = svd(R, legs, _TAG_K, _TAG_KR; Nkeep = k, cutoff = cut))
-    U = side === :left ? _reortho_left(Q, to_concrete(res.U)) :
-                         _reortho_right(Q, to_concrete(permutedims(res.U, (3, 1, 2))))
+    U =
+        side === :left ? _reortho_left(Q, to_concrete(res.U)) :
+        _reortho_right(Q, to_concrete(permutedims(res.U, (3, 1, 2))))
     # roundoff in a saturated sector must not become a column (`_cap_to_local_room`)
     U = _cap_to_local_room(Q, U, side)
     U === nothing && return (Q, 0, fits)
@@ -117,10 +130,20 @@ extended ([`_krylov_basis`](@ref)).
 every new local direction appended (numerical floor only), no weight stop; `met` then reports
 whether the weight had fallen to the allowance by depth `m`.
 """
-function _krylov_enrich(v0, applyH, Q0, side::Symbol, tau::ComplexF64,
-                        alloc::BasisAllocation; workcap::Int = 0,
-                        maxdepth::Int = _KRY_MAXDEPTH, amp::Float64 = 1.0,
-                        state_seed::Bool = true, fixed_depth::Int = 0, recycled = ())
+function _krylov_enrich(
+    v0,
+    applyH,
+    Q0,
+    side::Symbol,
+    tau::ComplexF64,
+    alloc::BasisAllocation;
+    workcap::Int = 0,
+    maxdepth::Int = _KRY_MAXDEPTH,
+    amp::Float64 = 1.0,
+    state_seed::Bool = true,
+    fixed_depth::Int = 0,
+    recycled = (),
+)
     side in (:left, :right) || throw(ArgumentError("side must be :left or :right"))
     perp = side === :left ? perp_component : perp_component_right
     fl = side === :left ? 3 : 1
@@ -144,13 +167,36 @@ function _krylov_enrich(v0, applyH, Q0, side::Symbol, tau::ComplexF64,
         # an allowance of 0 never "fits" (the floor's tail): only the adaptive stop caps here
         return fits || fixed
     end
-    kb = _krylov_basis(v0, applyH, tau, alloc.krylov, score; recycled = recycled,
-                       maxdepth = maxdepth, amp = amp, state_seed = state_seed, fixed = fixed)
-    return (Q, (eta_c = eta_c, eta_d = eta_d, added = added, n_h1 = kb.n_h1,
-                d_after_c = eta_c <= alloc.krylov && added_d > 0,
-                capped = kb.capped, met = kb.closed && !kb.capped, basis = kb.basis,
-                weights = kb.weights, n_recycled = kb.n_recycled, rec_closed = kb.rec_closed,
-                rec_overlap = kb.rec_overlap, rec_defect = kb.rec_defect))
+    kb = _krylov_basis(
+        v0,
+        applyH,
+        tau,
+        alloc.krylov,
+        score;
+        recycled = recycled,
+        maxdepth = maxdepth,
+        amp = amp,
+        state_seed = state_seed,
+        fixed = fixed,
+    )
+    return (
+        Q,
+        (
+            eta_c = eta_c,
+            eta_d = eta_d,
+            added = added,
+            n_h1 = kb.n_h1,
+            d_after_c = eta_c <= alloc.krylov && added_d > 0,
+            capped = kb.capped,
+            met = kb.closed && !kb.capped,
+            basis = kb.basis,
+            weights = kb.weights,
+            n_recycled = kb.n_recycled,
+            rec_closed = kb.rec_closed,
+            rec_overlap = kb.rec_overlap,
+            rec_defect = kb.rec_defect,
+        ),
+    )
 end
 
 # The recurrence runs on the local tensors and, for the matrix tests, on plain vectors.
@@ -177,27 +223,70 @@ is split as `v0 = alpha p + v_c` and only the complement `v_c` is extended
 ([`_rk_complement`](@ref)); when the previous block no longer holds `p`'s evolution it is Arnoldi
 from `v0` after all.
 """
-function _krylov_basis(v0, applyH, tau::ComplexF64, allowance::Float64, score;
-                       recycled = (), maxdepth::Int = _KRY_MAXDEPTH, amp::Float64 = 1.0,
-                       state_seed::Bool = true, fixed::Bool = false)
+function _krylov_basis(
+    v0,
+    applyH,
+    tau::ComplexF64,
+    allowance::Float64,
+    score;
+    recycled = (),
+    maxdepth::Int = _KRY_MAXDEPTH,
+    amp::Float64 = 1.0,
+    state_seed::Bool = true,
+    fixed::Bool = false,
+)
     b0 = norm(v0)
-    b0 > 0 || return (basis = Any[], weights = Float64[], n_h1 = 0, closed = true,
-                      capped = false, n_recycled = 0, rec_closed = false, rec_overlap = 0.0,
-                      rec_defect = 0.0)
+    b0 > 0 || return (
+        basis = Any[],
+        weights = Float64[],
+        n_h1 = 0,
+        closed = true,
+        capped = false,
+        n_recycled = 0,
+        rec_closed = false,
+        rec_overlap = 0.0,
+        rec_defect = 0.0,
+    )
     # `tau = 0` asks the unit-time closure question, as `basis_allocation` does.
     teff = iszero(tau) ? one(tau) : tau
     u0 = _kconc((1.0 / b0) * v0)
     rc = (n_h1 = 0, n_recycled = 0, rec_overlap = 0.0, rec_defect = 0.0)
     if !isempty(recycled)
-        rc = _rk_complement(u0, recycled, applyH, teff, allowance, score; maxdepth = maxdepth,
-                            amp = amp, state_seed = state_seed)
+        rc = _rk_complement(
+            u0,
+            recycled,
+            applyH,
+            teff,
+            allowance,
+            score;
+            maxdepth = maxdepth,
+            amp = amp,
+            state_seed = state_seed,
+        )
         haskey(rc, :basis) && return rc
     end
-    ch = _arnoldi_chain(u0, applyH, teff, allowance, score; maxdepth = maxdepth, amp = amp,
-                        state_seed = state_seed, fixed = fixed)
-    return (basis = ch.basis, weights = ch.weights, n_h1 = rc.n_h1 + ch.n_h1, closed = ch.closed,
-            capped = ch.capped, n_recycled = rc.n_recycled, rec_closed = false,
-            rec_overlap = rc.rec_overlap, rec_defect = rc.rec_defect)
+    ch = _arnoldi_chain(
+        u0,
+        applyH,
+        teff,
+        allowance,
+        score;
+        maxdepth = maxdepth,
+        amp = amp,
+        state_seed = state_seed,
+        fixed = fixed,
+    )
+    return (
+        basis = ch.basis,
+        weights = ch.weights,
+        n_h1 = rc.n_h1 + ch.n_h1,
+        closed = ch.closed,
+        capped = ch.capped,
+        n_recycled = rc.n_recycled,
+        rec_closed = false,
+        rec_overlap = rc.rec_overlap,
+        rec_defect = rc.rec_defect,
+    )
 end
 
 """
@@ -208,13 +297,21 @@ Arnoldi from the unit seed `u`: each new vector weighed by `amp` times Saad's es
 (`_kry_weight`) and offered to `score`, closed once that weight is within `allowance`. `fixed`
 runs all `maxdepth` steps (the `fixed_depth` ablation of [`_krylov_enrich`](@ref)).
 """
-function _arnoldi_chain(u, applyH, tau::ComplexF64, allowance::Float64, score;
-                        maxdepth::Int = _KRY_MAXDEPTH, amp::Float64 = 1.0,
-                        state_seed::Bool = true, fixed::Bool = false)
+function _arnoldi_chain(
+    u,
+    applyH,
+    tau::ComplexF64,
+    allowance::Float64,
+    score;
+    maxdepth::Int = _KRY_MAXDEPTH,
+    amp::Float64 = 1.0,
+    state_seed::Bool = true,
+    fixed::Bool = false,
+)
     nh, capped, closed = 0, false, false
     vs, ws = Any[u], Float64[amp]
     Hm = zeros(ComplexF64, maxdepth + 1, maxdepth + 1)
-    for k in 1:maxdepth
+    for k = 1:maxdepth
         w = applyH(vs[end])
         nh += 1
         # ⛔ CGS2 against EVERY previous vector, the correction accumulated lazily and subtracted
@@ -222,7 +319,7 @@ function _arnoldi_chain(u, applyH, tau::ComplexF64, allowance::Float64, score;
         # allocated 28.6 GiB per step at L=20, chi=32, d=4). Classical Gram-Schmidt repeated
         # twice is as stable as modified ("twice is enough"); the coefficients accumulate
         # across both passes, so column `k` of `Hm` is the true projection of `H v_k`.
-        for _pass in 1:2
+        for _pass = 1:2
             corr = nothing
             for (t, x) in pairs(vs)
                 ov = _kinner(x, w)
@@ -233,7 +330,7 @@ function _arnoldi_chain(u, applyH, tau::ComplexF64, allowance::Float64, score;
         end
         b = norm(w)
         b <= _KRY_BREAKDOWN && (closed = true; break)    # invariant: nothing further exists
-        Hm[k + 1, k] = b
+        Hm[k+1, k] = b
         v = _kconc((1.0 / b) * w)
         push!(vs, v)
         weight = amp * _kry_weight(Hm, k, tau; state_seed = state_seed)
@@ -269,9 +366,17 @@ residual, continued one direction per step, ran to the depth bound in the matrix
 the test is no option either: with the generator moved by 1e-6 relative between the solves, the
 complement's chain alone left errors 10x the allowance (1e-3: 1e4x).
 """
-function _rk_complement(u0, recycled, applyH, tau::ComplexF64, allowance::Float64, score;
-                        maxdepth::Int = _KRY_MAXDEPTH, amp::Float64 = 1.0,
-                        state_seed::Bool = true)
+function _rk_complement(
+    u0,
+    recycled,
+    applyH,
+    tau::ComplexF64,
+    allowance::Float64,
+    score;
+    maxdepth::Int = _KRY_MAXDEPTH,
+    amp::Float64 = 1.0,
+    state_seed::Bool = true,
+)
     none = (n_h1 = 0, n_recycled = 0, rec_overlap = 0.0, rec_defect = 0.0)
     np = norm(recycled[1])
     np > 0 || return none
@@ -308,16 +413,33 @@ function _rk_complement(u0, recycled, applyH, tau::ComplexF64, allowance::Float6
             push!(basis, uc)
             push!(weights, amp * nc)
         else
-            ch = _arnoldi_chain(uc, applyH, tau, rest, score; maxdepth = maxdepth,
-                                amp = amp * nc, state_seed = state_seed)
+            ch = _arnoldi_chain(
+                uc,
+                applyH,
+                tau,
+                rest,
+                score;
+                maxdepth = maxdepth,
+                amp = amp * nc,
+                state_seed = state_seed,
+            )
             nh += ch.n_h1
             capped, closed = ch.capped, ch.closed
             append!(basis, ch.basis)
             append!(weights, ch.weights)
         end
     end
-    return (basis = basis, weights = weights, n_h1 = nh, closed = closed, capped = capped,
-            n_recycled = length(B), rec_closed = true, rec_overlap = ampr, rec_defect = dr)
+    return (
+        basis = basis,
+        weights = weights,
+        n_h1 = nh,
+        closed = closed,
+        capped = capped,
+        n_recycled = length(B),
+        rec_closed = true,
+        rec_overlap = ampr,
+        rec_defect = dr,
+    )
 end
 
 "`sum_k c[k] vs[k]`."
@@ -335,9 +457,9 @@ function _exp_phi1_e1(A::AbstractMatrix)
     n = size(A, 1)
     Z = zeros(ComplexF64, n + 1, n + 1)
     Z[1:n, 1:n] .= A
-    Z[1, n + 1] = 1
+    Z[1, n+1] = 1
     E = exp(Z)
-    return E[1:n, 1], E[1:n, n + 1]
+    return E[1:n, 1], E[1:n, n+1]
 end
 
 """
@@ -356,13 +478,13 @@ function _merge_frame(Q, U, side::Symbol)
 end
 
 "Fold one `_krylov_enrich` verdict into the step ledger (plan §8 Krylov diagnostics)."
-function _record_krylov!(ledger::Union{Nothing, AdaptiveLedger}, st, alloc::BasisAllocation)
+function _record_krylov!(ledger::Union{Nothing,AdaptiveLedger}, st, alloc::BasisAllocation)
     ledger === nothing && return nothing
     ledger.max_krylov_c = max(ledger.max_krylov_c, st.eta_c)
     ledger.max_krylov_d = max(ledger.max_krylov_d, st.eta_d)
-    ledger.max_krylov   = max(ledger.max_krylov, st.eta_c, st.eta_d)
+    ledger.max_krylov = max(ledger.max_krylov, st.eta_c, st.eta_d)
     ledger.n_krylov += st.added
-    ledger.n_h1     += st.n_h1
+    ledger.n_h1 += st.n_h1
     st.eta_c <= alloc.krylov && (ledger.n_c_pass += 1)
     st.d_after_c && (ledger.n_d_after_c += 1)
     st.capped && (ledger.workcap_reached = true)
@@ -470,31 +592,31 @@ function _side_cache!(fr::KLFrames, Fm::SymMPS, mpo, side::Symbol)
         chain = Vector{Any}(undef, L - 1)
         ch = boundary_channels(mpo)
         if side === :left
-            for i in 1:c
+            for i = 1:c
                 chain[i] = ch
                 i < c && (ch = push_left_channels(ch, mpo, fr.W[i], i))
             end
         else
-            for j in (L - 1):-1:c
+            for j = (L-1):-1:c
                 chain[j] = ch
                 j > c && (ch = push_right_channels(ch, mpo, fr.Z[j], j + 1))
             end
         end
     end
-    E = Any[missing for _ in 1:(L + 1)]
+    E = Any[missing for _ = 1:(L+1)]
     env = nothing
     if side === :left
-        E[L + 1] = nothing
-        for k in L:-1:(c + 1)
+        E[L+1] = nothing
+        for k = L:-1:(c+1)
             env = _mpo_right_step(env, Fm[k], mpo[k])
             E[k] = env
         end
         fr.lcache = (gen = fr.gen, chain = chain, stack = E)
     else
         E[1] = nothing
-        for i in 1:(c - 1)
+        for i = 1:(c-1)
             env = _mpo_left_step(env, Fm[i], mpo[i])
-            E[i + 1] = env
+            E[i+1] = env
         end
         fr.rcache = (gen = fr.gen, chain = chain, stack = E)
     end
@@ -526,32 +648,32 @@ function frames_from_state(psi::SymMPS, mpo, c::Int)
     p = copy(psi)
     canonical!(p, c)
     W = Vector{Any}(undef, c)
-    for i in 1:(c - 1)
+    for i = 1:(c-1)
         W[i] = p[i]
     end
     W[c] = to_concrete(svd(p[c], (1, 2); cutoff = 0.0).U)
     q = copy(psi)
     canonical!(q, c + 1)
     Z = Vector{Any}(undef, L - 1)
-    Z[c] = to_concrete(svd(q[c + 1], (1,); cutoff = 0.0).Vd)
-    for j in (c + 1):(L - 1)
-        Z[j] = q[j + 1]
+    Z[c] = to_concrete(svd(q[c+1], (1,); cutoff = 0.0).Vd)
+    for j = (c+1):(L-1)
+        Z[j] = q[j+1]
     end
     # Frame tags on both ends of every frame link, as the half-sweeps write them.
-    for i in 1:c
+    for i = 1:c
         W[i] = to_concrete(setitag(W[i], 3, _tagW(i)))
-        i < c && (W[i + 1] = to_concrete(setitag(W[i + 1], 1, _tagW(i))))
+        i < c && (W[i+1] = to_concrete(setitag(W[i+1], 1, _tagW(i))))
     end
-    for j in c:(L - 1)
+    for j = c:(L-1)
         Z[j] = to_concrete(setitag(Z[j], 1, _tagZ(j)))
-        j > c && (Z[j - 1] = to_concrete(setitag(Z[j - 1], 3, _tagZ(j))))
+        j > c && (Z[j-1] = to_concrete(setitag(Z[j-1], 3, _tagZ(j))))
     end
     lenv = boundary_channels(mpo)
-    for i in 1:(c - 1)
+    for i = 1:(c-1)
         lenv = push_left_channels(lenv, mpo, W[i], i)
     end
     renv = boundary_channels(mpo)
-    for j in (L - 1):-1:(c + 1)
+    for j = (L-1):-1:(c+1)
         renv = push_right_channels(renv, mpo, Z[j], j + 1)
     end
     return KLFrames(W, Z, c, lenv, renv, 0)
@@ -560,7 +682,7 @@ end
 "`<W[1..c] | psi>` on the left of the root: `(b_L, link_{c+1})`. A full contraction, any gauge."
 function _overlap_left(psi::SymMPS, W, c::Int)
     AL = nothing
-    for i in 1:c
+    for i = 1:c
         T = AL === nothing ? psi[i] : to_concrete!(contract(AL, (2,), psi[i], (1,)))
         AL = to_concrete!(contract(W[i]', (1, 2), T, (1, 2)))         # (b_L, link_{i+1})
     end
@@ -570,8 +692,8 @@ end
 "`<Z[c..L-1] | psi>` on the right of the root: `(link_{c+1}, b_R)`. A full contraction, any gauge."
 function _overlap_right(psi::SymMPS, Z, c::Int)
     AR = nothing
-    for j in (length(psi) - 1):-1:c
-        B = AR === nothing ? psi[j + 1] : to_concrete!(contract(psi[j + 1], (3,), AR, (1,)))
+    for j = (length(psi)-1):-1:c
+        B = AR === nothing ? psi[j+1] : to_concrete!(contract(psi[j+1], (3,), AR, (1,)))
         AR = to_concrete!(contract(B, (2, 3), Z[j]', (2, 3)))         # (link_j, b_j)
     end
     return AR
@@ -590,28 +712,28 @@ a square-root factor of its Gram matrix (an SVD's `U S` / `S V'`), so any gauge 
 function _projection_miss(psi::SymMPS, W, Z, c::Int)
     L = length(psi)
     R = Vector{Any}(undef, L)                    # R[k] R[k]' = Gram of psi[k..L] on link_k
-    for k in L:-1:2
-        T = k == L ? psi[L] : to_concrete!(contract(psi[k], (3,), R[k + 1], (1,)))
+    for k = L:-1:2
+        T = k == L ? psi[L] : to_concrete!(contract(psi[k], (3,), R[k+1], (1,)))
         res = svd(T, (1,); cutoff = 0.0)
         R[k] = to_concrete(res.U * res.S)
     end
     miss2 = 0.0
     AL = nothing
-    for i in 1:c
+    for i = 1:c
         T = AL === nothing ? psi[i] : to_concrete!(contract(AL, (2,), psi[i], (1,)))
-        miss2 += norm(to_concrete!(contract(perp_component(W[i], T), (3,), R[i + 1], (1,))))^2
+        miss2 += norm(to_concrete!(contract(perp_component(W[i], T), (3,), R[i+1], (1,))))^2
         AL = to_concrete!(contract(W[i]', (1, 2), T, (1, 2)))         # (b_i, link_{i+1})
     end
     G = Vector{Any}(undef, L - 1)                # G[j]' G[j] = Gram of P_L psi on link_{j+1}
     res = svd(AL, (1,); cutoff = 0.0)
     G[c] = to_concrete(res.S * res.Vd)
-    for j in (c + 1):(L - 1)
-        res = svd(to_concrete!(contract(G[j - 1], (2,), psi[j], (1,))), (1, 2); cutoff = 0.0)
+    for j = (c+1):(L-1)
+        res = svd(to_concrete!(contract(G[j-1], (2,), psi[j], (1,))), (1, 2); cutoff = 0.0)
         G[j] = to_concrete(res.S * res.Vd)
     end
     AR = nothing
-    for j in (L - 1):-1:c
-        B = AR === nothing ? psi[j + 1] : to_concrete!(contract(psi[j + 1], (3,), AR, (1,)))
+    for j = (L-1):-1:c
+        B = AR === nothing ? psi[j+1] : to_concrete!(contract(psi[j+1], (3,), AR, (1,)))
         miss2 += norm(to_concrete!(contract(G[j], (2,), perp_component_right(Z[j], B), (1,))))^2
         AR = to_concrete!(contract(B, (2, 3), Z[j]', (2, 3)))         # (link_{j+1}, b_j)
     end
@@ -619,9 +741,9 @@ function _projection_miss(psi::SymMPS, W, Z, c::Int)
 end
 
 "`S = (W ⊗ Z)' psi`, the root coefficients of `P psi` (plan: `project_root`)."
-_project_root(psi::SymMPS, fr::KLFrames) =
-    to_concrete!(contract(_overlap_left(psi, fr.W, fr.c), (2,),
-                          _overlap_right(psi, fr.Z, fr.c), (1,)))
+_project_root(psi::SymMPS, fr::KLFrames) = to_concrete!(
+    contract(_overlap_left(psi, fr.W, fr.c), (2,), _overlap_right(psi, fr.Z, fr.c), (1,)),
+)
 
 "`B = P H P` at the root, from the frames' cached environments (plan: `root_generator`)."
 _root_generator(mpo, fr::KLFrames) =
@@ -639,7 +761,7 @@ type (root cores here, plain vectors in the dense unit tests).
 function _projected_frontiers(applyB, S0, tau::Number, m::Int)
     Fs = Any[]
     F = S0
-    for j in 1:m
+    for j = 1:m
         F = _scaled(tau / j, applyB(F))
         push!(Fs, F)
     end
@@ -655,12 +777,12 @@ same assembly `cbe_bug_step!` uses for the evolved core.
 function _frontier_mps(psi::SymMPS, fr::KLFrames, core)
     L, c = length(psi), fr.c
     T = Vector{Any}(undef, L)
-    for i in 1:(c - 1)
+    for i = 1:(c-1)
         T[i] = _relink(fr.W[i], psi[i].inds[1].itags, psi[i].inds[3].itags)
     end
     T[c] = _relink(to_concrete(fr.W[c] * core), psi[c].inds[1].itags, psi[c].inds[3].itags)
-    for j in c:(L - 1)
-        T[j + 1] = _relink(fr.Z[j], psi[j + 1].inds[1].itags, psi[j + 1].inds[3].itags)
+    for j = c:(L-1)
+        T[j+1] = _relink(fr.Z[j], psi[j+1].inds[1].itags, psi[j+1].inds[3].itags)
     end
     return SymMPS(T, c)
 end
@@ -675,20 +797,41 @@ two-site block. `old_rank` is `U0`'s width -- the side being grown.
 function _frame_onto_left(U0, K, right)
     res_r = svd(right, (1,), "bV,L", "bV,R"; cutoff = 0.0)
     V0 = to_concrete(res_r.Vd)
-    S0 = to_concrete(to_concrete!(contract(U0', (1, 2), K, (1, 2))) *
-                     to_concrete(res_r.U * res_r.S))
-    return BondFrame(U0, S0, V0, K.inds[1], K.inds[2], K.inds[3], right.inds[2],
-                     right.inds[3], leg_dim(U0, 3), copy(K.spaces[3]))
+    S0 =
+        to_concrete(to_concrete!(contract(U0', (1, 2), K, (1, 2))) * to_concrete(res_r.U * res_r.S))
+    return BondFrame(
+        U0,
+        S0,
+        V0,
+        K.inds[1],
+        K.inds[2],
+        K.inds[3],
+        right.inds[2],
+        right.inds[3],
+        leg_dim(U0, 3),
+        copy(K.spaces[3]),
+    )
 end
 
 "Row mirror of [`_frame_onto_left`](@ref): the right isometry `V0` is prescribed."
 function _frame_onto_right(left, B, V0)
     res_l = svd(left, (1, 2), "bU,L", "bU,R"; cutoff = 0.0)
     U0 = to_concrete(res_l.U)
-    S0 = to_concrete(to_concrete(res_l.S * res_l.Vd) *
-                     to_concrete!(contract(B, (2, 3), V0', (2, 3))))
-    return BondFrame(U0, S0, V0, left.inds[1], left.inds[2], left.inds[3], B.inds[2],
-                     B.inds[3], leg_dim(V0, 1), copy(left.spaces[3]))
+    S0 = to_concrete(
+        to_concrete(res_l.S * res_l.Vd) * to_concrete!(contract(B, (2, 3), V0', (2, 3))),
+    )
+    return BondFrame(
+        U0,
+        S0,
+        V0,
+        left.inds[1],
+        left.inds[2],
+        left.inds[3],
+        B.inds[2],
+        B.inds[3],
+        leg_dim(V0, 1),
+        copy(left.spaces[3]),
+    )
 end
 
 "`||(I - U0 U0') X||` for a two-site `X = (link_l, site_l, site_r, link_r)`."
@@ -711,8 +854,19 @@ quarter of the frame width. This is the large-chi path, since `X` lives on the f
 and the exact action costs far more than the folded probe. The closures and the estimate come from
 the basis-selection strategy `expansion`.
 """
-function _bond_action(expansion::BasisExpansion, f::BondFrame, mpo, i::Int, lch, rch, U0, V0,
-                      side::Symbol, fold::Bool, rng::AbstractRNG)
+function _bond_action(
+    expansion::BasisExpansion,
+    f::BondFrame,
+    mpo,
+    i::Int,
+    lch,
+    rch,
+    U0,
+    V0,
+    side::Symbol,
+    fold::Bool,
+    rng::AbstractRNG,
+)
     if fold
         skl, skr = folded_sketch_closures(expansion, f, mpo, i, lch, rch)
         n = max(8, cld(leg_dim(side === :left ? U0 : V0, side === :left ? 3 : 1), 4))
@@ -733,11 +887,20 @@ cheap sequential chain. Each bond's frame, two-site action and leak (~1/3 of a m
 drawn in bond order from `rng`. Entry `i` (a bond of `side`) is `(K, leak, nh2, sleak)`, `K` the
 carry the sequential loop would have built there; `sleak = 0` unless `nsample > 0`.
 """
-function _bond_measurements(Fm::SymMPS, mpo, fr::KLFrames, chain, stack, side::Symbol;
-                            expansion::BasisExpansion, fold::Bool, nsample::Int,
-                            rng::AbstractRNG)
+function _bond_measurements(
+    Fm::SymMPS,
+    mpo,
+    fr::KLFrames,
+    chain,
+    stack,
+    side::Symbol;
+    expansion::BasisExpansion,
+    fold::Bool,
+    nsample::Int,
+    rng::AbstractRNG,
+)
     L, c = length(Fm), fr.c
-    bonds = side === :left ? (1:c) : ((L - 1):-1:c)
+    bonds = side === :left ? (1:c) : ((L-1):-1:c)
     carry = Vector{Any}(undef, L - 1)
     X = nothing
     for i in bonds
@@ -745,8 +908,7 @@ function _bond_measurements(Fm::SymMPS, mpo, fr::KLFrames, chain, stack, side::S
             carry[i] = X === nothing ? Fm[i] : to_concrete!(contract(X, (2,), Fm[i], (1,)))
             X = to_concrete!(contract(fr.W[i]', (1, 2), carry[i], (1, 2)))
         else
-            carry[i] = X === nothing ? Fm[i + 1] :
-                       to_concrete!(contract(Fm[i + 1], (3,), X, (1,)))
+            carry[i] = X === nothing ? Fm[i+1] : to_concrete!(contract(Fm[i+1], (3,), X, (1,)))
             X = to_concrete!(contract(carry[i], (2, 3), fr.Z[i]', (2, 3)))
         end
     end
@@ -756,13 +918,41 @@ function _bond_measurements(Fm::SymMPS, mpo, fr::KLFrames, chain, stack, side::S
     end
     function one(i)
         f, a = if side === :left
-            f = _frame_onto_left(fr.W[i], carry[i], Fm[i + 1])
-            (f, _bond_action(expansion, f, mpo, i, chain[i], right_channels(stack, i + 2),
-                             fr.W[i], nothing, :left, fold, rngs[i]))
+            f = _frame_onto_left(fr.W[i], carry[i], Fm[i+1])
+            (
+                f,
+                _bond_action(
+                    expansion,
+                    f,
+                    mpo,
+                    i,
+                    chain[i],
+                    right_channels(stack, i + 2),
+                    fr.W[i],
+                    nothing,
+                    :left,
+                    fold,
+                    rngs[i],
+                ),
+            )
         else
             f = _frame_onto_right(Fm[i], carry[i], fr.Z[i])
-            (f, _bond_action(expansion, f, mpo, i, left_channels(stack, i), chain[i], nothing,
-                             fr.Z[i], :right, fold, rngs[i]))
+            (
+                f,
+                _bond_action(
+                    expansion,
+                    f,
+                    mpo,
+                    i,
+                    left_channels(stack, i),
+                    chain[i],
+                    nothing,
+                    fr.Z[i],
+                    :right,
+                    fold,
+                    rngs[i],
+                ),
+            )
         end
         skl, skr, leak, nh2 = a
         sl = nsample > 0 ? sampled_leak(expansion, f, skl, skr, side, nsample, rngs[i]) : 0.0
@@ -789,16 +979,37 @@ A frontier bond's CBE (plan T4.1): `side`'s frame grows by [`expand_frame`](@ref
 step's strategy `ckw.expansion`, exactly as in the half-sweeps, so the Krylov stage after it
 starts from those directions. `ckw` carries `cbe_bug_step!`'s expansion settings.
 """
-function _frontier_expand(f::BondFrame, mpo, i::Int, lch, rch, side::Symbol,
-                          ckw::NamedTuple, ledger::AdaptiveLedger, rng::AbstractRNG)
-    return expand_frame(ckw.expansion, f, mpo, i, lch, rch, side; ledger = ledger, rng = rng,
-                         alloc = get(ckw, :alloc, nothing), workcap = get(ckw, :workcap, 0),
-                         growth = get(ckw, :growth, ADAPTIVE_GROWTH),
-                         exact = get(ckw, :exact, false), version = i,
-                         cap_order = get(ckw, :cap_order, :sector),
-                         dd_width = get(ckw, :dd_width, 0),
-                         dd_policy = get(ckw, :dd_policy, :adaptive),
-                         dd_memory = get(ckw, :dd_memory, nothing))
+function _frontier_expand(
+    f::BondFrame,
+    mpo,
+    i::Int,
+    lch,
+    rch,
+    side::Symbol,
+    ckw::NamedTuple,
+    ledger::AdaptiveLedger,
+    rng::AbstractRNG,
+)
+    return expand_frame(
+        ckw.expansion,
+        f,
+        mpo,
+        i,
+        lch,
+        rch,
+        side;
+        ledger = ledger,
+        rng = rng,
+        alloc = get(ckw, :alloc, nothing),
+        workcap = get(ckw, :workcap, 0),
+        growth = get(ckw, :growth, ADAPTIVE_GROWTH),
+        exact = get(ckw, :exact, false),
+        version = i,
+        cap_order = get(ckw, :cap_order, :sector),
+        dd_width = get(ckw, :dd_width, 0),
+        dd_policy = get(ckw, :dd_policy, :adaptive),
+        dd_memory = get(ckw, :dd_memory, nothing),
+    )
 end
 
 # Tag every bond entry a frontier sweep logged, after `_log_bond!` wrote it.
@@ -822,21 +1033,44 @@ close; otherwise it enriches and then measures `j = 0` on the final frames. Non-
 `:closure`, never a silent pass; `capped` marks a stop at the working-rank limit
 ([`_closure_loop!`](@ref)).
 """
-function _krylov_closure!(fr::KLFrames, psi::SymMPS, mpo, S0, tau::ComplexF64,
-                          alloc::BasisAllocation, ckw::NamedTuple; order::Int,
-                          workcap::Int = 0, nrm::Float64 = 1.0, parallel::Bool = false,
-                          rng::AbstractRNG = MersenneTwister(0x5EED),
-                          ledger::Union{Nothing, AdaptiveLedger} = nothing,
-                          include_zero::Bool = false,
-                          maxpass::Int = _closure_maxpass(order), fold::Bool = false,
-                          checks::Bool = false)
+function _krylov_closure!(
+    fr::KLFrames,
+    psi::SymMPS,
+    mpo,
+    S0,
+    tau::ComplexF64,
+    alloc::BasisAllocation,
+    ckw::NamedTuple;
+    order::Int,
+    workcap::Int = 0,
+    nrm::Float64 = 1.0,
+    parallel::Bool = false,
+    rng::AbstractRNG = MersenneTwister(0x5EED),
+    ledger::Union{Nothing,AdaptiveLedger} = nothing,
+    include_zero::Bool = false,
+    maxpass::Int = _closure_maxpass(order),
+    fold::Bool = false,
+    checks::Bool = false,
+)
     t0 = time_ns()
     lg = AdaptiveLedger()
     lg.order = order
     sweepkw = (workcap = workcap, nrm = nrm, parallel = parallel, rng = rng, fold = fold)
-    checks || return _single_pass_closure!(fr, psi, mpo, S0, tau, alloc, ckw, lg, t0;
-                                           order = order, include_zero = include_zero,
-                                           ledger = ledger, sweepkw...)
+    checks || return _single_pass_closure!(
+        fr,
+        psi,
+        mpo,
+        S0,
+        tau,
+        alloc,
+        ckw,
+        lg,
+        t0;
+        order = order,
+        include_zero = include_zero,
+        ledger = ledger,
+        sweepkw...,
+    )
     # CHECK FIRST: what the incoming frames (the ordinary CBE + local-Krylov half-sweeps)
     # already capture of the global Krylov sequence. If they close every frontier, no closure
     # sweep runs and the frames stay exactly as the half-sweeps built them.
@@ -844,43 +1078,76 @@ function _krylov_closure!(fr::KLFrames, psi::SymMPS, mpo, S0, tau::ComplexF64,
     merge_ledger!(lg, pre.ledger)
     nroot = Ref(pre.n_root)
     S = Ref{Any}(S0)
-    final_leak = Dict{Int, Float64}(j - 1 => pre.leak[j] for j in 1:order)
+    final_leak = Dict{Int,Float64}(j - 1 => pre.leak[j] for j = 1:order)
     gen0 = fr.gen
     res = if pre.met && (pre.met0 || !include_zero)
         (passes = 0, converged = true, exhausted = false, capped = false, log = Any[])
     else
         H0 = Ref{Any}(_root_generator(mpo, fr))
         applyB = x -> (nroot[] += 1; apply_zero_site(H0[], x))
-        frontier = j -> KrylovFrontier(j == 0 ? S[] :
-                                       _projected_frontiers(applyB, S[], tau, j)[j], j, fr.gen)
+        frontier =
+            j -> KrylovFrontier(
+                j == 0 ? S[] : _projected_frontiers(applyB, S[], tau, j)[j],
+                j,
+                fr.gen,
+            )
         # ⚠ SPECULATIVE FINAL MEASUREMENT (>= _FRONTIER_THREADS threads). A later pass usually
         # adds nothing and is then the last; its last sweep cannot change the frames unless it
         # adds. So `j = 0` is measured CONCURRENTLY on a snapshot of the frames, and kept only
         # if the loop ends in that generation -- otherwise it is discarded and redone below.
         spec = Ref{Any}(nothing)
         r0kw = (workcap = workcap, nrm = nrm, parallel = parallel, fold = fold, enrich = false)
-        sweep! = (F, j, pass) -> begin
-            if _frontier_parallel(parallel) && pass >= 2 && j == order - 1
-                spec[] === nothing || fetch(spec[].task)
-                snap = KLFrames(copy(fr.W), copy(fr.Z), fr.c, fr.lenv, fr.renv, fr.gen,
-                                fr.lcache, fr.rcache, fr.eshift)
-                F0 = KrylovFrontier(S[], 0, snap.gen)
-                rs0 = MersenneTwister(rand(rng, UInt64))
-                spec[] = (gen = snap.gen, task = Threads.@spawn(
-                    _frontier_sweep!(snap, psi, mpo, F0, tau, alloc, ckw; r0kw...,
-                                     rng = rs0, pass = pass + 1)))
+        sweep! =
+            (F, j, pass) -> begin
+                if _frontier_parallel(parallel) && pass >= 2 && j == order - 1
+                    spec[] === nothing || fetch(spec[].task)
+                    snap = KLFrames(
+                        copy(fr.W),
+                        copy(fr.Z),
+                        fr.c,
+                        fr.lenv,
+                        fr.renv,
+                        fr.gen,
+                        fr.lcache,
+                        fr.rcache,
+                        fr.eshift,
+                    )
+                    F0 = KrylovFrontier(S[], 0, snap.gen)
+                    rs0 = MersenneTwister(rand(rng, UInt64))
+                    spec[] = (
+                        gen = snap.gen,
+                        task = Threads.@spawn(
+                            _frontier_sweep!(
+                                snap,
+                                psi,
+                                mpo,
+                                F0,
+                                tau,
+                                alloc,
+                                ckw;
+                                r0kw...,
+                                rng = rs0,
+                                pass = pass + 1,
+                            )
+                        )
+                    )
+                end
+                r = _frontier_sweep!(fr, psi, mpo, F, tau, alloc, ckw; sweepkw..., pass = pass)
+                merge_ledger!(lg, r.ledger)
+                final_leak[j] = r.leak
+                if r.added > 0
+                    H0[] = _root_generator(mpo, fr)
+                    S[] = _project_root(psi, fr)
+                end
+                r
             end
-            r = _frontier_sweep!(fr, psi, mpo, F, tau, alloc, ckw; sweepkw..., pass = pass)
-            merge_ledger!(lg, r.ledger)
-            final_leak[j] = r.leak
-            if r.added > 0
-                H0[] = _root_generator(mpo, fr)
-                S[] = _project_root(psi, fr)
-            end
-            r
-        end
-        loop = _closure_loop!(frontier, sweep!, order; maxpass = maxpass,
-                              include_zero = include_zero)
+        loop = _closure_loop!(
+            frontier,
+            sweep!,
+            order;
+            maxpass = maxpass,
+            include_zero = include_zero,
+        )
         sr = spec[] === nothing ? nothing : (gen = spec[].gen, r = fetch(spec[].task))
         if fr.gen == gen0
             # Nothing grew: the frames and `S0` are the ones `pre` measured `j = 0` on, so its
@@ -889,24 +1156,41 @@ function _krylov_closure!(fr::KLFrames, psi::SymMPS, mpo, S0, tau::ComplexF64,
             merge_ledger!(lg, sr.r.ledger)
             final_leak[0] = sr.r.leak
         else
-            r0 = _frontier_sweep!(fr, psi, mpo, frontier(0), tau, alloc, ckw; r0kw...,
-                                  rng = rng, pass = loop.passes + 1)
+            r0 = _frontier_sweep!(
+                fr,
+                psi,
+                mpo,
+                frontier(0),
+                tau,
+                alloc,
+                ckw;
+                r0kw...,
+                rng = rng,
+                pass = loop.passes + 1,
+            )
             merge_ledger!(lg, r0.ledger)
             final_leak[0] = r0.leak
         end
         loop
     end
     lg.n_passes = res.passes
-    lg.leak = [final_leak[j] for j in 0:(order - 1)]
-    lg.defect = sum(lg.leak[j + 1] / (j + 1) for j in 0:(order - 1))
+    lg.leak = [final_leak[j] for j = 0:(order-1)]
+    lg.defect = sum(lg.leak[j+1] / (j + 1) for j = 0:(order-1))
     lg.n_root_frontier = nroot[]
     res.converged || _unmet!(lg, :closure)
     lg.t_closure = (time_ns() - t0) / 1e9
     ledger === nothing || merge_ledger!(ledger, lg)
-    return (S0 = S[], passes = res.passes, converged = res.converged,
-            exhausted = res.exhausted, capped = res.capped, log = res.log, ledger = lg,
-            n_root = nroot[],
-            n_h1 = lg.n_h1_closure)
+    return (
+        S0 = S[],
+        passes = res.passes,
+        converged = res.converged,
+        exhausted = res.exhausted,
+        capped = res.capped,
+        log = res.log,
+        ledger = lg,
+        n_root = nroot[],
+        n_h1 = lg.n_h1_closure,
+    )
 end
 
 """
@@ -916,10 +1200,21 @@ end
 [`_krylov_closure!`](@ref) with `checks = false`: one enriching sweep per frontier, each rebuilt
 in the frames the previous sweep grew, and nothing measured before or after. Same return fields.
 """
-function _single_pass_closure!(fr::KLFrames, psi::SymMPS, mpo, S0, tau::ComplexF64,
-                               alloc::BasisAllocation, ckw::NamedTuple, lg::AdaptiveLedger,
-                               t0::UInt64; order::Int, include_zero::Bool,
-                               ledger::Union{Nothing, AdaptiveLedger}, sweepkw...)
+function _single_pass_closure!(
+    fr::KLFrames,
+    psi::SymMPS,
+    mpo,
+    S0,
+    tau::ComplexF64,
+    alloc::BasisAllocation,
+    ckw::NamedTuple,
+    lg::AdaptiveLedger,
+    t0::UInt64;
+    order::Int,
+    include_zero::Bool,
+    ledger::Union{Nothing,AdaptiveLedger},
+    sweepkw...,
+)
     nroot = Ref(0)
     S = Ref{Any}(S0)
     H0 = Ref{Any}(_root_generator(mpo, fr))
@@ -927,13 +1222,23 @@ function _single_pass_closure!(fr::KLFrames, psi::SymMPS, mpo, S0, tau::ComplexF
     leak = fill(NaN, order)                      # NaN: not measured (j = 0 unless include_zero)
     log = Any[]
     met, capped = true, false
-    for j in (include_zero ? 0 : 1):(order - 1)
+    for j = (include_zero ? 0 : 1):(order-1)
         core = j == 0 ? S[] : _projected_frontiers(applyB, S[], tau, j)[j]
-        r = _frontier_sweep!(fr, psi, mpo, KrylovFrontier(core, j, fr.gen), tau, alloc, ckw;
-                             sweepkw..., enrich = true, pass = 1)
+        r = _frontier_sweep!(
+            fr,
+            psi,
+            mpo,
+            KrylovFrontier(core, j, fr.gen),
+            tau,
+            alloc,
+            ckw;
+            sweepkw...,
+            enrich = true,
+            pass = 1,
+        )
         merge_ledger!(lg, r.ledger)
         push!(log, (pass = 1, frontier = j, added = r.added, leak = r.leak, met = r.met))
-        leak[j + 1] = r.leak                     # before this sweep's enrichment
+        leak[j+1] = r.leak                     # before this sweep's enrichment
         met &= r.met
         capped |= r.capped
         if r.added > 0
@@ -943,12 +1248,20 @@ function _single_pass_closure!(fr::KLFrames, psi::SymMPS, mpo, S0, tau::ComplexF
     end
     lg.n_passes = 1
     lg.leak = leak
-    lg.defect = sum((leak[j + 1] / (j + 1) for j in 0:(order - 1) if !isnan(leak[j + 1]));
-                    init = 0.0)
+    lg.defect = sum((leak[j+1] / (j + 1) for j = 0:(order-1) if !isnan(leak[j+1])); init = 0.0)
     lg.n_root_frontier = nroot[]
     met || _unmet!(lg, :closure)
     lg.t_closure = (time_ns() - t0) / 1e9
     ledger === nothing || merge_ledger!(ledger, lg)
-    return (S0 = S[], passes = 1, converged = met, exhausted = false, capped = capped && !met,
-            log = log, ledger = lg, n_root = nroot[], n_h1 = lg.n_h1_closure)
+    return (
+        S0 = S[],
+        passes = 1,
+        converged = met,
+        exhausted = false,
+        capped = capped && !met,
+        log = log,
+        ledger = lg,
+        n_root = nroot[],
+        n_h1 = lg.n_h1_closure,
+    )
 end

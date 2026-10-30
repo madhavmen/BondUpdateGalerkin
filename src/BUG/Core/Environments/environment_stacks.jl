@@ -92,17 +92,14 @@ Carry the left channels on link `i` through site tensor `A` onto link `i+1`.
 `open_next=false` suppresses opening new half-terms, for the last site of a chain where a
 term opened would never be closed.
 """
-function push_left_channels(cs::ChannelSet, h::XXZChain, A, i::Int;
-                            open_next::Bool = true)
+function push_left_channels(cs::ChannelSet, h::XXZChain, A, i::Int; open_next::Bool = true)
     terms = h.terms
     acc = cs.done === ZERO ? ZERO : _left_step(cs.done, A, nothing, i)
     for (t, term) in enumerate(terms)
         cs.open[t] === ZERO && continue
-        acc = _accum(acc, to_concrete(term.coeff *
-                     _left_step(cs.open[t], A, term.right, i)))
+        acc = _accum(acc, to_concrete(term.coeff * _left_step(cs.open[t], A, term.right, i)))
     end
-    nxt = Any[open_next ? _left_step(cs.id, A, terms[t].left, i) : ZERO
-              for t in eachindex(terms)]
+    nxt = Any[open_next ? _left_step(cs.id, A, terms[t].left, i) : ZERO for t in eachindex(terms)]
     return ChannelSet(_left_step(cs.id, A, nothing, i), acc, nxt)
 end
 
@@ -113,17 +110,14 @@ Mirror: carry the right channels on link `i+1` through site `i` onto link `i`. A
 channel OPENS with `term.right` and CLOSES with `term.left` -- the asymmetry `_right_step`
 documents.
 """
-function push_right_channels(cs::ChannelSet, h::XXZChain, A, i::Int;
-                             open_next::Bool = true)
+function push_right_channels(cs::ChannelSet, h::XXZChain, A, i::Int; open_next::Bool = true)
     terms = h.terms
     acc = cs.done === ZERO ? ZERO : _right_step(cs.done, A, nothing, i)
     for (t, term) in enumerate(terms)
         cs.open[t] === ZERO && continue
-        acc = _accum(acc, to_concrete(term.coeff *
-                     _right_step(cs.open[t], A, term.left, i)))
+        acc = _accum(acc, to_concrete(term.coeff * _right_step(cs.open[t], A, term.left, i)))
     end
-    nxt = Any[open_next ? _right_step(cs.id, A, terms[t].right, i) : ZERO
-              for t in eachindex(terms)]
+    nxt = Any[open_next ? _right_step(cs.id, A, terms[t].right, i) : ZERO for t in eachindex(terms)]
     return ChannelSet(_right_step(cs.id, A, nothing, i), acc, nxt)
 end
 
@@ -150,7 +144,7 @@ function _apply_site_op(A, O, i::Int)
     # T = (O's remaining legs..., A's link_l, A's link_r). The surviving site leg of a
     # rank-3 O is always at index < 3, so its remainder is (site_out, op) in order.
     return length(Oi.inds) == 2 ? to_concrete(permutedims(T, (2, 1, 3))) :
-                                  to_concrete(permutedims(T, (3, 1, 4, 2)))
+           to_concrete(permutedims(T, (3, 1, 4, 2)))
 end
 
 "Bra tensor for an interior step: both link legs primed, so each pairs with the
@@ -191,8 +185,10 @@ function _left_step(E, A, O, i::Int)
         elseif nE == 2
             tmp = contract(AO, (1,), E, (2,))
         else
-            error("_left_step: rank-$nE environment with a rank-$nAO operator would " *
-                  "carry an open channel past site $i")
+            error(
+                "_left_step: rank-$nE environment with a rank-$nAO operator would " *
+                "carry an open channel past site $i",
+            )
         end
         # tmp = (site, link_r, [op], bra) -- the bra leg is always last.
         out = contract(tmp, (1, length(tmp.inds)), _bra_interior(A), (2, 1))
@@ -213,11 +209,12 @@ a term running off the end of the chain, so that is an error.
 function _left_close(E, A, O, i::Int)
     AO = _apply_site_op(A, O, i)
     nAO, nE = length(AO.inds), length(E.inds)
-    tmp = (nE == 3 && nAO == 4) ? contract(AO, (1, 4), E, (2, 3)) :
-          nE == 2               ? contract(AO, (1,), E, (2,))     :
-          error("_left_close: rank-$nE environment with a rank-$nAO operator at site $i")
-    length(tmp.inds) == 3 || error(
-        "_left_close: an operator channel is still open at the right boundary")
+    tmp =
+        (nE == 3 && nAO == 4) ? contract(AO, (1, 4), E, (2, 3)) :
+        nE == 2 ? contract(AO, (1,), E, (2,)) :
+        error("_left_close: rank-$nE environment with a rank-$nAO operator at site $i")
+    length(tmp.inds) == 3 ||
+        error("_left_close: an operator channel is still open at the right boundary")
     s = to_concrete!(contract(tmp, (1, 2, 3), _bra_right_boundary(A), (2, 3, 1)))
     return ComplexF64(s[])
 end
@@ -256,21 +253,22 @@ needs, where there is nothing to its left.
 """
 function left_env_stack(psi::SymMPS, h::XXZChain; upto::Int = length(psi) - 1)
     L = length(psi)
-    length(h) == L || throw(DimensionMismatch(
-        "chain has $(length(h)) sites, state has $L"))
+    length(h) == L || throw(DimensionMismatch("chain has $(length(h)) sites, state has $L"))
     0 <= upto <= L || throw(ArgumentError("upto must be in 0:$L, got $upto"))
 
     # The stack IS the carry, recorded link by link -- one implementation of the
     # recursion, so a sweep that carries and a sweep that prebuilds can never drift.
     cs = boundary_channels(h)
-    id   = Any[cs.id]
+    id = Any[cs.id]
     done = Any[cs.done]
     open = Vector{Any}[cs.open]
-    for i in 1:upto
+    for i = 1:upto
         # A channel opened at site i is closed at site i+1, so nothing opens on the last
         # site of the chain.
         cs = push_left_channels(cs, h, psi[i], i; open_next = i < L)
-        push!(id, cs.id); push!(done, cs.done); push!(open, cs.open)
+        push!(id, cs.id)
+        push!(done, cs.done)
+        push!(open, cs.open)
     end
 
     return LeftEnvStack(id, done, open)
@@ -321,8 +319,10 @@ function _right_step(E, A, O, i::Int)
         elseif nE == 2
             tmp = contract(AO, (3,), E, (2,))
         else
-            error("_right_step: rank-$nE environment with a rank-$nAO operator would " *
-                  "carry an open channel past site $i")
+            error(
+                "_right_step: rank-$nE environment with a rank-$nAO operator would " *
+                "carry an open channel past site $i",
+            )
         end
         # tmp = (link_l, site, [op], bra) -- the bra leg is always last.
         out = contract(tmp, (2, length(tmp.inds)), _bra_interior(A), (2, 3))
@@ -341,11 +341,12 @@ contracted bra-to-ket, giving a scalar.
 function _right_close(E, A, O, i::Int)
     AO = _apply_site_op(A, O, i)
     nAO, nE = length(AO.inds), length(E.inds)
-    tmp = (nE == 3 && nAO == 4) ? contract(AO, (3, 4), E, (2, 3)) :
-          nE == 2               ? contract(AO, (3,), E, (2,))     :
-          error("_right_close: rank-$nE environment with a rank-$nAO operator at site $i")
-    length(tmp.inds) == 3 || error(
-        "_right_close: an operator channel is still open at the left boundary")
+    tmp =
+        (nE == 3 && nAO == 4) ? contract(AO, (3, 4), E, (2, 3)) :
+        nE == 2 ? contract(AO, (3,), E, (2,)) :
+        error("_right_close: rank-$nE environment with a rank-$nAO operator at site $i")
+    length(tmp.inds) == 3 ||
+        error("_right_close: an operator channel is still open at the left boundary")
     s = to_concrete!(contract(tmp, (1, 2, 3), _bra_left_boundary(A), (1, 2, 3)))
     return ComplexF64(s[])
 end
@@ -376,22 +377,24 @@ bond `L-1` needs, where there is nothing to its right.
 """
 function right_env_stack(psi::SymMPS, h::XXZChain; downto::Int = 2)
     L = length(psi)
-    length(h) == L || throw(DimensionMismatch(
-        "chain has $(length(h)) sites, state has $L"))
-    1 <= downto <= L + 1 || throw(ArgumentError(
-        "downto must be in 1:$(L + 1), got $downto"))
+    length(h) == L || throw(DimensionMismatch("chain has $(length(h)) sites, state has $L"))
+    1 <= downto <= L + 1 || throw(ArgumentError("downto must be in 1:$(L + 1), got $downto"))
     nt = length(h.terms)
 
-    id   = Any[missing for _ in 1:(L + 1)]
-    done = Any[missing for _ in 1:(L + 1)]
-    open = Vector{Any}[Any[missing for _ in 1:nt] for _ in 1:(L + 1)]
+    id = Any[missing for _ = 1:(L+1)]
+    done = Any[missing for _ = 1:(L+1)]
+    open = Vector{Any}[Any[missing for _ = 1:nt] for _ = 1:(L+1)]
 
     cs = boundary_channels(h)
-    id[L + 1] = cs.id; done[L + 1] = cs.done; open[L + 1] = cs.open
-    for i in L:-1:downto
+    id[L+1] = cs.id
+    done[L+1] = cs.done
+    open[L+1] = cs.open
+    for i = L:-1:downto
         # A channel opened at site i is closed at site i-1, so nothing opens at site 1.
         cs = push_right_channels(cs, h, psi[i], i; open_next = i > 1)
-        id[i] = cs.id; done[i] = cs.done; open[i] = cs.open
+        id[i] = cs.id
+        done[i] = cs.done
+        open[i] = cs.open
     end
 
     return RightEnvStack(id, done, open)
@@ -462,8 +465,10 @@ function _apply_theta_env(T, E, link_leg::Int)
     elseif nE == 2 && nT == 4
         contract(T, (link_leg,), E, (2,))
     else
-        error("_apply_theta_env: rank-$nT block against a rank-$nE environment leaves " *
-              "an operator channel dangling")
+        error(
+            "_apply_theta_env: rank-$nT block against a rank-$nE environment leaves " *
+            "an operator channel dangling",
+        )
     end
     # `out` = T's remaining legs in order, then E's bra leg.
     #   link_leg == 1: (site_l, site_r, link_r, bra) -> bra first
@@ -482,8 +487,7 @@ end
 from must be canonical at the bond (see the note above). This is the whole chain's `H`,
 not the bond's gate -- which is the point of the module.
 """
-function apply_h_two_site(Theta, h::XXZChain, i::Int,
-                          lch::ChannelSet, rch::ChannelSet)
+function apply_h_two_site(Theta, h::XXZChain, i::Int, lch::ChannelSet, rch::ChannelSet)
     tl, tr = Theta.inds[2].itags, Theta.inds[3].itags
     # Collect the terms and sum once: pairwise `to_concrete(acc + x)` rebuilt the metadata for each of the
     # roughly nine summands, which made the probe allocation-bound. Telum's `sum` aligns all summands once.
@@ -517,8 +521,7 @@ function apply_h_two_site(Theta, h::XXZChain, i::Int,
     return length(terms) == 1 ? terms[1] : to_concrete(sum(terms))
 end
 
-apply_h_two_site(Theta, h::XXZChain, i::Int,
-                 lenv::LeftEnvStack, renv::RightEnvStack) =
+apply_h_two_site(Theta, h::XXZChain, i::Int, lenv::LeftEnvStack, renv::RightEnvStack) =
     apply_h_two_site(Theta, h, i, left_channels(lenv, i), right_channels(renv, i + 2))
 
 # ── reading a link out of a prebuilt stack ───────────────────────────────────
@@ -528,9 +531,7 @@ apply_h_two_site(Theta, h::XXZChain, i::Int,
 # further up this file.
 
 "Link `i` of a prebuilt left stack, as a `ChannelSet`."
-left_channels(lenv::LeftEnvStack, i::Int) =
-    ChannelSet(lenv.id[i], lenv.done[i], lenv.open[i])
+left_channels(lenv::LeftEnvStack, i::Int) = ChannelSet(lenv.id[i], lenv.done[i], lenv.open[i])
 
 "Link `i` of a prebuilt right stack, as a `ChannelSet`."
-right_channels(renv::RightEnvStack, i::Int) =
-    ChannelSet(renv.id[i], renv.done[i], renv.open[i])
+right_channels(renv::RightEnvStack, i::Int) = ChannelSet(renv.id[i], renv.done[i], renv.open[i])

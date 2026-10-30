@@ -106,15 +106,14 @@ link by link, so a sweep that carries and a sweep that prebuilds cannot drift.
 """
 function left_env_stack(psi::SymMPS, mpo::MPO; upto::Int = length(psi) - 1)
     L = length(psi)
-    length(mpo) == L || throw(DimensionMismatch(
-        "MPO has $(length(mpo)) sites, state has $L"))
+    length(mpo) == L || throw(DimensionMismatch("MPO has $(length(mpo)) sites, state has $L"))
     0 <= upto <= L || throw(ArgumentError("upto must be in 0:$L, got $upto"))
-    E = Any[missing for _ in 1:(L + 1)]
+    E = Any[missing for _ = 1:(L+1)]
     E[1] = nothing
     cur = nothing
-    for i in 1:upto
+    for i = 1:upto
         cur = _mpo_left_step(cur, psi[i], mpo[i])
-        E[i + 1] = cur
+        E[i+1] = cur
     end
     return MPOLeftEnvStack(E)
 end
@@ -126,14 +125,12 @@ Build the right MPO environments on links `downto … L+1`.
 """
 function right_env_stack(psi::SymMPS, mpo::MPO; downto::Int = 2)
     L = length(psi)
-    length(mpo) == L || throw(DimensionMismatch(
-        "MPO has $(length(mpo)) sites, state has $L"))
-    1 <= downto <= L + 1 || throw(ArgumentError(
-        "downto must be in 1:$(L + 1), got $downto"))
-    E = Any[missing for _ in 1:(L + 1)]
-    E[L + 1] = nothing
+    length(mpo) == L || throw(DimensionMismatch("MPO has $(length(mpo)) sites, state has $L"))
+    1 <= downto <= L + 1 || throw(ArgumentError("downto must be in 1:$(L + 1), got $downto"))
+    E = Any[missing for _ = 1:(L+1)]
+    E[L+1] = nothing
     cur = nothing
-    for i in L:-1:downto
+    for i = L:-1:downto
         cur = _mpo_right_step(cur, psi[i], mpo[i])
         E[i] = cur
     end
@@ -183,10 +180,10 @@ MPO (`no_jump_mpo`) as a matrix on a small product basis.
 """
 function mpo_matrix_element(bra::SymMPS, mpo::MPO, ket::SymMPS)
     L = length(ket)
-    length(mpo) == L && length(bra) == L || throw(DimensionMismatch(
-        "MPO has $(length(mpo)) sites, ket $L, bra $(length(bra))"))
+    length(mpo) == L && length(bra) == L ||
+        throw(DimensionMismatch("MPO has $(length(mpo)) sites, ket $L, bra $(length(bra))"))
     E = nothing
-    for i in 1:(L - 1)
+    for i = 1:(L-1)
         E = _mpo_left_step(E, ket[i], mpo[i], bra[i])
     end
     return _mpo_left_close(E, ket[L], mpo[L], bra[L])
@@ -235,11 +232,10 @@ eigenstate, and `variance / gap` bounds the energy error.
 """
 function mpo_variance(psi::SymMPS, mpo::MPO)
     L = length(psi)
-    length(mpo) == L || throw(DimensionMismatch(
-        "MPO has $(length(mpo)) sites, state has $L"))
+    length(mpo) == L || throw(DimensionMismatch("MPO has $(length(mpo)) sites, state has $L"))
     L >= 2 || throw(ArgumentError("mpo_variance needs at least two sites"))
     E = nothing
-    for i in 1:(L - 1)
+    for i = 1:(L-1)
         E = _mpo2_left_step(E, psi[i], mpo[i])
     end
     A, W = psi[L], mpo[L]
@@ -248,8 +244,7 @@ function mpo_variance(psi::SymMPS, mpo::MPO)
     T = to_concrete(deleteSingleton(to_concrete!(T), 5))   # (bra, wa, ℓ_r, s1)
     T = contract(T, (2, 4), _mpo_outer(W), (1, 2))        # (bra, ℓ_r, s2, wa_r)
     T = to_concrete(deleteSingleton(to_concrete!(T), 4))   # (bra, ℓ_r, s2)
-    h2 = real(ComplexF64(to_concrete(contract(T, (1, 3, 2), _bra_right_boundary(A),
-                                              (1, 2, 3)))[]))
+    h2 = real(ComplexF64(to_concrete(contract(T, (1, 3, 2), _bra_right_boundary(A), (1, 2, 3)))[]))
     n2 = norm(psi)^2
     e = real(mpo_energy(psi, mpo)) / n2
     return h2 / n2 - e^2
@@ -270,7 +265,7 @@ sit on link `i` and `renv` on link `i+2`, and the state they were built from mus
 canonical at the bond, since a boundary environment is the identity only in that gauge.
 """
 function apply_h_two_site(Theta, mpo::MPO, i::Int, lenv::MPOLink, renv::MPOLink)
-    W1, W2 = mpo[i], mpo[i + 1]
+    W1, W2 = mpo[i], mpo[i+1]
 
     # Left end: attach the environment, or -- at the boundary -- keep `Theta`'s own link
     # leg and drop the MPO's dim-1 boundary leg.
@@ -295,8 +290,7 @@ function apply_h_two_site(Theta, mpo::MPO, i::Int, lenv::MPOLink, renv::MPOLink)
     return T
 end
 
-apply_h_two_site(Theta, mpo::MPO, i::Int,
-                 lenv::MPOLeftEnvStack, renv::MPORightEnvStack) =
+apply_h_two_site(Theta, mpo::MPO, i::Int, lenv::MPOLeftEnvStack, renv::MPORightEnvStack) =
     apply_h_two_site(Theta, mpo, i, left_channels(lenv, i), right_channels(renv, i + 2))
 
 # ── from BUG/Randomised/cbe.jl: deterministic, used by the Core sweeps ──
@@ -332,8 +326,10 @@ function _env_on_link(T, E, leg::Int)
     elseif nE == 2 && nT == 3
         contract(T, (leg,), E, (2,))
     else
-        error("_env_on_link: rank-$nT tensor against a rank-$nE environment leaves an " *
-              "operator channel dangling")
+        error(
+            "_env_on_link: rank-$nT tensor against a rank-$nE environment leaves an " *
+            "operator channel dangling",
+        )
     end
     # `out` = T's remaining legs in order, then E's bra leg.
     #   leg == 1 (K0): (site_l, bond, bra) -> bra first
@@ -352,7 +348,7 @@ end
 
 "`X Om` for `Om` in `V0`'s layout; `K0 = U0 S0`. Legs `(link_l, site_l, g)`."
 function _stream_left(K0, V0, mpo::MPO, i::Int, lenv::MPOLink, renv::MPOLink, Om)
-    W1, W2 = mpo[i], mpo[i + 1]
+    W1, W2 = mpo[i], mpo[i+1]
     Omd = Om'                                                 # (g, s_bra_r, bra_r)
     C = if renv.E === nothing
         X = to_concrete!(contract(Omd, (2,), W2, (3,)))       # (g, bra_r, w_mid, s_ket_r, w_r)
@@ -374,7 +370,7 @@ end
 
 "`X' Om` for `Om` in `U0`'s layout, as rows; `M0 = S0 V0`. Legs `(g, site_r, link_r)`."
 function _stream_right(U0, M0, mpo::MPO, i::Int, lenv::MPOLink, renv::MPOLink, Om)
-    W1, W2 = mpo[i], mpo[i + 1]
+    W1, W2 = mpo[i], mpo[i+1]
     Omd = Om'                                                 # (bra_l, s_bra_l, g)
     C = if lenv.E === nothing
         X = to_concrete!(contract(Omd, (2,), W1, (3,)))       # (bra_l, g, w_l, s_ket_l, w_mid)

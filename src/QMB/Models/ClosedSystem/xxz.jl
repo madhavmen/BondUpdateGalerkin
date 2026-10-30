@@ -43,9 +43,12 @@ The overall constant is measured (Clebsch-Gordan scaling), pinned against dense 
 """
 function heisenberg_su2_chain(L::Int; J::Float64 = 1.0)
     L >= 2 || throw(ArgumentError("heisenberg_su2_chain needs at least two sites, got $L"))
-    symmetry_mode() === :SU2 || throw(ArgumentError(
-        "heisenberg_su2_chain needs symmetry_mode() === :SU2, got $(symmetry_mode()); " *
-        "use xxz_chain for :U1 or :none"))
+    symmetry_mode() === :SU2 || throw(
+        ArgumentError(
+            "heisenberg_su2_chain needs symmetry_mode() === :SU2, got $(symmetry_mode()); " *
+            "use xxz_chain for :U1 or :none",
+        ),
+    )
     q = local_space(:SU2)
     # One term, op-leg contracted between the two halves -- the same shape the rank-3 `:U1`
     # branch of `xxz_chain` builds for `Sp`/`Sm`.

@@ -27,25 +27,28 @@ frame leg is written in. A sweep writes `pend` and its entries become usable onl
 are committed ([`_recycle_commit!`](@ref)). `log` has one row per recycled bond visit.
 """
 mutable struct KrylovRecycle
-    cur::Dict{Symbol, Any}      # side => (entries, tail, gen)
-    pend::Dict{Symbol, Any}
-    log::Dict{Symbol, Vector{Any}}
+    cur::Dict{Symbol,Any}      # side => (entries, tail, gen)
+    pend::Dict{Symbol,Any}
+    log::Dict{Symbol,Vector{Any}}
     mode::Symbol                # :images (refreshed block recurrence), :frame (frame seeding) or
-                                # :complement (certified block, complement extended)
+    # :complement (certified block, complement extended)
 end
 function KrylovRecycle(mode::Symbol = :images)
     mode in (:images, :frame, :complement) ||
         throw(ArgumentError("recycle mode must be :images, :frame or :complement"))
-    return KrylovRecycle(Dict{Symbol, Any}(:left => nothing, :right => nothing),
-                         Dict{Symbol, Any}(:left => nothing, :right => nothing),
-                         Dict{Symbol, Vector{Any}}(:left => Any[], :right => Any[]), mode)
+    return KrylovRecycle(
+        Dict{Symbol,Any}(:left => nothing, :right => nothing),
+        Dict{Symbol,Any}(:left => nothing, :right => nothing),
+        Dict{Symbol,Vector{Any}}(:left => Any[], :right => Any[]),
+        mode,
+    )
 end
 
 # The two half-sweeps (and the two halves of a frontier sweep) may run concurrently: each touches
 # only its own side's slots, which `Dict` assignment to an EXISTING key does not resize.
 _recycle_begin!(::Nothing, ::Symbol, tail, gen) = nothing
 _recycle_begin!(rec::KrylovRecycle, side::Symbol, tail, gen::Int) =
-    (rec.pend[side] = (entries = Dict{Int, Any}(), tail = tail, gen = gen); nothing)
+    (rec.pend[side] = (entries = Dict{Int,Any}(), tail = tail, gen = gen); nothing)
 
 """
 Store bond `i`'s round: the vectors that carried weight above `keep` (they mattered to the
@@ -59,11 +62,11 @@ function _recycle_store!(rec::KrylovRecycle, side::Symbol, i::Int, st, frame, ke
     (p === nothing || isempty(st.basis)) && return nothing
     n = length(st.basis)
     sel = if rec.mode === :complement
-        s = sort!([k for k in 2:(n - 1) if st.weights[k] > keep]; by = k -> -st.weights[k])
+        s = sort!([k for k = 2:(n-1) if st.weights[k] > keep]; by = k -> -st.weights[k])
         s = vcat(n >= 2 ? [n] : Int[], s)
         vcat(1, s[1:min(end, _RECYCLE_KEEP)])
     else
-        [k for k in 1:n if k == n || st.weights[k] > keep]
+        [k for k = 1:n if k == n || st.weights[k] > keep]
     end
     p.entries[i] = (basis = st.basis[sel], weights = st.weights[sel], frame = frame)
     return nothing
@@ -101,14 +104,14 @@ function _tail_overlaps(Anew::SymMPS, Aold::SymMPS, side::Symbol)
     L = length(Anew)
     E = Vector{Any}(nothing, L + 1)
     if side === :left
-        for k in L:-1:3
-            T = E[k + 1] === nothing ? Aold[k] : to_concrete!(contract(Aold[k], (3,), E[k + 1], (2,)))
+        for k = L:-1:3
+            T = E[k+1] === nothing ? Aold[k] : to_concrete!(contract(Aold[k], (3,), E[k+1], (2,)))
             E[k] = to_concrete!(contract(_rb(Anew[k], k, L)', (2, 3), T, (2, 3)))
         end
     else
-        for k in 1:(L - 2)
+        for k = 1:(L-2)
             T = E[k] === nothing ? Aold[k] : to_concrete!(contract(E[k], (2,), Aold[k], (1,)))
-            E[k + 1] = to_concrete!(contract(_rb(Anew[k], k, L)', (1, 2), T, (1, 2)))
+            E[k+1] = to_concrete!(contract(_rb(Anew[k], k, L)', (1, 2), T, (1, 2)))
         end
     end
     return E
@@ -125,7 +128,7 @@ by the solver).
 function _recycle_transport(e, side::Symbol, Pm, Fnew, E, i::Int)
     Fold = e.frame
     if side === :left                               # opposite frame: (bond, site_{i+1}, link_{i+1})
-        Ek = E[i + 2]
+        Ek = E[i+2]
         Fn = setitag(Fnew, 1, "RCb")
         Ek === nothing || (Fn = setitag(Fn, 3, "RB,$(i + 2)"))
         X = Ek === nothing ? Fold : to_concrete!(contract(Fold, (3,), Ek, (2,)))
@@ -151,7 +154,7 @@ end
 
 "`x` minus its projection on the orthonormal `B`, CGS2 (`_krylov_enrich`'s orthogonalisation)."
 function _orth_against(B, x)
-    for _pass in 1:2
+    for _pass = 1:2
         corr = nothing
         for u in B
             ov = _kinner(u, x)
@@ -177,9 +180,18 @@ production one. While `amp ||d||` exceeds `alloc.krylov` the recurrence continue
 (one new application each). Block vectors are scored by their Galerkin coefficient, defect
 directions by the defect weight, and appended to the frame by the same rule (`_extend_frame`).
 """
-function _krylov_enrich_recycled(v0, applyH, Q0, side::Symbol, tau::ComplexF64,
-                                 alloc::BasisAllocation, C::AbstractVector; workcap::Int = 0,
-                                 maxdepth::Int = _KRY_MAXDEPTH, amp::Float64 = 1.0)
+function _krylov_enrich_recycled(
+    v0,
+    applyH,
+    Q0,
+    side::Symbol,
+    tau::ComplexF64,
+    alloc::BasisAllocation,
+    C::AbstractVector;
+    workcap::Int = 0,
+    maxdepth::Int = _KRY_MAXDEPTH,
+    amp::Float64 = 1.0,
+)
     perp = side === :left ? perp_component : perp_component_right
     fl = side === :left ? 3 : 1
     Q = Q0
@@ -210,22 +222,22 @@ function _krylov_enrich_recycled(v0, applyH, Q0, side::Symbol, tau::ComplexF64,
     Rs = Any[]
     function image!(k)                                   # column k of Hm and its residual
         y = applyH(B[k])
-        for j in 1:k
+        for j = 1:k
             Hm[j, k] = tensor_inner(B[j], y)
         end
         r = _orth_against(B[1:k], y)
-        for j in 1:k                                     # the CGS2 correction, folded back
+        for j = 1:k                                     # the CGS2 correction, folded back
             Hm[j, k] += tensor_inner(B[j], r)
         end
         push!(Rs, _orth_against(B[1:k], r))
     end
     # the block: images of the seed and the recycled vectors (refreshed, never reused)
-    for k in 1:length(B)
+    for k = 1:length(B)
         image!(k)
         nref += 1
         # later block vectors' residuals must also be orthogonal to the earlier block vectors
     end
-    for k in 1:length(B), j in (k + 1):length(B)
+    for k = 1:length(B), j = (k+1):length(B)
         ov = tensor_inner(B[j], Rs[k])
         Hm[j, k] += ov
         Rs[k] = to_concrete(Rs[k] - ov * B[j])
@@ -233,7 +245,7 @@ function _krylov_enrich_recycled(v0, applyH, Q0, side::Symbol, tau::ComplexF64,
     n = length(B)
     if nrec > 0
         cG = exp(teff .* Hm[1:n, 1:n])[:, 1]
-        for k in 2:n
+        for k = 2:n
             w = amp * abs(cG[k])
             push!(ws, w)
             score!(B[k], w, k == 2) || (capped = true)
@@ -242,7 +254,7 @@ function _krylov_enrich_recycled(v0, applyH, Q0, side::Symbol, tau::ComplexF64,
     while !capped
         ph = _phi1_e1(teff .* Hm[1:n, 1:n])
         d = nothing
-        for k in 1:n
+        for k = 1:n
             t = (teff * ph[k]) * Rs[k]
             d = d === nothing ? t : d + t
         end
@@ -263,9 +275,9 @@ function _krylov_enrich_recycled(v0, applyH, Q0, side::Symbol, tau::ComplexF64,
         bn = to_concrete((1.0 / norm(bn)) * bn)
         push!(B, bn)
         push!(ws, weight)
-        for k in 1:n                                     # old residuals lose their bn part
+        for k = 1:n                                     # old residuals lose their bn part
             ov = tensor_inner(bn, Rs[k])
-            Hm[n + 1, k] += ov
+            Hm[n+1, k] += ov
             Rs[k] = to_concrete(Rs[k] - ov * bn)
         end
         image!(n + 1)
@@ -273,10 +285,23 @@ function _krylov_enrich_recycled(v0, applyH, Q0, side::Symbol, tau::ComplexF64,
         n += 1
         score!(bn, weight, n == 2) || (capped = true)
     end
-    return (Q, (eta_c = eta_c, eta_d = eta_d, added = added, n_h1 = nref + nnew,
-                d_after_c = eta_c <= alloc.krylov && added > 0, capped = capped,
-                met = closed && !capped, basis = B, weights = ws, n_recycled = nrec,
-                n_refresh = nref, n_new = nnew))
+    return (
+        Q,
+        (
+            eta_c = eta_c,
+            eta_d = eta_d,
+            added = added,
+            n_h1 = nref + nnew,
+            d_after_c = eta_c <= alloc.krylov && added > 0,
+            capped = capped,
+            met = closed && !capped,
+            basis = B,
+            weights = ws,
+            n_recycled = nrec,
+            n_refresh = nref,
+            n_new = nnew,
+        ),
+    )
 end
 
 """
@@ -285,8 +310,20 @@ end
 The bond's local Krylov stage: recycled from the entry `e` (transported by `transport()`) when
 there is one and the step is unitary, `_krylov_enrich` otherwise. Logs the visit.
 """
-function _recycled_or_fresh(rec, side::Symbol, i::Int, e, transport, v0, applyH, Q0,
-                            tau::ComplexF64, alloc::BasisAllocation; round::Int, kw...)
+function _recycled_or_fresh(
+    rec,
+    side::Symbol,
+    i::Int,
+    e,
+    transport,
+    v0,
+    applyH,
+    Q0,
+    tau::ComplexF64,
+    alloc::BasisAllocation;
+    round::Int,
+    kw...,
+)
     if rec === nothing || e === nothing || real(tau) != 0 || get(kw, :fixed_depth, 0) > 0
         return _krylov_enrich(v0, applyH, Q0, side, tau, alloc; kw...)
     end
@@ -303,25 +340,70 @@ function _recycled_or_fresh(rec, side::Symbol, i::Int, e, transport, v0, applyH,
             nseed += n
         end
         Q, st = _krylov_enrich(v0, applyH, Q, side, tau, alloc; kw...)
-        push!(rec.log[side], (round = round, bond = i, cached = length(e.basis), recycled = nseed,
-                              n_refresh = 0, n_new = st.n_h1, added = st.added + nseed,
-                              t_transport = tt, met = st.met, capped = st.capped))
+        push!(
+            rec.log[side],
+            (
+                round = round,
+                bond = i,
+                cached = length(e.basis),
+                recycled = nseed,
+                n_refresh = 0,
+                n_new = st.n_h1,
+                added = st.added + nseed,
+                t_transport = tt,
+                met = st.met,
+                capped = st.capped,
+            ),
+        )
         return Q, st
     end
     if rec.mode === :complement
         Q, st = _krylov_enrich(v0, applyH, Q0, side, tau, alloc; kw..., recycled = C)
-        push!(rec.log[side], (round = round, bond = i, cached = length(e.basis),
-                              recycled = st.n_recycled, n_refresh = 0, n_new = st.n_h1,
-                              added = st.added, t_transport = tt, met = st.met,
-                              capped = st.capped, rec_closed = st.rec_closed))
+        push!(
+            rec.log[side],
+            (
+                round = round,
+                bond = i,
+                cached = length(e.basis),
+                recycled = st.n_recycled,
+                n_refresh = 0,
+                n_new = st.n_h1,
+                added = st.added,
+                t_transport = tt,
+                met = st.met,
+                capped = st.capped,
+                rec_closed = st.rec_closed,
+            ),
+        )
         return Q, st
     end
-    Q, st = _krylov_enrich_recycled(v0, applyH, Q0, side, tau, alloc, C;
-                                    workcap = get(kw, :workcap, 0),
-                                    amp = get(kw, :amp, 1.0))
-    push!(rec.log[side], (round = round, bond = i, cached = length(e.basis),
-                          recycled = st.n_recycled, n_refresh = st.n_refresh, n_new = st.n_new,
-                          added = st.added, t_transport = tt, met = st.met, capped = st.capped,
-                          eta_c = st.eta_c, eta_d = st.eta_d))
+    Q, st = _krylov_enrich_recycled(
+        v0,
+        applyH,
+        Q0,
+        side,
+        tau,
+        alloc,
+        C;
+        workcap = get(kw, :workcap, 0),
+        amp = get(kw, :amp, 1.0),
+    )
+    push!(
+        rec.log[side],
+        (
+            round = round,
+            bond = i,
+            cached = length(e.basis),
+            recycled = st.n_recycled,
+            n_refresh = st.n_refresh,
+            n_new = st.n_new,
+            added = st.added,
+            t_transport = tt,
+            met = st.met,
+            capped = st.capped,
+            eta_c = st.eta_c,
+            eta_d = st.eta_d,
+        ),
+    )
     return Q, st
 end

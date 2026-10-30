@@ -41,23 +41,46 @@ and `_krylov_enrich` append validated directions. Returns the new frames (genera
 root environment, the bond ledger and the per-bond misses. A measuring sweep (`enrich = false`)
 grows nothing and uses the cached frame chain ([`_side_cache!`](@ref)).
 """
-function _frontier_left(Fm::SymMPS, mpo, fr::KLFrames, tau::ComplexF64,
-                        alloc::BasisAllocation, ckw::NamedTuple; enrich::Bool, gen::Int,
-                        workcap::Int, amp::Float64, rng::AbstractRNG, nsample::Int = 0,
-                        fold::Bool = false, bonds::Bool = false)
+function _frontier_left(
+    Fm::SymMPS,
+    mpo,
+    fr::KLFrames,
+    tau::ComplexF64,
+    alloc::BasisAllocation,
+    ckw::NamedTuple;
+    enrich::Bool,
+    gen::Int,
+    workcap::Int,
+    amp::Float64,
+    rng::AbstractRNG,
+    nsample::Int = 0,
+    fold::Bool = false,
+    bonds::Bool = false,
+)
     c, L = fr.c, length(Fm)
     canonical!(Fm, 1)
     chain, zst = _side_cache!(fr, Fm, mpo, :left)
     E = copy(zst)                                # links >= c+1: shared by every frontier
-    env = E[c + 1]
-    for k in c:-1:3                              # links 3..c: this frontier's own gauge
+    env = E[c+1]
+    for k = c:-1:3                              # links 3..c: this frontier's own gauge
         env = _mpo_right_step(env, Fm[k], mpo[k])
         E[k] = env
     end
     rstack = MPORightEnvStack(E)
-    pre = bonds && !enrich ? _bond_measurements(Fm, mpo, fr, chain, rstack, :left;
-                                                expansion = ckw.expansion, fold = fold,
-                                                nsample = nsample, rng = rng) : nothing
+    pre =
+        bonds && !enrich ?
+        _bond_measurements(
+            Fm,
+            mpo,
+            fr,
+            chain,
+            rstack,
+            :left;
+            expansion = ckw.expansion,
+            fold = fold,
+            nsample = nsample,
+            rng = rng,
+        ) : nothing
     lch = boundary_channels(mpo)
     lenv = lch
     lchs = Vector{Any}(undef, L - 1)
@@ -71,16 +94,19 @@ function _frontier_left(Fm::SymMPS, mpo, fr::KLFrames, tau::ComplexF64,
     leak, sleak = zeros(c), zeros(c)
     added, newsec, nskip, nh2 = 0, 0, 0, 0
     nh1 = Ref(0)
-    for i in 1:c
+    for i = 1:c
         enrich || (lch = chain[i])
-        U0 = _check_frame(Pm === nothing ? fr.W[i] : to_concrete!(contract(Pm, (2,), fr.W[i], (1,))),
-                          :left, "frontier U0 = Pm W[$i] (gen $(fr.gen))")
+        U0 = _check_frame(
+            Pm === nothing ? fr.W[i] : to_concrete!(contract(Pm, (2,), fr.W[i], (1,))),
+            :left,
+            "frontier U0 = Pm W[$i] (gen $(fr.gen))",
+        )
         if pre === nothing
             K = C === nothing ? Fm[i] : to_concrete!(contract(C, (2,), Fm[i], (1,)))
-            f = _frame_onto_left(U0, K, Fm[i + 1])
+            f = _frame_onto_left(U0, K, Fm[i+1])
             rch = right_channels(rstack, i + 2)
-            skl, skr, leak[i], k2 = _bond_action(ckw.expansion, f, mpo, i, lch, rch, U0, nothing,
-                                                 :left, fold, rng)
+            skl, skr, leak[i], k2 =
+                _bond_action(ckw.expansion, f, mpo, i, lch, rch, U0, nothing, :left, fold, rng)
             nsample > 0 &&
                 (sleak[i] = sampled_leak(ckw.expansion, f, skl, skr, :left, nsample, rng))
         else
@@ -92,23 +118,37 @@ function _frontier_left(Fm::SymMPS, mpo, fr::KLFrames, tau::ComplexF64,
         nrec, rclosed, rov, rdef = 0, false, 0.0, 0.0
         Wi = if enrich && !quiet
             ex = _frontier_expand(f, mpo, i, lch, rch, :left, ckw, bl, rng)
-            M = to_concrete!(contract(Fm[i + 1], (2, 3), ex.V_ex', (2, 3)))
+            M = to_concrete!(contract(Fm[i+1], (2, 3), ex.V_ex', (2, 3)))
             Kex = to_concrete!(contract(K, (3,), M, (1,)))
-            H1 = shift_h(one_site_h(mpo, i, lch, push_right_channels(rch, mpo, ex.V_ex, i + 1)),
-                         fr.eshift)
+            H1 = shift_h(
+                one_site_h(mpo, i, lch, push_right_channels(rch, mpo, ex.V_ex, i + 1)),
+                fr.eshift,
+            )
             reuse = get(ckw, :krylov_reuse, true)
             e = rcur === nothing ? nothing : get(rcur.entries, i, nothing)
             Pmi = Pm
-            Q, st = _recycled_or_fresh(rec, :left, i, e,
-                                       () -> _recycle_transport(e, :left, Pmi, ex.V_ex, Eov, i),
-                                       Kex, x -> (nh1[] += 1; apply_one_site(H1, x)),
-                                       reuse ? ex.U_ex : U0, tau, alloc; round = gen + 1,
-                                       workcap = workcap, amp = amp, state_seed = false,
-                                       fixed_depth = get(ckw, :krylov_depth, 0))
+            Q, st = _recycled_or_fresh(
+                rec,
+                :left,
+                i,
+                e,
+                () -> _recycle_transport(e, :left, Pmi, ex.V_ex, Eov, i),
+                Kex,
+                x -> (nh1[] += 1; apply_one_site(H1, x)),
+                reuse ? ex.U_ex : U0,
+                tau,
+                alloc;
+                round = gen + 1,
+                workcap = workcap,
+                amp = amp,
+                state_seed = false,
+                fixed_depth = get(ckw, :krylov_depth, 0),
+            )
             _recycle_store!(rec, :left, i, st, ex.V_ex, alloc.krylov)
             nrec = get(st, :n_recycled, 0)
-            rclosed, rov, rdef = get(st, :rec_closed, false), get(st, :rec_overlap, 0.0),
-                                 get(st, :rec_defect, 0.0)
+            rclosed, rov, rdef = get(st, :rec_closed, false),
+            get(st, :rec_overlap, 0.0),
+            get(st, :rec_defect, 0.0)
             _record_krylov!(bl, st, alloc)
             reuse ? Q : _merge_frame(Q, ex.U_ex, :left)
         else
@@ -122,38 +162,82 @@ function _frontier_left(Fm::SymMPS, mpo, fr::KLFrames, tau::ComplexF64,
         added += nadd
         newsec += nsec
         _log_bond!(lg, bl, i, :left, leg_dim(Wn[i], 3))
-        _tag_last!(lg, (leak = indicator(alloc, leak[i]), skipped = quiet || !enrich,
-                        added = nadd, new_sectors = nsec, width_before = leg_dim(U0, 3),
-                        recycled = nrec, rec_closed = rclosed, rec_overlap = rov,
-                        rec_defect = rdef))
+        _tag_last!(
+            lg,
+            (
+                leak = indicator(alloc, leak[i]),
+                skipped = quiet || !enrich,
+                added = nadd,
+                new_sectors = nsec,
+                width_before = leg_dim(U0, 3),
+                recycled = nrec,
+                rec_closed = rclosed,
+                rec_overlap = rov,
+                rec_defect = rdef,
+            ),
+        )
         enrich && (Pm = to_concrete!(contract(Wn[i]', (1, 2), U0, (1, 2))))  # (new_i, old_i)
         pre === nothing && (C = to_concrete!(contract(Wn[i]', (1, 2), K, (1, 2))))
         lchs[i] = lch
         i == c && (lenv = lch)
         enrich && i < c && (lch = push_left_channels(lch, mpo, Wn[i], i))
     end
-    return (frames = Wn, env = lenv, chain = lchs, ledger = lg, leak = leak, sleak = sleak,
-            added = added, new_sectors = newsec, skipped = nskip, n_h2 = nh2, n_h1 = nh1[])
+    return (
+        frames = Wn,
+        env = lenv,
+        chain = lchs,
+        ledger = lg,
+        leak = leak,
+        sleak = sleak,
+        added = added,
+        new_sectors = newsec,
+        skipped = nskip,
+        n_h2 = nh2,
+        n_h1 = nh1[],
+    )
 end
 
 "Row mirror of [`_frontier_left`](@ref): grows `fr.Z[L-1..c]`."
-function _frontier_right(Fm::SymMPS, mpo, fr::KLFrames, tau::ComplexF64,
-                         alloc::BasisAllocation, ckw::NamedTuple; enrich::Bool, gen::Int,
-                         workcap::Int, amp::Float64, rng::AbstractRNG, nsample::Int = 0,
-                         fold::Bool = false, bonds::Bool = false)
+function _frontier_right(
+    Fm::SymMPS,
+    mpo,
+    fr::KLFrames,
+    tau::ComplexF64,
+    alloc::BasisAllocation,
+    ckw::NamedTuple;
+    enrich::Bool,
+    gen::Int,
+    workcap::Int,
+    amp::Float64,
+    rng::AbstractRNG,
+    nsample::Int = 0,
+    fold::Bool = false,
+    bonds::Bool = false,
+)
     c, L = fr.c, length(Fm)
     canonical!(Fm, L)
     chain, wst = _side_cache!(fr, Fm, mpo, :right)
     E = copy(wst)                                # links <= c: shared by every frontier
     env = E[c]
-    for i in c:(L - 2)                           # links c+1..L-1: this frontier's own gauge
+    for i = c:(L-2)                           # links c+1..L-1: this frontier's own gauge
         env = _mpo_left_step(env, Fm[i], mpo[i])
-        E[i + 1] = env
+        E[i+1] = env
     end
     lstack = MPOLeftEnvStack(E)
-    pre = bonds && !enrich ? _bond_measurements(Fm, mpo, fr, chain, lstack, :right;
-                                                expansion = ckw.expansion, fold = fold,
-                                                nsample = nsample, rng = rng) : nothing
+    pre =
+        bonds && !enrich ?
+        _bond_measurements(
+            Fm,
+            mpo,
+            fr,
+            chain,
+            lstack,
+            :right;
+            expansion = ckw.expansion,
+            fold = fold,
+            nsample = nsample,
+            rng = rng,
+        ) : nothing
     rch = boundary_channels(mpo)
     renv = rch
     rchs = Vector{Any}(undef, L - 1)
@@ -167,16 +251,19 @@ function _frontier_right(Fm::SymMPS, mpo, fr::KLFrames, tau::ComplexF64,
     leak, sleak = zeros(L - 1), zeros(L - 1)
     added, newsec, nskip, nh2 = 0, 0, 0, 0
     nh1 = Ref(0)
-    for j in (L - 1):-1:c
+    for j = (L-1):-1:c
         enrich || (rch = chain[j])
-        V0 = _check_frame(Pm === nothing ? fr.Z[j] : to_concrete!(contract(fr.Z[j], (3,), Pm, (1,))),
-                          :right, "frontier V0 = Z[$j] Pm (gen $(fr.gen))")
+        V0 = _check_frame(
+            Pm === nothing ? fr.Z[j] : to_concrete!(contract(fr.Z[j], (3,), Pm, (1,))),
+            :right,
+            "frontier V0 = Z[$j] Pm (gen $(fr.gen))",
+        )
         if pre === nothing
-            B = D === nothing ? Fm[j + 1] : to_concrete!(contract(Fm[j + 1], (3,), D, (1,)))
+            B = D === nothing ? Fm[j+1] : to_concrete!(contract(Fm[j+1], (3,), D, (1,)))
             f = _frame_onto_right(Fm[j], B, V0)
             lch = left_channels(lstack, j)
-            skl, skr, leak[j], k2 = _bond_action(ckw.expansion, f, mpo, j, lch, rch, nothing, V0,
-                                                 :right, fold, rng)
+            skl, skr, leak[j], k2 =
+                _bond_action(ckw.expansion, f, mpo, j, lch, rch, nothing, V0, :right, fold, rng)
             nsample > 0 &&
                 (sleak[j] = sampled_leak(ckw.expansion, f, skl, skr, :right, nsample, rng))
         else
@@ -190,21 +277,35 @@ function _frontier_right(Fm::SymMPS, mpo, fr::KLFrames, tau::ComplexF64,
             ex = _frontier_expand(f, mpo, j, lch, rch, :right, ckw, bl, rng)
             M = to_concrete!(contract(ex.U_ex', (1, 2), Fm[j], (1, 2)))
             Bex = to_concrete!(contract(M, (2,), B, (1,)))
-            H1 = shift_h(one_site_h(mpo, j + 1, push_left_channels(lch, mpo, ex.U_ex, j), rch),
-                         fr.eshift)
+            H1 = shift_h(
+                one_site_h(mpo, j + 1, push_left_channels(lch, mpo, ex.U_ex, j), rch),
+                fr.eshift,
+            )
             reuse = get(ckw, :krylov_reuse, true)
             e = rcur === nothing ? nothing : get(rcur.entries, j, nothing)
             Pmj = Pm
-            Q, st = _recycled_or_fresh(rec, :right, j, e,
-                                       () -> _recycle_transport(e, :right, Pmj, ex.U_ex, Eov, j),
-                                       Bex, x -> (nh1[] += 1; apply_one_site(H1, x)),
-                                       reuse ? ex.V_ex : V0, tau, alloc; round = gen + 1,
-                                       workcap = workcap, amp = amp, state_seed = false,
-                                       fixed_depth = get(ckw, :krylov_depth, 0))
+            Q, st = _recycled_or_fresh(
+                rec,
+                :right,
+                j,
+                e,
+                () -> _recycle_transport(e, :right, Pmj, ex.U_ex, Eov, j),
+                Bex,
+                x -> (nh1[] += 1; apply_one_site(H1, x)),
+                reuse ? ex.V_ex : V0,
+                tau,
+                alloc;
+                round = gen + 1,
+                workcap = workcap,
+                amp = amp,
+                state_seed = false,
+                fixed_depth = get(ckw, :krylov_depth, 0),
+            )
             _recycle_store!(rec, :right, j, st, ex.U_ex, alloc.krylov)
             nrec = get(st, :n_recycled, 0)
-            rclosed, rov, rdef = get(st, :rec_closed, false), get(st, :rec_overlap, 0.0),
-                                 get(st, :rec_defect, 0.0)
+            rclosed, rov, rdef = get(st, :rec_closed, false),
+            get(st, :rec_overlap, 0.0),
+            get(st, :rec_defect, 0.0)
             _record_krylov!(bl, st, alloc)
             reuse ? Q : _merge_frame(Q, ex.V_ex, :right)
         else
@@ -218,24 +319,45 @@ function _frontier_right(Fm::SymMPS, mpo, fr::KLFrames, tau::ComplexF64,
         added += nadd
         newsec += nsec
         _log_bond!(lg, bl, j, :right, leg_dim(Zn[j], 1))
-        _tag_last!(lg, (leak = indicator(alloc, leak[j]), skipped = quiet || !enrich,
-                        added = nadd, new_sectors = nsec, width_before = leg_dim(V0, 1),
-                        recycled = nrec, rec_closed = rclosed, rec_overlap = rov,
-                        rec_defect = rdef))
+        _tag_last!(
+            lg,
+            (
+                leak = indicator(alloc, leak[j]),
+                skipped = quiet || !enrich,
+                added = nadd,
+                new_sectors = nsec,
+                width_before = leg_dim(V0, 1),
+                recycled = nrec,
+                rec_closed = rclosed,
+                rec_overlap = rov,
+                rec_defect = rdef,
+            ),
+        )
         enrich && (Pm = to_concrete!(contract(V0, (2, 3), Zn[j]', (2, 3))))  # (old_j, new_j)
         pre === nothing && (D = to_concrete!(contract(B, (2, 3), Zn[j]', (2, 3))))
         rchs[j] = rch
         j == c && (renv = rch)
         enrich && j > c && (rch = push_right_channels(rch, mpo, Zn[j], j + 1))
     end
-    return (frames = Zn, env = renv, chain = rchs, ledger = lg, leak = leak, sleak = sleak,
-            added = added,
-            new_sectors = newsec, skipped = nskip, n_h2 = nh2, n_h1 = nh1[])
+    return (
+        frames = Zn,
+        env = renv,
+        chain = rchs,
+        ledger = lg,
+        leak = leak,
+        sleak = sleak,
+        added = added,
+        new_sectors = newsec,
+        skipped = nskip,
+        n_h2 = nh2,
+        n_h1 = nh1[],
+    )
 end
 
-_frame_width(fr::KLFrames, L::Int) =
-    max(maximum(leg_dim(fr.W[i], 3) for i in 1:fr.c),
-        maximum(leg_dim(fr.Z[j], 1) for j in fr.c:(L - 1)))
+_frame_width(fr::KLFrames, L::Int) = max(
+    maximum(leg_dim(fr.W[i], 3) for i = 1:fr.c),
+    maximum(leg_dim(fr.Z[j], 1) for j = fr.c:(L-1)),
+)
 
 """
     _frontier_sweep!(fr, psi, mpo, F, tau, alloc, ckw; enrich, workcap, nrm, parallel, rng,
@@ -248,42 +370,86 @@ otherwise. `leak` is the time-weighted outside-space action `|tau| sqrt(left^2 +
 ||psi||` of the frontier BEFORE this sweep enriched; `met` is whether every bond ended within
 its share.
 """
-function _frontier_sweep!(fr::KLFrames, psi::SymMPS, mpo, F::KrylovFrontier, tau::ComplexF64,
-                          alloc::BasisAllocation, ckw::NamedTuple; enrich::Bool = true,
-                          workcap::Int = 0, nrm::Float64 = 1.0, parallel::Bool = false,
-                          rng::AbstractRNG = MersenneTwister(0x5EED), pass::Int = 0,
-                          nsample::Int = 0, fold::Bool = false)
-    F.gen == fr.gen || throw(ArgumentError(
-        "stale frontier: built in frames generation $(F.gen), the frames are at $(fr.gen) -- " *
-        "the root operator and frontiers must be rebuilt whenever the frames change"))
+function _frontier_sweep!(
+    fr::KLFrames,
+    psi::SymMPS,
+    mpo,
+    F::KrylovFrontier,
+    tau::ComplexF64,
+    alloc::BasisAllocation,
+    ckw::NamedTuple;
+    enrich::Bool = true,
+    workcap::Int = 0,
+    nrm::Float64 = 1.0,
+    parallel::Bool = false,
+    rng::AbstractRNG = MersenneTwister(0x5EED),
+    pass::Int = 0,
+    nsample::Int = 0,
+    fold::Bool = false,
+)
+    F.gen == fr.gen || throw(
+        ArgumentError(
+            "stale frontier: built in frames generation $(F.gen), the frames are at $(fr.gen) -- " *
+            "the root operator and frontiers must be rebuilt whenever the frames change",
+        ),
+    )
     t0 = time_ns()
     L, c = length(psi), fr.c
     nF = norm(F.core)
     zero_leaks = (zeros(c), zeros(L - 1))
     if nF <= _FRONTIER_FLOOR * max(nrm, eps())
         lg = AdaptiveLedger()
-        push!(lg.closure_log, (pass = pass, frontier = F.degree, enrich = enrich,
-                               norm = nF / max(nrm, eps()), leak = 0.0, added = 0,
-                               zero = true, t = 0.0))
-        return (added = 0, leak = 0.0, leak_left = 0.0, leak_right = 0.0, met = true,
-                capped = false, ledger = lg, leaks_left = zero_leaks[1], leaks_right = zero_leaks[2],
-                sleaks_left = zero_leaks[1], sleaks_right = zero_leaks[2])
+        push!(
+            lg.closure_log,
+            (
+                pass = pass,
+                frontier = F.degree,
+                enrich = enrich,
+                norm = nF / max(nrm, eps()),
+                leak = 0.0,
+                added = 0,
+                zero = true,
+                t = 0.0,
+            ),
+        )
+        return (
+            added = 0,
+            leak = 0.0,
+            leak_left = 0.0,
+            leak_right = 0.0,
+            met = true,
+            capped = false,
+            ledger = lg,
+            leaks_left = zero_leaks[1],
+            leaks_right = zero_leaks[2],
+            sleaks_left = zero_leaks[1],
+            sleaks_right = zero_leaks[2],
+        )
     end
     Fm = _frontier_mps(psi, fr, F.core)
     FmR = copy(Fm)
     gen = fr.gen + 1
     amp = nF / max(nrm, eps())
     rngR = parallel ? MersenneTwister(rand(rng, UInt64)) : rng
-    kw(r) = (enrich = enrich, gen = gen, workcap = workcap, amp = amp, rng = r,
-             nsample = nsample, fold = fold,
-             bonds = !enrich && _BOND_TASKS[] && _frontier_parallel(parallel))
+    kw(r) = (
+        enrich = enrich,
+        gen = gen,
+        workcap = workcap,
+        amp = amp,
+        rng = r,
+        nsample = nsample,
+        fold = fold,
+        bonds = !enrich && _BOND_TASKS[] && _frontier_parallel(parallel),
+    )
     rl, rr = if parallel
         tR = Threads.@spawn _frontier_right(FmR, mpo, fr, tau, alloc, ckw; kw(rngR)...)
         l = _frontier_left(Fm, mpo, fr, tau, alloc, ckw; kw(rng)...)
         (l, fetch(tR))
     else
-        (_frontier_left(Fm, mpo, fr, tau, alloc, ckw; kw(rng)...),
-         _frontier_right(FmR, mpo, fr, tau, alloc, ckw; kw(rngR)...))
+        (
+            _frontier_left(Fm, mpo, fr, tau, alloc, ckw; kw(rng)...),
+            _frontier_right(FmR, mpo, fr, tau, alloc, ckw; kw(rngR)...),
+        )
     end
     lg = AdaptiveLedger()
     for half in (rl.ledger, rr.ledger)
@@ -292,8 +458,9 @@ function _frontier_sweep!(fr::KLFrames, psi::SymMPS, mpo, F::KrylovFrontier, tau
     end
     lL, lR = sqrt(sum(abs2, rl.leak)), sqrt(sum(abs2, rr.leak))
     leak = indicator(alloc, sqrt(lL^2 + lR^2))
-    met = enrich ? lg.tolerance_met :
-          all(indicator(alloc, x) <= alloc.per_bond for x in vcat(rl.leak, rr.leak))
+    met =
+        enrich ? lg.tolerance_met :
+        all(indicator(alloc, x) <= alloc.per_bond for x in vcat(rl.leak, rr.leak))
     added = rl.added + rr.added
     wbefore = _frame_width(fr, L)
     if enrich           # the sweep's recycle entries live in its frames: usable only if committed
@@ -302,10 +469,10 @@ function _frontier_sweep!(fr::KLFrames, psi::SymMPS, mpo, F::KrylovFrontier, tau
         _recycle_commit!(rec, :right, added > 0)
     end
     if enrich && added > 0
-        for i in 1:c
+        for i = 1:c
             fr.W[i] = rl.frames[i]
         end
-        for j in c:(L - 1)
+        for j = c:(L-1)
             fr.Z[j] = rr.frames[j]
         end
         fr.lenv, fr.renv, fr.gen = rl.env, rr.env, gen
@@ -316,22 +483,49 @@ function _frontier_sweep!(fr::KLFrames, psi::SymMPS, mpo, F::KrylovFrontier, tau
     lg.n_closure_sweeps = 1
     lg.n_h2_leak = rl.n_h2 + rr.n_h2
     lg.n_h1_closure = rl.n_h1 + rr.n_h1
-    push!(lg.closure_log,
-          (pass = pass, frontier = F.degree, enrich = enrich, norm = amp, leak = leak,
-           leak_left = indicator(alloc, lL), leak_right = indicator(alloc, lR), met = met,
-           added = added, added_left = rl.added, added_right = rr.added,
-           new_sectors = rl.new_sectors + rr.new_sectors,
-           skipped = rl.skipped + rr.skipped, bonds = c + (L - c),
-           width_before = wbefore, width_after = _frame_width(fr, L),
-           n_h2 = lg.n_h2_leak, n_h1 = lg.n_h1_closure, n_probes = lg.n_probes,
-           n_selected = lg.n_selected, n_krylov = lg.n_krylov, zero = false,
-           capped = enrich && lg.workcap_reached, t = (time_ns() - t0) / 1e9))
+    push!(
+        lg.closure_log,
+        (
+            pass = pass,
+            frontier = F.degree,
+            enrich = enrich,
+            norm = amp,
+            leak = leak,
+            leak_left = indicator(alloc, lL),
+            leak_right = indicator(alloc, lR),
+            met = met,
+            added = added,
+            added_left = rl.added,
+            added_right = rr.added,
+            new_sectors = rl.new_sectors + rr.new_sectors,
+            skipped = rl.skipped + rr.skipped,
+            bonds = c + (L - c),
+            width_before = wbefore,
+            width_after = _frame_width(fr, L),
+            n_h2 = lg.n_h2_leak,
+            n_h1 = lg.n_h1_closure,
+            n_probes = lg.n_probes,
+            n_selected = lg.n_selected,
+            n_krylov = lg.n_krylov,
+            zero = false,
+            capped = enrich && lg.workcap_reached,
+            t = (time_ns() - t0) / 1e9,
+        ),
+    )
     # `capped`: an enrichment of this sweep stopped at the work ceiling (`_closure_loop!`).
-    return (added = added, leak = leak, leak_left = indicator(alloc, lL),
-            leak_right = indicator(alloc, lR), met = met,
-            capped = enrich && lg.workcap_reached, ledger = lg,
-            leaks_left = rl.leak, leaks_right = rr.leak,
-            sleaks_left = rl.sleak, sleaks_right = rr.sleak)
+    return (
+        added = added,
+        leak = leak,
+        leak_left = indicator(alloc, lL),
+        leak_right = indicator(alloc, lR),
+        met = met,
+        capped = enrich && lg.workcap_reached,
+        ledger = lg,
+        leaks_left = rl.leak,
+        leaks_right = rr.leak,
+        sleaks_left = rl.sleak,
+        sleaks_right = rr.sleak,
+    )
 end
 
 """
@@ -348,21 +542,44 @@ with `left = ||(I - P_L ⊗ 1) H v||` and `right = ||(1 ⊗ (I - P_R)) H v||`. L
 these an estimate; `nsample > 0` adds randomised per-bond estimates (`sampled_*`). `expansion` is
 the step's `BasisExpansion`, which measures the per-bond actions.
 """
-function estimate_global_complement_action(psi::SymMPS, mpo, fr::KLFrames, core;
-                                           expansion::BasisExpansion, nsample::Int = 0,
-                                           rng::AbstractRNG = MersenneTwister(0x5EED))
+function estimate_global_complement_action(
+    psi::SymMPS,
+    mpo,
+    fr::KLFrames,
+    core;
+    expansion::BasisExpansion,
+    nsample::Int = 0,
+    rng::AbstractRNG = MersenneTwister(0x5EED),
+)
     L, c = length(psi), fr.c
     alloc = basis_allocation(AdaptiveBudget(1.0, 0.0, 1.0), L - 1)    # scale 1: raw norms
-    r = _frontier_sweep!(fr, psi, mpo, KrylovFrontier(core, 0, fr.gen), ComplexF64(0), alloc,
-                         (expansion = expansion,); enrich = false, nrm = max(norm(core), eps()),
-                         nsample = nsample, rng = rng)
-    pl, pr = r.leaks_left, r.leaks_right[c:(L - 1)]
-    sl, sr = r.sleaks_left, r.sleaks_right[c:(L - 1)]
+    r = _frontier_sweep!(
+        fr,
+        psi,
+        mpo,
+        KrylovFrontier(core, 0, fr.gen),
+        ComplexF64(0),
+        alloc,
+        (expansion = expansion,);
+        enrich = false,
+        nrm = max(norm(core), eps()),
+        nsample = nsample,
+        rng = rng,
+    )
+    pl, pr = r.leaks_left, r.leaks_right[c:(L-1)]
+    sl, sr = r.sleaks_left, r.sleaks_right[c:(L-1)]
     left, right = sqrt(sum(abs2, pl)), sqrt(sum(abs2, pr))
-    return (left = left, right = right, bound = sqrt(left^2 + right^2),
-            per_left = pl, per_right = pr,
-            sampled_left = sqrt(sum(abs2, sl)), sampled_right = sqrt(sum(abs2, sr)),
-            per_sampled_left = sl, per_sampled_right = sr)
+    return (
+        left = left,
+        right = right,
+        bound = sqrt(left^2 + right^2),
+        per_left = pl,
+        per_right = pr,
+        sampled_left = sqrt(sum(abs2, sl)),
+        sampled_right = sqrt(sum(abs2, sr)),
+        per_sampled_left = sl,
+        per_sampled_right = sr,
+    )
 end
 
 """
@@ -375,35 +592,60 @@ the frames already capture, `rho_j = ||(I - P) A F_j|| / ||F_j||`. Returns the t
 `ledger`, `n_root`, and `met0` (the `j = 0` verdict). With `parallel` the frontiers run
 concurrently, each on its own RNG stream from `rng`; results merge in `j` order.
 """
-function _measure_frontiers(fr::KLFrames, psi::SymMPS, mpo, S0, tau::ComplexF64,
-                            alloc::BasisAllocation, ckw::NamedTuple, m::Int;
-                            nrm::Float64 = 1.0, parallel::Bool = false,
-                            rng::AbstractRNG = MersenneTwister(0x5EED), pass::Int = 0,
-                            workcap::Int = 0, fold::Bool = false)
+function _measure_frontiers(
+    fr::KLFrames,
+    psi::SymMPS,
+    mpo,
+    S0,
+    tau::ComplexF64,
+    alloc::BasisAllocation,
+    ckw::NamedTuple,
+    m::Int;
+    nrm::Float64 = 1.0,
+    parallel::Bool = false,
+    rng::AbstractRNG = MersenneTwister(0x5EED),
+    pass::Int = 0,
+    workcap::Int = 0,
+    fold::Bool = false,
+)
     H0 = _root_generator(mpo, fr)
     nroot = Ref(0)
-    F = m > 1 ? _projected_frontiers(x -> (nroot[] += 1; apply_zero_site(H0, x)), S0, tau,
-                                     m - 1) : Any[]
+    F =
+        m > 1 ? _projected_frontiers(x -> (nroot[] += 1; apply_zero_site(H0, x)), S0, tau, m - 1) :
+        Any[]
     lg = AdaptiveLedger()
     leak, rho, met, met0 = zeros(m), zeros(m), true, true
-    cores = Any[j == 0 ? S0 : F[j] for j in 0:(m - 1)]
-    measure(j, r) = _frontier_sweep!(fr, psi, mpo, KrylovFrontier(cores[j + 1], j, fr.gen), tau,
-                                     alloc, ckw; enrich = false, workcap = workcap, nrm = nrm,
-                                     parallel = parallel, rng = r, pass = pass, fold = fold)
+    cores = Any[j == 0 ? S0 : F[j] for j = 0:(m-1)]
+    measure(j, r) = _frontier_sweep!(
+        fr,
+        psi,
+        mpo,
+        KrylovFrontier(cores[j+1], j, fr.gen),
+        tau,
+        alloc,
+        ckw;
+        enrich = false,
+        workcap = workcap,
+        nrm = nrm,
+        parallel = parallel,
+        rng = r,
+        pass = pass,
+        fold = fold,
+    )
     rs = if _frontier_parallel(parallel) && m > 1
         _prime_caches!(fr, psi, mpo, S0)
-        rngs = [MersenneTwister(rand(rng, UInt64)) for _ in 1:m]
-        fetch.([Threads.@spawn(measure(j, rngs[j + 1])) for j in 0:(m - 1)])
+        rngs = [MersenneTwister(rand(rng, UInt64)) for _ = 1:m]
+        fetch.([Threads.@spawn(measure(j, rngs[j+1])) for j = 0:(m-1)])
     else
-        [measure(j, rng) for j in 0:(m - 1)]
+        [measure(j, rng) for j = 0:(m-1)]
     end
-    for j in 0:(m - 1)
-        core, r = cores[j + 1], rs[j + 1]
+    for j = 0:(m-1)
+        core, r = cores[j+1], rs[j+1]
         merge_ledger!(lg, r.ledger)
         nF = norm(core)
         raw = sqrt(sum(abs2, r.leaks_left) + sum(abs2, r.leaks_right))
-        leak[j + 1] = r.leak
-        rho[j + 1] = nF > 0 ? raw / nF : 0.0
+        leak[j+1] = r.leak
+        rho[j+1] = nF > 0 ? raw / nF : 0.0
         j >= 1 ? (met &= r.met) : (met0 = r.met)
     end
     lg.leak_initial, lg.rho_initial = leak, rho
@@ -421,16 +663,15 @@ Converged means a pass added nothing and met every share. A pass with a share un
 the work ceiling stops with `capped = true`, since those bonds cannot widen. `maxpass` is a safety
 bound whose hit is reported.
 """
-function _closure_loop!(frontier, sweep!, order::Int; maxpass::Int,
-                        include_zero::Bool = true)
+function _closure_loop!(frontier, sweep!, order::Int; maxpass::Int, include_zero::Bool = true)
     order >= 1 || throw(ArgumentError("order must be >= 1, got $order"))
     log = Any[]
-    later = 1:(order - 1)
-    initial = include_zero ? (0:(order - 1)) : later
+    later = 1:(order-1)
+    initial = include_zero ? (0:(order-1)) : later
     isempty(initial) &&
         return (passes = 0, converged = true, exhausted = false, capped = false, log = log)
     ok0 = true
-    for pass in 1:maxpass
+    for pass = 1:maxpass
         grew, allmet, capped = false, true, false
         for j in (pass == 1 ? initial : later)
             r = sweep!(frontier(j), j, pass)
@@ -440,12 +681,16 @@ function _closure_loop!(frontier, sweep!, order::Int; maxpass::Int,
             capped |= get(r, :capped, false)
             j == 0 && (ok0 = r.met)
         end
-        (!grew || isempty(later)) &&
-            return (passes = pass, converged = allmet && ok0, exhausted = false,
-                    capped = false, log = log)
-        capped && !allmet &&
-            return (passes = pass, converged = false, exhausted = false, capped = true,
-                    log = log)
+        (!grew || isempty(later)) && return (
+            passes = pass,
+            converged = allmet && ok0,
+            exhausted = false,
+            capped = false,
+            log = log,
+        )
+        capped &&
+            !allmet &&
+            return (passes = pass, converged = false, exhausted = false, capped = true, log = log)
     end
     return (passes = maxpass, converged = false, exhausted = true, capped = false, log = log)
 end

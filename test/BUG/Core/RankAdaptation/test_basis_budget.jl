@@ -17,8 +17,13 @@ using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
         # The fixed-knob path is removed from the solver: a retired knob is no keyword.
         @test_throws MethodError cbe_bug_step!(psi, mpo, dt; tol_basis = 1e-5, dex = 4)
         @test_throws MethodError cbe_bug_step!(psi, mpo, dt; trunc_thresh = 1e-10)
-        @test_throws MethodError cbe_bug_midpoint_step!(psi, mpo, dt; tol_expv = 1e-10,
-                                                        stol_pre = 1e-10)
+        @test_throws MethodError cbe_bug_midpoint_step!(
+            psi,
+            mpo,
+            dt;
+            tol_expv = 1e-10,
+            stol_pre = 1e-10,
+        )
         @test bond_dims(psi) == dims0                    # refused, not half-run
     end
 
@@ -26,7 +31,7 @@ using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
         b = AdaptiveBudget(1e-5, 1e-7, 1e-10)
         @test b.basis == 1e-5
         @test b.trunc == 1e-7
-        @test b.expv  == 1e-10
+        @test b.expv == 1e-10
 
         # A non-positive basis or expv tolerance is a caller error, not a "keep everything"
         # instruction: both divide or bound a search, and 0 would make every residual fail.
@@ -42,9 +47,9 @@ using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
         a = basis_allocation(b, 19; tau = 0.05, nrm = 1.0)       # L = 20 -> 19 bonds
         @test a.per_bond ≈ 1e-4 / sqrt(19)
         @test a.sample ≈ a.per_bond / 2
-        @test a.tail   ≈ a.per_bond / 2
+        @test a.tail ≈ a.per_bond / 2
         @test a.krylov ≈ a.per_bond / 2
-        @test a.scale  ≈ 0.05
+        @test a.scale ≈ 0.05
 
         # More bonds means a tighter per-bond allowance, and in quadrature rather than
         # linearly -- four times the bonds halves the allowance.

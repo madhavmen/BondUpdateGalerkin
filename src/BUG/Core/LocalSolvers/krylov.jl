@@ -63,9 +63,11 @@ end
 Krylov coefficients of `exp(tau*T)e_1` for the Hermitian tridiagonal `T`.
 Ports `krylov.py::hermitian_tridiagonal_exp_coeffs`.
 """
-function hermitian_tridiagonal_exp_coeffs(alpha::Vector{Float64},
-                                          beta::Vector{Float64},
-                                          tau::ComplexF64)
+function hermitian_tridiagonal_exp_coeffs(
+    alpha::Vector{Float64},
+    beta::Vector{Float64},
+    tau::ComplexF64,
+)
     isempty(alpha) && return ComplexF64[]
     vals, vecs = _tridiag_eigen(alpha, beta)
     c, ls = _coeffs_from_eigen(vals, vecs, tau)
@@ -78,8 +80,7 @@ end
 "Eigendecomposition of the leading tridiagonal, done ONCE so the substep search can evaluate
 `exp(tau'*T)e_1` for any trial `tau'` in `O(k^2)` instead of re-exponentiating the matrix."
 function _tridiag_eigen(alpha::Vector{Float64}, beta::Vector{Float64})
-    T = isempty(beta) ? Matrix{Float64}(reshape(alpha, 1, 1)) :
-                        Matrix(SymTridiagonal(alpha, beta))
+    T = isempty(beta) ? Matrix{Float64}(reshape(alpha, 1, 1)) : Matrix(SymTridiagonal(alpha, beta))
     return eigen(Symmetric(T))
 end
 
@@ -112,21 +113,36 @@ breakdown-only exit, matching `krylov.py::tensor_lanczos_expv` and its defaults.
 orthogonalises twice against the whole basis: more stable, but not what the reference kernel does.
 `conv_tol > 0` adds Saad's convergence estimate; `substeps != 1` splits `tau`.
 """
-function lanczos_expv(apply, tau::ComplexF64, x;
-                      tol::Float64 = 1e-13, maxiter::Int = 60, reorth::Bool = false,
-                      conv_tol::Float64 = 0.0, substeps::Int = 1,
-                      report::Union{Nothing, Base.RefValue} = nothing,
-                      root_method::Symbol = :exp)
+function lanczos_expv(
+    apply,
+    tau::ComplexF64,
+    x;
+    tol::Float64 = 1e-13,
+    maxiter::Int = 60,
+    reorth::Bool = false,
+    conv_tol::Float64 = 0.0,
+    substeps::Int = 1,
+    report::Union{Nothing,Base.RefValue} = nothing,
+    root_method::Symbol = :exp,
+)
     # GMRES needs the full orthogonalisation whatever `B` is: the shifted stage systems are
     # complex non-Hermitian even for a Hermitian generator
-    root_method === :radau2_gmres && return radau2_gmres_expv(apply, tau, x; tol = tol,
-        maxiter = maxiter, conv_tol = conv_tol, report = report)
+    root_method === :radau2_gmres && return radau2_gmres_expv(
+        apply,
+        tau,
+        x;
+        tol = tol,
+        maxiter = maxiter,
+        conv_tol = conv_tol,
+        report = report,
+    )
     root_method in ROOT_METHODS || _bad_root(root_method)
     # An implicit root takes the WHOLE step in one stage -- that is what it is for -- so the
     # exponential's substep split does not apply to it.
     root_method === :exp || (substeps = 1)
-    coeffs(vals, vecs, t) = root_method === :exp ? _coeffs_from_eigen(vals, vecs, t) :
-                                                   _rational_coeffs(vals, vecs, t, root_method)
+    coeffs(vals, vecs, t) =
+        root_method === :exp ? _coeffs_from_eigen(vals, vecs, t) :
+        _rational_coeffs(vals, vecs, t, root_method)
     xc = _as_complex(x)
     beta0 = norm(xc)
     if beta0 == 0
@@ -151,13 +167,14 @@ function lanczos_expv(apply, tau::ComplexF64, x;
         alpha = Float64[]
         betas = Float64[]
 
-        w = apply(v); total += 1
+        w = apply(v)
+        total += 1
         a = real(tensor_inner(v, w))
         push!(alpha, a)
         w = to_concrete(w + (-a) * v)
 
         # the step this basis will actually take; set once the loop ends (or converges early)
-        for _ in 2:maxiter
+        for _ = 2:maxiter
             b = norm(w)
             b < tol && break                       # genuine breakdown: the space is exhausted
             if conv_tol > 0                        # genuine convergence: the answer stopped moving
@@ -168,19 +185,20 @@ function lanczos_expv(apply, tau::ComplexF64, x;
             push!(betas, b)
             v = to_concrete((1.0 / b) * w)
             push!(basis, v)
-            w = apply(v); total += 1
+            w = apply(v)
+            total += 1
             a = real(tensor_inner(v, w))
             push!(alpha, a)
             # Materialise `w` before the reorth loop: Telum's +/- are lazy, so a symbolic `w` grew
             # by one term per step and made the loop O(k^3 N). Modified Gram-Schmidt is sequential,
             # so this changes only when each subtraction is evaluated, not the arithmetic.
-            w = to_concrete(w + (-a) * v + (-b) * basis[end - 1])
+            w = to_concrete(w + (-a) * v + (-b) * basis[end-1])
             if reorth
                 # One materialisation per pass, not per basis vector. `w` stays concrete for the
                 # whole pass and only the correction is lazy, so every inner product is against a
                 # fixed `w`. That makes the pass classical Gram-Schmidt, applied twice (as stable as
                 # MGS). The same fix is in `cbe_bug.jl`, which keeps BUG and tdvp2 on equal footing.
-                for _pass in 1:2
+                for _pass = 1:2
                     corr = nothing
                     for u in basis
                         c = tensor_inner(u, w)
@@ -259,7 +277,7 @@ end
 "Recombine `out = beta0 * sum_i coeff[i] * basis[i]`."
 function _combine(coeff, basis, beta0::Float64)
     out = (coeff[1] * beta0) * basis[1]
-    for i in 2:length(coeff)
+    for i = 2:length(coeff)
         out = out + (coeff[i] * beta0) * basis[i]
     end
     return to_concrete(out)
@@ -274,9 +292,9 @@ each inner product force a sum one term longer, so `w` stays concrete for the wh
 `corr` is lazy.
 """
 function _cgs2!(H::AbstractMatrix{ComplexF64}, j::Int, basis, w)
-    for _pass in 1:2
+    for _pass = 1:2
         corr = nothing
-        for i in 1:length(basis)
+        for i = 1:length(basis)
             h = tensor_inner(basis[i], w)
             H[i, j] += h
             corr = corr === nothing ? h * basis[i] : corr + h * basis[i]
@@ -295,17 +313,29 @@ is invalid. Each vector is orthogonalised twice against the full basis, since on
 orthogonality once the Krylov vectors align. `conv_tol` and `substeps` are as for
 [`lanczos_expv`](@ref).
 """
-function arnoldi_expv(apply, tau::ComplexF64, x;
-                      tol::Float64 = 1e-13, maxiter::Int = 60,
-                      conv_tol::Float64 = 0.0, substeps::Int = 1,
-                      report::Union{Nothing, Base.RefValue} = nothing,
-                      root_method::Symbol = :exp)
-    root_method === :radau2_gmres && return radau2_gmres_expv(apply, tau, x; tol = tol,
-        maxiter = maxiter, conv_tol = conv_tol, report = report)
+function arnoldi_expv(
+    apply,
+    tau::ComplexF64,
+    x;
+    tol::Float64 = 1e-13,
+    maxiter::Int = 60,
+    conv_tol::Float64 = 0.0,
+    substeps::Int = 1,
+    report::Union{Nothing,Base.RefValue} = nothing,
+    root_method::Symbol = :exp,
+)
+    root_method === :radau2_gmres && return radau2_gmres_expv(
+        apply,
+        tau,
+        x;
+        tol = tol,
+        maxiter = maxiter,
+        conv_tol = conv_tol,
+        report = report,
+    )
     root_method in ROOT_METHODS || _bad_root(root_method)
     root_method === :exp || (substeps = 1)     # an implicit root takes the whole step at once
-    hcoeffs(Hm, t) = root_method === :exp ? _hess_coeffs(Hm, t) :
-                                            _hess_rational(Hm, t, root_method)
+    hcoeffs(Hm, t) = root_method === :exp ? _hess_coeffs(Hm, t) : _hess_rational(Hm, t, root_method)
     xc = _as_complex(x)
     beta0 = norm(xc)
     if beta0 == 0
@@ -331,8 +361,9 @@ function arnoldi_expv(apply, tau::ComplexF64, x;
         m = 0
         betak = 0.0
 
-        for j in 1:maxiter
-            w = _cgs2!(H, j, basis, apply(basis[j])); total += 1
+        for j = 1:maxiter
+            w = _cgs2!(H, j, basis, apply(basis[j]))
+            total += 1
             m = j
             b = norm(w)
             betak = b
@@ -341,7 +372,7 @@ function arnoldi_expv(apply, tau::ComplexF64, x;
                 c = hcoeffs(H[1:m, 1:m], tau_rem)[1]
                 _tail(c, b) < conv_tol && break
             end
-            H[j + 1, j] = b
+            H[j+1, j] = b
             j == maxiter && break
             push!(basis, to_concrete((1.0 / b) * w))
         end

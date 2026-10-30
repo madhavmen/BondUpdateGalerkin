@@ -115,16 +115,19 @@ end
     bug_dir = joinpath(SRC_DIR, "BUG")
     core_files = julia_files(joinpath(bug_dir, "Core"))
     core_names = defined_names_in(core_files)
-    higher_files = vcat(julia_files(joinpath(bug_dir, "Randomised")),
-                        julia_files(joinpath(bug_dir, "TimeEvolution")),
-                        julia_files(joinpath(bug_dir, "ITE")), [joinpath(bug_dir, "solve.jl")])
+    higher_files = vcat(
+        julia_files(joinpath(bug_dir, "Randomised")),
+        julia_files(joinpath(bug_dir, "TimeEvolution")),
+        julia_files(joinpath(bug_dir, "ITE")),
+        [joinpath(bug_dir, "solve.jl")],
+    )
     # A method a higher layer adds to a Core function (`apply_one_site(op::RootOp, ...)`) is Core's name.
     higher_only = setdiff(defined_names_in(higher_files), core_names)
     @test :dd_cbe_expand in higher_only && :cbe_bug_step! in higher_only     # the check is not vacuous
     for file in core_files
         offending = intersect(used_symbols(file), higher_only)
-        isempty(offending) ||
-            @error "BUG/Core uses a name of a higher layer" file offending = sort!(collect(offending))
+        isempty(offending) || @error "BUG/Core uses a name of a higher layer" file offending =
+            sort!(collect(offending))
         @test isempty(offending)
     end
 end

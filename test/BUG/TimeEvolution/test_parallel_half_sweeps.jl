@@ -21,15 +21,26 @@ using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
     tolerances = (tol_basis = 1e-7, tol_trunc = 1e-9, tol_expv = 1e-10, maxdim = 64)
     fidelity(state_a, state_b) = abs(overlap(state_a, state_b)) / (norm(state_a) * norm(state_b))
     schemes = (
-        ("ordinary", (state; keywords...) -> cbe_bug_step!(state, hamiltonian, time_step; keywords...)),
-        ("midpoint", (state; keywords...) -> cbe_bug_midpoint_step!(state, hamiltonian, time_step; keywords...)),
-        ("order 2", (state; keywords...) -> cbe_bug_step!(state, hamiltonian, time_step; order = 2, keywords...)),
+        (
+            "ordinary",
+            (state; keywords...) -> cbe_bug_step!(state, hamiltonian, time_step; keywords...),
+        ),
+        (
+            "midpoint",
+            (state; keywords...) ->
+                cbe_bug_midpoint_step!(state, hamiltonian, time_step; keywords...),
+        ),
+        (
+            "order 2",
+            (state; keywords...) ->
+                cbe_bug_step!(state, hamiltonian, time_step; order = 2, keywords...),
+        ),
     )
     for (scheme_name, step!) in schemes
         @testset "$scheme_name" begin
             # Exact selection: agreement to round-off, step by step verdicts included.
             serial_state, parallel_state = neel_state(chain_length), neel_state(chain_length)
-            for _ in 1:2
+            for _ = 1:2
                 serial_info = step!(serial_state; parallel = false, exact = true, tolerances...)
                 parallel_info = step!(parallel_state; parallel = true, exact = true, tolerances...)
                 @test budget_status(serial_info.ledger) === budget_status(parallel_info.ledger)
@@ -39,8 +50,8 @@ using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
 
             # RSVD selection: equal to tolerance, and two parallel runs identical.
             serial_state = neel_state(chain_length)
-            parallel_states = [neel_state(chain_length) for _ in 1:2]
-            for _ in 1:2
+            parallel_states = [neel_state(chain_length) for _ = 1:2]
+            for _ = 1:2
                 step!(serial_state; parallel = false, tolerances...)
                 for state in parallel_states
                     step!(state; parallel = true, tolerances...)

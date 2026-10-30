@@ -232,7 +232,7 @@ function state_dim(t, leg::Int)
     tot = 0
     for (q, d) in t.spaces[leg]
         w = 1
-        for k in 1:n
+        for k = 1:n
             w *= dimension(S[k], q[k])
         end
         tot += d * w
@@ -249,7 +249,7 @@ The interior bond dimensions in STATES rather than multiplets -- the SU(2) analo
 Under `:none` and `:U1` this is `bond_dims(psi)` exactly, so it is safe to call unconditionally
 and is the right thing to log when a script may run in more than one mode.
 """
-state_bond_dims(psi::SymMPS) = [state_dim(psi[i], 3) for i in 1:(length(psi) - 1)]
+state_bond_dims(psi::SymMPS) = [state_dim(psi[i], 3) for i = 1:(length(psi)-1)]
 
 """
     local_dim(psi) -> Int

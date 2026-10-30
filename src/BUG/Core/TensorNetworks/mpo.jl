@@ -163,7 +163,7 @@ function mpo_from_terms(h::XXZChain; Iloc)
     n = length(terms)
 
     Ws = Any[]
-    for i in 1:L
+    for i = 1:L
         tl, tr = "W,$(i - 1)", "W,$i"
         Iid = _mpo_block(Iloc, i, tl, tr, :none)
         # A zero block with the SAME spaces as `Iid`; `empty_tlarray` will not do, it
@@ -171,18 +171,22 @@ function mpo_from_terms(h::XXZChain; Iloc)
         Znil = to_concrete(0.0 * Iid)
         mat = Matrix{Any}(nothing, n + 2, n + 2)
         i < L && (mat[1, 1] = Iid)                       # transport the identity
-        i > 1 && (mat[n + 2, n + 2] = Iid)               # ... on the far side of a term
-        for t in 1:n
-            i < L && (mat[1, 1 + t] =
-                _mpo_block(terms[t].left, i, tl, tr, _side(terms[t].left, :left)))
-            i > 1 && (mat[1 + t, n + 2] = to_concrete(terms[t].coeff *
-                _mpo_block(terms[t].right, i, tl, tr, _side(terms[t].right, :right))))
+        i > 1 && (mat[n+2, n+2] = Iid)               # ... on the far side of a term
+        for t = 1:n
+            i < L &&
+                (mat[1, 1+t] = _mpo_block(terms[t].left, i, tl, tr, _side(terms[t].left, :left)))
+            i > 1 && (
+                mat[1+t, n+2] = to_concrete(
+                    terms[t].coeff *
+                    _mpo_block(terms[t].right, i, tl, tr, _side(terms[t].right, :right)),
+                )
+            )
         end
         if i == 1
             mat = reshape(mat[1, :], 1, n + 2)           # the `id` row only
-            mat[1, n + 2] = Znil                         # ... and it cannot be `done` yet
+            mat[1, n+2] = Znil                         # ... and it cannot be `done` yet
         elseif i == L
-            mat = reshape(mat[:, n + 2], n + 2, 1)       # the `done` column only
+            mat = reshape(mat[:, n+2], n + 2, 1)       # the `done` column only
             mat[1, 1] = Znil                             # ... and nothing may stay `id`
         end
         push!(Ws, to_concrete(oplus(mat, (1, 4))))
@@ -201,7 +205,7 @@ function mpo_sum(A::MPO, B::MPO; a::Number = 1.0, b::Number = 1.0)
     length(B) == L || throw(DimensionMismatch("mpo_sum: $L sites against $(length(B))"))
     L >= 2 || throw(ArgumentError("mpo_sum needs at least two sites, got $L"))
     Ws = Any[]
-    for i in 1:L
+    for i = 1:L
         sa, sb = i == 1 ? (a, b) : (1, 1)
         Ai = to_concrete(ComplexF64(sa) * A[i])
         Bi = to_concrete(ComplexF64(sb) * B[i])
@@ -242,11 +246,19 @@ norm `tol_trunc` and rank `maxdim` (the step's own compression rule), centre `ro
 state and its relative discarded norm. A product that is exactly zero (a jump that annihilates every
 component) is refused: its probability is zero, so it can never be drawn.
 """
-function apply_factor(F, psi::SymMPS; tol_trunc::Float64 = 0.0, maxdim::Int = 10_000,
-                      root::Int = length(psi) ÷ 2 + 1)
+function apply_factor(
+    F,
+    psi::SymMPS;
+    tol_trunc::Float64 = 0.0,
+    maxdim::Int = 10_000,
+    root::Int = length(psi) ÷ 2 + 1,
+)
     phi = factor_product(F, psi)
-    real(overlap(phi, phi)) > 0 || throw(ArgumentError(
-        "apply_factor: the product is exactly zero (the operator annihilates the state)"))
+    real(overlap(phi, phi)) > 0 || throw(
+        ArgumentError(
+            "apply_factor: the product is exactly zero (the operator annihilates the state)",
+        ),
+    )
     canonical!(phi, 1)
     canonical!(phi, root)
     _, _, cum, _ = truncate_recursive!(phi, root; maxdim = maxdim, weight_tol = tol_trunc)
@@ -266,10 +278,15 @@ plan U10: both legs of `S⁺_a S⁻_b` leave their frames' sectors, and every tw
 that away), so `mpo^p psi` is missing from the root space unless it is kept (dt5m: one-step slope
 2.7 -> 3.7, global error /2.7-18; keeping them on later steps changes nothing).
 """
-function global_krylov_states(mpo::MPO, psi::SymMPS, m::Int; tol_trunc::Float64 = 1e-13,
-                              maxdim::Int = 10_000)
+function global_krylov_states(
+    mpo::MPO,
+    psi::SymMPS,
+    m::Int;
+    tol_trunc::Float64 = 1e-13,
+    maxdim::Int = 10_000,
+)
     ks, cur = SymMPS[], psi
-    for _ in 1:m
+    for _ = 1:m
         nxt, _ = apply_mpo(mpo, cur; tol_trunc = tol_trunc, maxdim = maxdim)
         canonical!(nxt, 1)
         nxt[1] = to_concrete(nxt[1] / norm(nxt[1]))
@@ -309,12 +326,18 @@ of a symmetric tensor and returns a plausible, silently wrong answer.
 """
 function apply_gate(gate, theta, site_l, site_r)
     tl, tr = _site_tag(site_l), _site_tag(site_r)
-    (gate.inds[1].itags == tl && gate.inds[2].itags == tr) || throw(ArgumentError(
-        "gate is tagged for ($(gate.inds[1].itags), $(gate.inds[2].itags)), " *
-        "asked to act on ($tl, $tr)"))
-    (theta.inds[2].itags == tl && theta.inds[3].itags == tr) || throw(ArgumentError(
-        "gate is tagged for ($tl, $tr) but theta carries " *
-        "($(theta.inds[2].itags), $(theta.inds[3].itags))"))
+    (gate.inds[1].itags == tl && gate.inds[2].itags == tr) || throw(
+        ArgumentError(
+            "gate is tagged for ($(gate.inds[1].itags), $(gate.inds[2].itags)), " *
+            "asked to act on ($tl, $tr)",
+        ),
+    )
+    (theta.inds[2].itags == tl && theta.inds[3].itags == tr) || throw(
+        ArgumentError(
+            "gate is tagged for ($tl, $tr) but theta carries " *
+            "($(theta.inds[2].itags), $(theta.inds[3].itags))",
+        ),
+    )
     out = contract(gate, (1, 2), theta, (2, 3))   # (bra_l, bra_r, link_l, link_r)
     return to_concrete(permutedims(out, (3, 1, 2, 4)))
 end

@@ -11,9 +11,12 @@ Its gain is the second-order bound of Theorem 4.2, with constants independent of
 values; weigh it against halving `dt` (`benchmarks/midpoint_bug.jl`).
 """
 function cbe_bug_midpoint_step!(psi::SymMPS, mpo::MPO, tau::ComplexF64; kwargs...)
-    get(kwargs, :order, 1) == 1 || throw(ArgumentError(
-        "order > 1 is a single-step method (cbe_bug_step!); the midpoint scheme is its own " *
-        "second-order construction and does not take an order"))
+    get(kwargs, :order, 1) == 1 || throw(
+        ArgumentError(
+            "order > 1 is a single-step method (cbe_bug_step!); the midpoint scheme is its own " *
+            "second-order construction and does not take an order",
+        ),
+    )
     half = copy(psi)
     # stage 1: bases only. `truncate = false` keeps the augmented rank -- see the docstring.
     info1 = cbe_bug_step!(half, mpo, tau / 2; kwargs..., truncate = false)

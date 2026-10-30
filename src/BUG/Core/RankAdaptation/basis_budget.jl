@@ -58,9 +58,15 @@ the same rule; `nothing` is `budget.basis`. On a nonlocal generator the Krylov s
 trial frame to the work ceiling (dr6ta: ~4000 Krylov vs ~0 DD directions per step), so it is tuned
 on its own (USER 2026-10-27).
 """
-function basis_allocation(budget::AdaptiveBudget, nbonds::Int;
-                          tau::Number = 0, nrm::Real = 1.0, nfront::Int = 1,
-                          rule::Symbol = :rss, krylov::Union{Nothing, Real} = nothing)
+function basis_allocation(
+    budget::AdaptiveBudget,
+    nbonds::Int;
+    tau::Number = 0,
+    nrm::Real = 1.0,
+    nfront::Int = 1,
+    rule::Symbol = :rss,
+    krylov::Union{Nothing,Real} = nothing,
+)
     nb = max(nbonds, 1)
     nf = max(nfront, 1)
     rule in (:rss, :linear) || throw(ArgumentError("rule must be :rss or :linear, got $rule"))
@@ -188,11 +194,50 @@ mutable struct AdaptiveLedger
     kls::Any
 end
 
-AdaptiveLedger() = AdaptiveLedger(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                                  0, 0, 0, 0, 0, 0, 0, 0, false, true,
-                                  false, 0.0, 0, 0, 0, 0, Symbol[], Any[], Any[],
-                                  1, 0, 0, Float64[], 0.0, 0, 0, 0, Any[], 0.0, 0,
-                                  Float64[], Float64[], nothing)
+AdaptiveLedger() = AdaptiveLedger(
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    false,
+    true,
+    false,
+    0.0,
+    0,
+    0,
+    0,
+    0,
+    Symbol[],
+    Any[],
+    Any[],
+    1,
+    0,
+    0,
+    Float64[],
+    0.0,
+    0,
+    0,
+    0,
+    Any[],
+    0.0,
+    0,
+    Float64[],
+    Float64[],
+    nothing,
+)
 
 """
     _unmet!(ledger, what) -> ledger
@@ -227,27 +272,33 @@ and the retry that addresses each (plan §1 "retry diagnostic"). Empty when the 
 function budget_diagnostic(ledger::AdaptiveLedger)
     ledger.tolerance_met && return ""
     msg = String[]
-    cap = ledger.workcap_reached ? " at the work ceiling (raise maxdim or reduce dt)" :
-                                   " with the local space exhausted (reduce dt)"
-    :sample in ledger.unmet &&
-        push!(msg, "Test B sampling residual $(ledger.max_sample)" * cap)
-    :tail in ledger.unmet &&
-        push!(msg, "Test A retained-rank tail $(ledger.max_tail)" * cap)
-    :krylov in ledger.unmet &&
-        push!(msg, "Tests C/D Krylov residual $(ledger.max_krylov)" * cap)
-    :trunc in ledger.unmet &&
-        push!(msg, "final compression discarded $(ledger.discarded) relative norm" *
-                   (ledger.maxdim_reached ? " because maxdim bound (raise maxdim or loosen tol_trunc)" :
-                                            " (loosen tol_trunc)"))
+    cap =
+        ledger.workcap_reached ? " at the work ceiling (raise maxdim or reduce dt)" :
+        " with the local space exhausted (reduce dt)"
+    :sample in ledger.unmet && push!(msg, "Test B sampling residual $(ledger.max_sample)" * cap)
+    :tail in ledger.unmet && push!(msg, "Test A retained-rank tail $(ledger.max_tail)" * cap)
+    :krylov in ledger.unmet && push!(msg, "Tests C/D Krylov residual $(ledger.max_krylov)" * cap)
+    :trunc in ledger.unmet && push!(
+        msg,
+        "final compression discarded $(ledger.discarded) relative norm" * (
+            ledger.maxdim_reached ? " because maxdim bound (raise maxdim or loosen tol_trunc)" :
+            " (loosen tol_trunc)"
+        ),
+    )
     :projection in ledger.unmet &&
         push!(msg, "midpoint frames miss the original state by $(ledger.proj_err) (reduce dt)")
-    :expv in ledger.unmet &&
-        push!(msg, "root expv error estimate $(ledger.expv_err) after $(ledger.expv_iters) " *
-                   "applications (reduce dt)")
-    :closure in ledger.unmet &&
-        push!(msg, "order-$(ledger.order) Krylov closure did not close after " *
-                   "$(ledger.n_passes) passes, frontier leak $(ledger.leak)" * cap *
-                   " (or lower the order)")
+    :expv in ledger.unmet && push!(
+        msg,
+        "root expv error estimate $(ledger.expv_err) after $(ledger.expv_iters) " *
+        "applications (reduce dt)",
+    )
+    :closure in ledger.unmet && push!(
+        msg,
+        "order-$(ledger.order) Krylov closure did not close after " *
+        "$(ledger.n_passes) passes, frontier leak $(ledger.leak)" *
+        cap *
+        " (or lower the order)",
+    )
     return "budget unmet: " * join(msg, "; ")
 end
 
@@ -259,27 +310,27 @@ function merge_ledger!(a::AdaptiveLedger, b::AdaptiveLedger)
     a.max_sample_l = max(a.max_sample_l, b.max_sample_l)
     a.max_sample_r = max(a.max_sample_r, b.max_sample_r)
     append!(a.sample_log, b.sample_log)
-    a.max_tail   = max(a.max_tail,   b.max_tail)
+    a.max_tail = max(a.max_tail, b.max_tail)
     a.max_krylov = max(a.max_krylov, b.max_krylov)
     a.max_krylov_c = max(a.max_krylov_c, b.max_krylov_c)
     a.max_krylov_d = max(a.max_krylov_d, b.max_krylov_d)
-    a.n_c_pass    += b.n_c_pass
+    a.n_c_pass += b.n_c_pass
     a.n_d_after_c += b.n_d_after_c
-    a.discarded  = max(a.discarded,  b.discarded)
-    a.expv_err   = max(a.expv_err,   b.expv_err)
-    a.n_probes  += b.n_probes
+    a.discarded = max(a.discarded, b.discarded)
+    a.expv_err = max(a.expv_err, b.expv_err)
+    a.n_probes += b.n_probes
     a.n_holdout += b.n_holdout
     a.n_selected += b.n_selected
-    a.n_krylov  += b.n_krylov
-    a.n_h1      += b.n_h1
+    a.n_krylov += b.n_krylov
+    a.n_h1 += b.n_h1
     a.n_targeted += b.n_targeted
     a.workcap_reached |= b.workcap_reached
-    a.tolerance_met   &= b.tolerance_met
-    a.maxdim_reached  |= b.maxdim_reached
+    a.tolerance_met &= b.tolerance_met
+    a.maxdim_reached |= b.maxdim_reached
     a.proj_err = max(a.proj_err, b.proj_err)
-    a.r_old    = max(a.r_old, b.r_old)
-    a.r_aug    = max(a.r_aug, b.r_aug)
-    a.r_final  = max(a.r_final, b.r_final)
+    a.r_old = max(a.r_old, b.r_old)
+    a.r_aug = max(a.r_aug, b.r_aug)
+    a.r_final = max(a.r_final, b.r_final)
     a.expv_iters += b.expv_iters
     union!(a.unmet, b.unmet)
     append!(a.bond_log, b.bond_log)
@@ -310,25 +361,40 @@ logged bonds, by construction rather than by a second bookkeeping path. `nothing
 no-op.
 """
 _log_bond!(::Nothing, ::Nothing, ::Int, ::Symbol, ::Int) = nothing
-function _log_bond!(ledger::AdaptiveLedger, bl::AdaptiveLedger, bond::Int, side::Symbol,
-                    width::Int)
+function _log_bond!(ledger::AdaptiveLedger, bl::AdaptiveLedger, bond::Int, side::Symbol, width::Int)
     # Probes per reachable sector, from the FINAL Test B sketch of each expansion side (Test B
     # logs every widening attempt; the last one is what the frame was built from). Empty on
     # `exact = true`, which draws no sketch.
-    final = Dict{Symbol, Any}()
+    final = Dict{Symbol,Any}()
     for s in bl.sample_log
         final[s.side] = s.sketch
     end
-    probes = Dict{Symbol, Dict{Any, Int}}(k => v for (k, v) in final)
-    push!(bl.bond_log,
-          (bond = bond, side = side, sample = bl.max_sample, tail = bl.max_tail,
-           krylov_c = bl.max_krylov_c, krylov_d = bl.max_krylov_d,
-           n_probes = bl.n_probes, n_holdout = bl.n_holdout, n_selected = bl.n_selected,
-           n_targeted = bl.n_targeted, n_krylov = bl.n_krylov, n_h1 = bl.n_h1,
-           c_pass = bl.n_c_pass > 0, d_after_c = bl.n_d_after_c > 0,
-           workcap = bl.workcap_reached, met = bl.tolerance_met, unmet = copy(bl.unmet),
-           width = width, n_sectors = sum(length, values(probes); init = 0),
-           probes_per_sector = probes))
+    probes = Dict{Symbol,Dict{Any,Int}}(k => v for (k, v) in final)
+    push!(
+        bl.bond_log,
+        (
+            bond = bond,
+            side = side,
+            sample = bl.max_sample,
+            tail = bl.max_tail,
+            krylov_c = bl.max_krylov_c,
+            krylov_d = bl.max_krylov_d,
+            n_probes = bl.n_probes,
+            n_holdout = bl.n_holdout,
+            n_selected = bl.n_selected,
+            n_targeted = bl.n_targeted,
+            n_krylov = bl.n_krylov,
+            n_h1 = bl.n_h1,
+            c_pass = bl.n_c_pass > 0,
+            d_after_c = bl.n_d_after_c > 0,
+            workcap = bl.workcap_reached,
+            met = bl.tolerance_met,
+            unmet = copy(bl.unmet),
+            width = width,
+            n_sectors = sum(length, values(probes); init = 0),
+            probes_per_sector = probes,
+        ),
+    )
     return merge_ledger!(ledger, bl)
 end
 

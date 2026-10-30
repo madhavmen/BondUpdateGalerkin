@@ -12,11 +12,11 @@ using BondUpdateGalerkin.BUG
         @test g[1] == 0.0
         @test g[end] ≈ bmax rtol = 1e-14
         @test all(diff(g) .> 0)                                     # no gaps, no duplicates
-        panels = [s[(j - 1) * k + 1:j * k] for j in 1:P]
+        panels = [s[(j-1)*k+1:j*k] for j = 1:P]
         @test all(all(x -> x ≈ p[1], p) for p in panels)            # uniform inside a panel
         widths = [sum(p) for p in panels]
         P >= 2 && @test widths[2] ≈ widths[1]                       # first two panels equal
-        P >= 3 && @test all(widths[j + 1] ≈ 2 * widths[j] for j in 2:(P - 1))   # then doubling
+        P >= 3 && @test all(widths[j+1] ≈ 2 * widths[j] for j = 2:(P-1))   # then doubling
         @test s[1] ≈ bmax / (2.0^(P - 1) * k)                       # early resolution
         @test maximum(s) ≈ (P == 1 ? bmax : bmax / 2) / k           # coarsest step: per_panel
         @test log_panel_steps(bmax, P; per_panel = k) == s          # reproducible

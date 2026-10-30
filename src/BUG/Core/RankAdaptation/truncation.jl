@@ -14,20 +14,20 @@ One left-to-right truncating pass, then one right-to-left, ending with the centr
 function truncate_sweep!(psi::SymMPS; maxdim::Int = 200, cutoff::Float64 = 1e-12)
     L = length(psi)
     canonical!(psi, 1)
-    for i in 1:(L - 1)
+    for i = 1:(L-1)
         res = svd(psi[i], (1, 2); cutoff = cutoff, Nkeep = maxdim)
         tag = psi[i].inds[3].itags
         M = to_concrete(res.S * res.Vd)
-        psi[i]     = to_concrete(setitag(res.U, 3, tag))
-        psi[i + 1] = to_concrete(setitag(contract(M, (2,), psi[i + 1], (1,)), 1, tag))
+        psi[i] = to_concrete(setitag(res.U, 3, tag))
+        psi[i+1] = to_concrete(setitag(contract(M, (2,), psi[i+1], (1,)), 1, tag))
         psi.center = i + 1
     end
-    for i in L:-1:2
+    for i = L:-1:2
         res = svd(psi[i], (1,); cutoff = cutoff, Nkeep = maxdim)
-        tag = psi[i - 1].inds[3].itags
+        tag = psi[i-1].inds[3].itags
         M = to_concrete(res.U * res.S)
-        psi[i]     = to_concrete(setitag(res.Vd, 1, tag))
-        psi[i - 1] = to_concrete(setitag(contract(psi[i - 1], (3,), M, (1,)), 3, tag))
+        psi[i] = to_concrete(setitag(res.Vd, 1, tag))
+        psi[i-1] = to_concrete(setitag(contract(psi[i-1], (3,), M, (1,)), 3, tag))
         psi.center = i - 1
     end
     return psi
@@ -73,15 +73,21 @@ single bond. `weight_tol` is a shared budget on `||psi - psi_trunc|| / ||psi||`:
 equal share, and `cumulative` bounds the error by the triangle inequality across the two subtrees.
 `capped` is true when `maxdim` binds past the budget; `bond_weights` receives each bond's share.
 """
-function truncate_recursive!(psi::SymMPS, root::Int; maxdim::Int = 200,
-                             cutoff::Float64 = 1e-12,
-                             weight_tol::Union{Nothing, Float64} = nothing,
-                             bond_weights::Union{Nothing, Vector{Float64}} = nothing)
+function truncate_recursive!(
+    psi::SymMPS,
+    root::Int;
+    maxdim::Int = 200,
+    cutoff::Float64 = 1e-12,
+    weight_tol::Union{Nothing,Float64} = nothing,
+    bond_weights::Union{Nothing,Vector{Float64}} = nothing,
+)
     L = length(psi)
-    bond_weights === nothing || length(bond_weights) == L - 1 ||
+    bond_weights === nothing ||
+        length(bond_weights) == L - 1 ||
         throw(DimensionMismatch("bond_weights needs $(L - 1) entries"))
     1 <= root <= L || throw(ArgumentError("root $root outside 1:$L"))
-    weight_tol === nothing || weight_tol >= 0 ||
+    weight_tol === nothing ||
+        weight_tol >= 0 ||
         throw(ArgumentError("weight_tol must be non-negative, got $weight_tol"))
     worst = 0.0
     cum = [0.0, 0.0]           # absolute squared weight removed, left / right subtree
@@ -93,10 +99,15 @@ function truncate_recursive!(psi::SymMPS, root::Int; maxdim::Int = 200,
     function cut(T, split)
         weight_tol === nothing &&
             return svd(T, split; cutoff = cutoff, Nkeep = maxdim, get_lists = true)
-        res, c = _budget_svd(T, split, maxdim, function (n2)
-            nrm2 < 0 && (nrm2 = n2)
-            return sdiv > 0 ? weight_tol * sqrt(max(nrm2, 0.0)) / sdiv : 0.0
-        end)
+        res, c = _budget_svd(
+            T,
+            split,
+            maxdim,
+            function (n2)
+                nrm2 < 0 && (nrm2 = n2)
+                return sdiv > 0 ? weight_tol * sqrt(max(nrm2, 0.0)) / sdiv : 0.0
+            end,
+        )
         capped |= c
         return res
     end
@@ -108,15 +119,15 @@ function truncate_recursive!(psi::SymMPS, root::Int; maxdim::Int = 200,
     end
 
     # ── left subtree, root-to-leaf: bonds root-1, root-2, … 1 ──
-    for i in root:-1:2
+    for i = root:-1:2
         res = cut(psi[i], (1,))
         account!(res, 1, i - 1)               # splits bond (i-1, i)
-        tag = psi[i - 1].inds[3].itags
+        tag = psi[i-1].inds[3].itags
         # `A = U S Vd`: keep `Vd` here and hand `U S` outward, so the child receives the weight
         # and its own SVD is a genuine Schmidt decomposition.
-        psi[i]     = to_concrete(setitag(res.Vd, 1, tag))
-        psi[i - 1] = to_concrete(setitag(
-            contract(psi[i - 1], (3,), to_concrete(res.U * res.S), (1,)), 3, tag))
+        psi[i] = to_concrete(setitag(res.Vd, 1, tag))
+        psi[i-1] =
+            to_concrete(setitag(contract(psi[i-1], (3,), to_concrete(res.U * res.S), (1,)), 3, tag))
         psi.center = i - 1
     end
 
@@ -126,13 +137,14 @@ function truncate_recursive!(psi::SymMPS, root::Int; maxdim::Int = 200,
     canonical!(psi, root)
 
     # ── right subtree, root-to-leaf: bonds root, root+1, … L-1 ──
-    for i in root:(L - 1)
+    for i = root:(L-1)
         res = cut(psi[i], (1, 2))
         account!(res, 2, i)                   # splits bond (i, i+1)
         tag = psi[i].inds[3].itags
-        psi[i]     = to_concrete(setitag(res.U, 3, tag))
-        psi[i + 1] = to_concrete(setitag(
-            contract(to_concrete(res.S * res.Vd), (2,), psi[i + 1], (1,)), 1, tag))
+        psi[i] = to_concrete(setitag(res.U, 3, tag))
+        psi[i+1] = to_concrete(
+            setitag(contract(to_concrete(res.S * res.Vd), (2,), psi[i+1], (1,)), 1, tag),
+        )
         psi.center = i + 1
     end
 
@@ -173,8 +185,7 @@ const _TAG_OR, _TAG_ORR = "cbeP,L", "cbeP,R"
 The preselection SVD's relative cutoff: `stol > 0` cuts at `stol`; `stol <= 0` is the numerical
 rank test, with the floor `_CBE_EPS` measured against `||Y||` (not `||P_perp Y||`, which cancels).
 """
-_rank_cut(stol::Float64, Y, n::Real) =
-    stol > 0 ? stol : _CBE_EPS * max(norm(Y), n) / n
+_rank_cut(stol::Float64, Y, n::Real) = stol > 0 ? stol : _CBE_EPS * max(norm(Y), n) / n
 
 """
     _preselect_left(U0, Y, stol) -> (Q, err) or (nothing, 0.0)
@@ -190,8 +201,14 @@ function _preselect_left(U0, Y, stol::Float64)
     R = perp_component(U0, Y)
     n = norm(R)
     n <= _CBE_EPS * max(norm(Y), 1.0) && return (nothing, 0.0)
-    res = svd(to_concrete((1.0 / n) * R), (1, 2), _TAG_L, _TAG_LR;
-              cutoff = _rank_cut(stol, Y, n), get_lists = true)
+    res = svd(
+        to_concrete((1.0 / n) * R),
+        (1, 2),
+        _TAG_L,
+        _TAG_LR;
+        cutoff = _rank_cut(stol, Y, n),
+        get_lists = true,
+    )
     Q = to_concrete(res.U)
     R2 = perp_component(U0, Q)            # RepairOrtho
     norm(R2) <= _CBE_EPS * norm(Q) && return (nothing, 0.0)
@@ -209,13 +226,18 @@ function _preselect_right(V0, Y, stol::Float64)
     R = perp_component_right(V0, Y)
     n = norm(R)
     n <= _CBE_EPS * max(norm(Y), 1.0) && return (nothing, 0.0)
-    res = svd(to_concrete((1.0 / n) * R), (2, 3), _TAG_R, _TAG_RR;
-              cutoff = _rank_cut(stol, Y, n), get_lists = true)
+    res = svd(
+        to_concrete((1.0 / n) * R),
+        (2, 3),
+        _TAG_R,
+        _TAG_RR;
+        cutoff = _rank_cut(stol, Y, n),
+        get_lists = true,
+    )
     Q = to_concrete(permutedims(res.U, (3, 1, 2)))
     R2 = perp_component_right(V0, Q)      # RepairOrtho
     norm(R2) <= _CBE_EPS * norm(Q) && return (nothing, 0.0)
-    Q = to_concrete(permutedims(svd(R2, (2, 3), _TAG_R, _TAG_RR; cutoff = 1e-13).U,
-                                (3, 1, 2)))
+    Q = to_concrete(permutedims(svd(R2, (2, 3), _TAG_R, _TAG_RR; cutoff = 1e-13).U, (3, 1, 2)))
     return (Q, _trunc_weight(res))
 end
 
@@ -233,7 +255,7 @@ function _tail_rank(list, scale::Float64, allowance::Float64, kmax::Int; base::F
     kmax <= 0 && return (0, scale * sqrt(base + _sq_weight(list)))
     w = [Float64(s)^2 * Float64(deg) for (s, deg, _, _) in list]
     # Weight below `kmax` is discarded whatever `k` we choose, so it belongs to the floor.
-    tail = base + sum(w[(kmax + 1):n]; init = 0.0)
+    tail = base + sum(w[(kmax+1):n]; init = 0.0)
     k = kmax
     while k > 0
         t = tail + w[k]
@@ -267,14 +289,20 @@ function _frame_sector_dims(frame, side::Symbol, F, where::AbstractString)
     fdir, bdir = F.inds[3].dir, frame.inds[fl].dir
     dT = Dict(q => sector_dim(frame, fl, align_charge(syms_, q, fdir, bdir)) for q in keys(dfull))
     for (q, d) in dT
-        d <= dfull[q] || throw(ErrorException(
-            "$where: the frame holds $d directions in sector $q but the fused local space has " *
-            "only $(dfull[q]) -- a frame cannot exceed its local space (frame width " *
-            "$(leg_dim(frame, fl)), local $(sum(values(dfull))))"))
+        d <= dfull[q] || throw(
+            ErrorException(
+                "$where: the frame holds $d directions in sector $q but the fused local space has " *
+                "only $(dfull[q]) -- a frame cannot exceed its local space (frame width " *
+                "$(leg_dim(frame, fl)), local $(sum(values(dfull))))",
+            ),
+        )
     end
-    sum(values(dT); init = 0) == leg_dim(frame, fl) || throw(ErrorException(
-        "$where: the frame holds $(leg_dim(frame, fl)) directions but only " *
-        "$(sum(values(dT); init = 0)) lie in sectors its local space has"))
+    sum(values(dT); init = 0) == leg_dim(frame, fl) || throw(
+        ErrorException(
+            "$where: the frame holds $(leg_dim(frame, fl)) directions but only " *
+            "$(sum(values(dT); init = 0)) lie in sectors its local space has",
+        ),
+    )
     return dfull, dT
 end
 
@@ -292,7 +320,7 @@ function _cap_to_local_room(Q, U, side::Symbol)
     F = fusion_basis(Q, a, b; tag = "cbeRoom")
     dfull, dT = _frame_sector_dims(Q, side, F, "_cap_to_local_room")
     syms_ = symm(Q)
-    counts = Dict{Any, Int}()
+    counts = Dict{Any,Int}()
     over = false
     for (q, d) in dfull
         uq = align_charge(syms_, q, F.inds[3].dir, U.inds[fl].dir)
@@ -323,13 +351,17 @@ end
 # ── orthonormality guard on the appended blocks ──
 # Project the frame out, then orthonormalise (Telum has no QR, so `svd(...).U`); cutoff 1e-14
 # drops columns that collapse, and a dropped column shows in `n_new_*`.
-_reortho_left(U0, C) = _reortho(C, X -> perp_component(U0, X),
-                                R -> svd(R, (1, 2), _TAG_OL, _TAG_OLR; cutoff = 1e-14).U)
+_reortho_left(U0, C) = _reortho(
+    C,
+    X -> perp_component(U0, X),
+    R -> svd(R, (1, 2), _TAG_OL, _TAG_OLR; cutoff = 1e-14).U,
+)
 
-_reortho_right(V0, C) = _reortho(C, X -> perp_component_right(V0, X),
-                                 R -> permutedims(
-                                     svd(R, (2, 3), _TAG_OR, _TAG_ORR; cutoff = 1e-14).U,
-                                     (3, 1, 2)))
+_reortho_right(V0, C) = _reortho(
+    C,
+    X -> perp_component_right(V0, X),
+    R -> permutedims(svd(R, (2, 3), _TAG_OR, _TAG_ORR; cutoff = 1e-14).U, (3, 1, 2)),
+)
 
 function _reortho(C, perp, orth)
     C === nothing && return nothing

@@ -38,8 +38,8 @@ mutable struct KernelCounters
     b_compress::Int        # the closing compression
 end
 
-KernelCounters() = KernelCounters(0, 0, 0, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0, 0, 0,
-                                  0, 0, 0, 0)
+KernelCounters() =
+    KernelCounters(0, 0, 0, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0, 0, 0, 0, 0, 0, 0)
 
 function merge_counters!(a::KernelCounters, b::KernelCounters)
     for f in fieldnames(KernelCounters)
@@ -154,10 +154,38 @@ struct CBEBugRunInfo
     energies::Vector{Float64}
 end
 
-CBEBugRunInfo(times, norms, bds, maxbd, expanded, maxexp, centres,
-              epre, efnl, disc, mags, obs, kdim, maug) =
-    CBEBugRunInfo(times, norms, bds, maxbd, expanded, maxexp, centres,
-                  epre, efnl, disc, mags, obs, kdim, maug, Float64[])
+CBEBugRunInfo(
+    times,
+    norms,
+    bds,
+    maxbd,
+    expanded,
+    maxexp,
+    centres,
+    epre,
+    efnl,
+    disc,
+    mags,
+    obs,
+    kdim,
+    maug,
+) = CBEBugRunInfo(
+    times,
+    norms,
+    bds,
+    maxbd,
+    expanded,
+    maxexp,
+    centres,
+    epre,
+    efnl,
+    disc,
+    mags,
+    obs,
+    kdim,
+    maug,
+    Float64[],
+)
 
 Base.length(info::CBEBugRunInfo) = length(info.times)
 
@@ -233,19 +261,30 @@ state (plan §5). `tol_trunc` is a budget on the CUMULATIVE discarded norm over 
 out by `truncate_recursive!` into `bwts`; the ledger records it and closes the per-bond log.
 `discarded` is the largest single relative weight the root split or the compression threw away.
 """
-function _assemble_and_compress!(psi, W, Z, c::Int, res, ledger::AdaptiveLedger, bwts, bd0;
-                                 maxdim::Int, tol_trunc::Float64, truncate::Bool)
+function _assemble_and_compress!(
+    psi,
+    W,
+    Z,
+    c::Int,
+    res,
+    ledger::AdaptiveLedger,
+    bwts,
+    bd0;
+    maxdim::Int,
+    tol_trunc::Float64,
+    truncate::Bool,
+)
     L = length(psi)
     discarded = _trunc_weight(res)
-    for i in 1:(c - 1)
+    for i = 1:(c-1)
         psi[i] = _relink(W[i], psi[i].inds[1].itags, psi[i].inds[3].itags)
     end
     t1c, t3c = psi[c].inds[1].itags, psi[c].inds[3].itags
-    t3r = psi[c + 1].inds[3].itags
-    psi[c]     = _relink(to_concrete(W[c] * res.U), t1c, t3c)
-    psi[c + 1] = _relink(to_concrete((res.S * res.Vd) * Z[c]), t3c, t3r)
-    for j in (c + 1):(L - 1)
-        psi[j + 1] = _relink(Z[j], psi[j + 1].inds[1].itags, psi[j + 1].inds[3].itags)
+    t3r = psi[c+1].inds[3].itags
+    psi[c] = _relink(to_concrete(W[c] * res.U), t1c, t3c)
+    psi[c+1] = _relink(to_concrete((res.S * res.Vd) * Z[c]), t3c, t3r)
+    for j = (c+1):(L-1)
+        psi[j+1] = _relink(Z[j], psi[j+1].inds[1].itags, psi[j+1].inds[3].itags)
     end
     psi.center = c + 1
     root_rank = leg_dim(psi[c], 3)
@@ -253,8 +292,13 @@ function _assemble_and_compress!(psi, W, Z, c::Int, res, ledger::AdaptiveLedger,
     ttr = 0.0
     if truncate
         t0 = time_ns()
-        _, wtr, cumw, capped = truncate_recursive!(psi, c + 1; maxdim = maxdim,
-                                                   weight_tol = tol_trunc, bond_weights = bwts)
+        _, wtr, cumw, capped = truncate_recursive!(
+            psi,
+            c + 1;
+            maxdim = maxdim,
+            weight_tol = tol_trunc,
+            bond_weights = bwts,
+        )
         ttr = (time_ns() - t0) / 1e9
         discarded = max(discarded, wtr)
         ledger.n_compress += 1
@@ -266,7 +310,9 @@ function _assemble_and_compress!(psi, W, Z, c::Int, res, ledger::AdaptiveLedger,
     bd1 = bond_dims(psi)
     ledger.r_final = maximum(bd1; init = 0)
     # Close the per-bond log with what only exists after the root solve and compression.
-    ledger.bond_log = Any[merge(e, (r_old = bd0[e.bond], r_final = bd1[e.bond],
-                                    discarded = bwts[e.bond])) for e in ledger.bond_log]
+    ledger.bond_log = Any[
+        merge(e, (r_old = bd0[e.bond], r_final = bd1[e.bond], discarded = bwts[e.bond])) for
+        e in ledger.bond_log
+    ]
     return (root_rank, discarded, ttr)
 end

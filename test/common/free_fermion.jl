@@ -24,9 +24,9 @@ off-diagonal is `J/2` and the diagonal is zero.
 """
 function xx_single_particle_hamiltonian(L::Int; J::Real = 1.0)
     h = zeros(ComplexF64, L, L)
-    for j in 1:(L - 1)
-        h[j, j + 1] = J / 2
-        h[j + 1, j] = J / 2
+    for j = 1:(L-1)
+        h[j, j+1] = J / 2
+        h[j+1, j] = J / 2
     end
     return h
 end
@@ -41,10 +41,9 @@ end
 `occupied` lists the initially occupied sites. Up spin is an occupied fermion
 (`Sz = n − ½`), so the default `1:(L÷2)` is exactly `domain_wall_state(L)`.
 """
-function xx_free_fermion_sz(L::Int, t::Real; J::Real = 1.0,
-                            occupied = 1:(L ÷ 2))
+function xx_free_fermion_sz(L::Int, t::Real; J::Real = 1.0, occupied = 1:(L÷2))
     U = exp(-im * t * xx_single_particle_hamiltonian(L; J = J))
-    return [sum(abs2(U[j, k]) for k in occupied) - 0.5 for j in 1:L]
+    return [sum(abs2(U[j, k]) for k in occupied) - 0.5 for j = 1:L]
 end
 
 """
@@ -57,9 +56,11 @@ The open-chain one-body propagator in closed form (HQ plan T7.1),
 the eigen-decomposition of `xx_single_particle_hamiltonian` written out, NOT computed from it.
 """
 function xx_open_propagator(L::Int, t::Real; J::Real = 1.0)
-    k = [pi * m / (L + 1) for m in 1:L]
-    return [2 / (L + 1) * sum(sin(k[m] * i) * sin(k[m] * j) * cis(-J * t * cos(k[m]))
-                              for m in 1:L) for i in 1:L, j in 1:L]
+    k = [pi * m / (L + 1) for m = 1:L]
+    return [
+        2 / (L + 1) * sum(sin(k[m] * i) * sin(k[m] * j) * cis(-J * t * cos(k[m])) for m = 1:L) for
+        i = 1:L, j = 1:L
+    ]
 end
 
 """
@@ -68,9 +69,9 @@ end
 `C(t) = u(t) C(0) u(t)'` with `C_ij = <c_j^dag c_i>` (plan T7.1's convention), from the Slater
 determinant occupying `occupied`: `<S^z_i> = C_ii - 1/2`.
 """
-function xx_open_correlation(L::Int, t::Real; J::Real = 1.0, occupied = 1:(L ÷ 2))
+function xx_open_correlation(L::Int, t::Real; J::Real = 1.0, occupied = 1:(L÷2))
     u = xx_open_propagator(L, t; J = J)
-    C0 = Diagonal([i in occupied ? 1.0 : 0.0 for i in 1:L])
+    C0 = Diagonal([i in occupied ? 1.0 : 0.0 for i = 1:L])
     return u * C0 * u'
 end
 
@@ -81,7 +82,7 @@ The bond currents `j_b = (iJ/2) <S^+_b S^-_{b+1} - h.c.> = -J Im C_{b+1,b}` of t
 (`S^+_b S^-_{b+1} = c_b^dag c_{b+1}`: the string cancels on adjacent sites), `C` in the convention of
 `xx_open_correlation`. Signed so that `dC_bb/dt = j_{b-1} - j_b`.
 """
-xx_open_current(C::AbstractMatrix; J::Real = 1.0) = [-J * imag(C[b + 1, b]) for b in 1:(size(C, 1) - 1)]
+xx_open_current(C::AbstractMatrix; J::Real = 1.0) = [-J * imag(C[b+1, b]) for b = 1:(size(C, 1)-1)]
 
 """
     xx_slater_amplitudes(L, t, basis; J=1.0, occupied=1:(L÷2)) -> Vector{ComplexF64}
@@ -93,7 +94,7 @@ of `j`, `c'_{I_1} ... c'_{I_N} |0>` IS `S^+_{I_1} ... S^+_{I_N} |down...>`, so n
 (checked against sector ED, xx-efficiency plan S1). A state-fidelity oracle for an arbitrary MPS,
 which the correlation matrix alone is not.
 """
-function xx_slater_amplitudes(L::Int, t::Real, basis; J::Real = 1.0, occupied = 1:(L ÷ 2))
+function xx_slater_amplitudes(L::Int, t::Real, basis; J::Real = 1.0, occupied = 1:(L÷2))
     V = xx_open_propagator(L, t; J = J)[:, collect(occupied)]
     return ComplexF64[det(V[findall(>(0), b), :]) for b in basis]
 end
@@ -135,12 +136,17 @@ gives a different, silently plausible curve.
 that backwards transposes the generator, which for a SYMMETRIC `h` and a DIAGONAL initial `C`
 still produces a smooth, wrong-looking-right curve.
 """
-function xx_dephasing_correlation(L::Int, t::Real; J::Real = 1.0, gamma::Real = 0.0,
-                                  occupied = 1:2:L)
-    h  = xx_single_particle_hamiltonian(L; J = J)
+function xx_dephasing_correlation(
+    L::Int,
+    t::Real;
+    J::Real = 1.0,
+    gamma::Real = 0.0,
+    occupied = 1:2:L,
+)
+    h = xx_single_particle_hamiltonian(L; J = J)
     Id = Matrix{ComplexF64}(LinearAlgebra.I, L, L)
-    M  = -im * (kron(Id, h) - kron(transpose(h), Id))
-    for i in 1:L, j in 1:L
+    M = -im * (kron(Id, h) - kron(transpose(h), Id))
+    for i = 1:L, j = 1:L
         i == j && continue
         k = (j - 1) * L + i                     # column-major position of C[i,j]
         M[k, k] -= gamma
@@ -161,7 +167,7 @@ end
 the dissipative generator was assembled the right way round.
 """
 xx_dephasing_sz(L::Int, t::Real; kwargs...) =
-    [real(xx_dephasing_correlation(L, t; kwargs...)[j, j]) - 0.5 for j in 1:L]
+    [real(xx_dephasing_correlation(L, t; kwargs...)[j, j]) - 0.5 for j = 1:L]
 
 # ── NON-HERMITIAN free fermions: the Hatano-Nelson chain, EXACTLY ─────────────────────────────
 #
@@ -239,17 +245,22 @@ string-free nearest-neighbour terms intact.
 function nh_hopping_matrix(L::Int; J_r = 1.0, J_l = 1.0, periodic::Bool = false)
     _bond(x, j) = x isa Number ? ComplexF64(x) : ComplexF64(x[j])
     for (nm, x) in (("J_r", J_r), ("J_l", J_l))
-        x isa Number || length(x) == L - 1 || throw(DimensionMismatch(
-            "$nm has $(length(x)) entries, need $(L - 1) (one per bond)"))
+        x isa Number ||
+            length(x) == L - 1 ||
+            throw(DimensionMismatch("$nm has $(length(x)) entries, need $(L - 1) (one per bond)"))
     end
     h = zeros(ComplexF64, L, L)
-    for j in 1:(L - 1)
-        h[j, j + 1] = _bond(J_r, j)
-        h[j + 1, j] = _bond(J_l, j)
+    for j = 1:(L-1)
+        h[j, j+1] = _bond(J_r, j)
+        h[j+1, j] = _bond(J_l, j)
     end
     if periodic
-        L >= 3 || throw(ArgumentError("periodic needs L >= 3, got $L: at L = 2 the wrap bond " *
-                                      "IS the chain bond and adding both doubles it"))
+        L >= 3 || throw(
+            ArgumentError(
+                "periodic needs L >= 3, got $L: at L = 2 the wrap bond " *
+                "IS the chain bond and adding both doubles it",
+            ),
+        )
         # ⛔ SPECTRUM DEMONSTRATION ONLY -- see the Jordan-Wigner warning above. This does NOT
         # correspond to any `pair_mpo` this repo can build.
         h[L, 1] = _bond(J_r, L - 1)
@@ -268,7 +279,7 @@ Pass the same vector as both `J_r` and `J_l`: symmetric in the two hopping direc
 the amplitude. `g = 0` recovers the Hermitian XX chain with `J_r = J_l = J`.
 """
 nh_staggered_couplings(L::Int; J::Number = 1.0, g::Real = 0.0) =
-    ComplexF64[J * (1 + im * g * (-1)^j) for j in 1:(L - 1)]
+    ComplexF64[J * (1 + im * g * (-1)^j) for j = 1:(L-1)]
 
 """
     nh_orbitals(L, t; J_r=1.0, J_l=1.0, occupied=1:2:L) -> Matrix{ComplexF64}
@@ -279,8 +290,14 @@ nh_staggered_couplings(L::Int; J::Number = 1.0, g::Real = 0.0) =
 columns of `U(t)` are neither normalised nor mutually orthogonal. Every quantity below therefore
 goes through the Gram matrix; none of them may use `U'` alone.
 """
-function nh_orbitals(L::Int, t::Real; J_r = 1.0, J_l = 1.0,
-                     periodic::Bool = false, occupied = 1:2:L)
+function nh_orbitals(
+    L::Int,
+    t::Real;
+    J_r = 1.0,
+    J_l = 1.0,
+    periodic::Bool = false,
+    occupied = 1:2:L,
+)
     U0 = zeros(ComplexF64, L, length(occupied))
     for (mu, k) in enumerate(occupied)
         U0[k, mu] = 1.0
@@ -334,7 +351,7 @@ machine precision. That check is the calibration for the whole family and is wor
 any comparison against the MPS arms.
 """
 nh_free_fermion_sz(L::Int, t::Real; kwargs...) =
-    [real(nh_free_fermion_correlation(L, t; kwargs...)[j, j]) - 0.5 for j in 1:L]
+    [real(nh_free_fermion_correlation(L, t; kwargs...)[j, j]) - 0.5 for j = 1:L]
 
 # ── BOUNDARY-DISSIPATED XX CHAIN: the COMPLEX-FREQUENCY reference (arXiv:2104.11479) ─────────
 #
@@ -383,16 +400,21 @@ so `eps/4` is right and every neighbouring convention is O(1) wrong. A wrong fac
 still give a plausible complex spectrum with a plausible gap -- which is exactly why it is checked
 against a published identity rather than derived once and trusted.
 """
-function xx_boundary_structure_matrix(N::Int; J::Real = 1.0, B::Real = 0.0,
-                                      eps_L::Real = 1.0, eps_R::Real = 1.0)
+function xx_boundary_structure_matrix(
+    N::Int;
+    J::Real = 1.0,
+    B::Real = 0.0,
+    eps_L::Real = 1.0,
+    eps_R::Real = 1.0,
+)
     N >= 2 || throw(ArgumentError("need N >= 2, got $N"))
     X = zeros(ComplexF64, N, N)
-    for k in 1:N
+    for k = 1:N
         X[k, k] = B
     end
-    for k in 1:(N - 1)
-        X[k, k + 1] = J
-        X[k + 1, k] = J
+    for k = 1:(N-1)
+        X[k, k+1] = J
+        X[k+1, k] = J
     end
     X[1, 1] -= im * eps_L / 4
     X[N, N] -= im * eps_R / 4
@@ -406,8 +428,7 @@ Eigenvalues of [`xx_boundary_structure_matrix`](@ref). `real(lambda)` is a mode'
 FREQUENCY and `abs(imag(lambda))` its DECAY RATE, so these two numbers are what decide the Nyquist
 step and the run length respectively.
 """
-xx_boundary_rapidities(N::Int; kwargs...) =
-    eigvals(xx_boundary_structure_matrix(N; kwargs...))
+xx_boundary_rapidities(N::Int; kwargs...) = eigvals(xx_boundary_structure_matrix(N; kwargs...))
 
 """
     xx_boundary_liouvillian_gap(N; kwargs...) -> Float64
@@ -437,8 +458,7 @@ of the paper's central result rather than an internal consistency check.
 function xx_boundary_gap_published(N::Int; J::Real = 1.0, eps_L::Real = 1.0, eps_R::Real = 1.0)
     l = eps_L / (4J)
     r = eps_R / (4J)
-    return 4J * pi^2 * (l + r) * (l * r + 1) /
-           ((l + r)^2 + (l * r - 1)^2) / N^3
+    return 4J * pi^2 * (l + r) * (l * r + 1) / ((l + r)^2 + (l * r - 1)^2) / N^3
 end
 
 include(joinpath(@__DIR__, "free_fermion_open.jl"))

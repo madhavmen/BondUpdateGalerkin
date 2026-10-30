@@ -21,13 +21,13 @@ the op-leg charge (+/-2) forces each to pair with its own adjoint.
 """
 function heisenberg_bond_gate(site_l, site_r; J::Float64 = 1.0, delta::Float64 = 1.0)
     tl, tr = _site_tag(site_l), _site_tag(site_r)
-    tl == tr && throw(ArgumentError(
-        "the two sites of a bond need distinct itags, both are '$tl'"))
+    tl == tr && throw(ArgumentError("the two sites of a bond need distinct itags, both are '$tl'"))
     q = local_space()
 
     # (ket_l, bra_l, ket_r, bra_r) -> (ket_l, ket_r, bra_l, bra_r).
-    pair(A, B) = to_concrete(permutedims(
-        contract(_retag_site(A, tl), (3,), _retag_site(B, tr)', (3,)), (1, 4, 2, 3)))
+    pair(A, B) = to_concrete(
+        permutedims(contract(_retag_site(A, tl), (3,), _retag_site(B, tr)', (3,)), (1, 4, 2, 3)),
+    )
 
     # ── :SU2 ──
     # One term, not three: under SU(2) only `:S` (a rank-3 op-leg, S = 1 irrep) is exposed, and its
@@ -35,13 +35,17 @@ function heisenberg_bond_gate(site_l, site_r; J::Float64 = 1.0, delta::Float64 =
     # is refused, not built isotropically: anisotropy breaks SU(2) to U(1), so the gate would be the
     # wrong Hamiltonian.
     if symmetry_mode() === :SU2
-        delta == 1.0 || throw(ArgumentError(
-            "SU(2) admits only the isotropic point, got delta = $delta; anisotropy breaks " *
-            "the symmetry down to U(1), so run that case under set_symmetry!(:U1)"))
+        delta == 1.0 || throw(
+            ArgumentError(
+                "SU(2) admits only the isotropic point, got delta = $delta; anisotropy breaks " *
+                "the symmetry down to U(1), so run that case under set_symmetry!(:U1)",
+            ),
+        )
         return to_concrete(J * pair(q.S, q.S) * (1.0 + 0.0im))
     end
-    outer(A, B) = to_concrete(permutedims(
-        contract(_retag_site(A, tl), (), _retag_site(B, tr), ()), (1, 3, 2, 4)))
+    outer(A, B) = to_concrete(
+        permutedims(contract(_retag_site(A, tl), (), _retag_site(B, tr), ()), (1, 3, 2, 4)),
+    )
 
     # Under :U1 the raising/lowering ops are rank 3 and `pair` already folds in the 1/2 (see the
     # header). Under :none they are plain matrices: Telum's Sp = -(1/√2) S⁺ and Sm = (1/√2) S⁻ make
@@ -75,8 +79,9 @@ that pins U(1) charge conservation across a bond update.
 function magnetisation_gate(site_l, site_r)
     tl, tr = _site_tag(site_l), _site_tag(site_r)
     q = local_space()
-    outer(A, B) = to_concrete(permutedims(
-        contract(_retag_site(A, tl), (), _retag_site(B, tr), ()), (1, 3, 2, 4)))
+    outer(A, B) = to_concrete(
+        permutedims(contract(_retag_site(A, tl), (), _retag_site(B, tr), ()), (1, 3, 2, 4)),
+    )
     return to_concrete((outer(q.Sz, q.I) + outer(q.I, q.Sz)) * (1.0 + 0.0im))
 end
 
@@ -100,14 +105,14 @@ function dimer_state(L::Int)
     # that symmetry changes the cost and not the physics. Under `:none`/`:U1` the construction is
     # by projection — see `_dimer_state_projected`.
     symmetry_mode() === :SU2 || return _dimer_state_projected(L)
-    L >= 2 && iseven(L) || throw(ArgumentError(
-        "dimer_state needs an even number of sites >= 2, got $L"))
+    L >= 2 && iseven(L) ||
+        throw(ArgumentError("dimer_state needs an even number of sites >= 2, got $L"))
     q = local_space(:SU2)
 
     tensors = Any[]
     prev = (getvac(q.I, ("L,0", "L,1")), 2)
 
-    for i in 1:L
+    for i = 1:L
         F = to_concrete(getIdentity(prev, (q.I, 1); itag = "L,$(i + 1)"))
         F = to_concrete(setitag(F, 2, "S,$i"))
         # Select on leg 3, the FUSED total spin, not on the physical leg.
