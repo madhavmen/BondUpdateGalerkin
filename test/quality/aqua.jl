@@ -1,5 +1,6 @@
 # Package hygiene: undefined exports, ambiguities, compat entries, type piracy (plan Section 7).
-using Aqua
+using Test, Aqua
+using BondUpdateGalerkin
 
 @testset "Aqua" begin
     Aqua.test_all(BondUpdateGalerkin)

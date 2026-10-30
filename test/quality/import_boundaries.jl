@@ -2,6 +2,8 @@
 # modules it is allowed to depend on. Layering inside BUG (Core <- Randomised <- TimeEvolution,
 # ITE) is not visible at module level and is enforced in review.
 
+using Test
+
 const SRC_DIR = normpath(joinpath(@__DIR__, "..", "..", "src"))
 
 const FORBIDDEN_REFERENCES = Dict(
