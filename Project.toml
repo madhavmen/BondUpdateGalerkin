@@ -3,10 +3,22 @@ uuid = "1e716c53-f7fe-4870-a059-040ee0ffff16"
 version = "0.1.0"
 authors = ["Madhav Menon"]
 
+[deps]
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+LurCGT = "4f3ab192-95b7-495a-a0ca-04b4b33dd828"
+Telum = "206e1281-4cfe-4f93-80c6-84968ba7c8d5"
+
+[sources]
+LurCGT = {url = "https://github.com/lurlurlurrrrr/LurCGT.jl", rev = "1375987561c3393cf7b45e66a129ecb6a4fae1d7"}
+Telum = {path = "deps/Telum"}
+
 [compat]
 Aqua = "0.8"
+LinearAlgebra = "1"
+LurCGT = "1"
+Telum = "0.2"
 Test = "1"
-julia = "1.10"
+julia = "1.11"
 
 [extras]
 Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"

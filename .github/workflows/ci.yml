@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: ["1.10", "1"]
+        version: ["1.11", "1"]
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
@@ -37,5 +37,5 @@ jobs:
       - name: Check JuliaFormatter
         run: |
           julia -e 'using Pkg; Pkg.add(name = "JuliaFormatter", version = "1")'
-          julia -e 'using JuliaFormatter; format(".")'
+          julia -e 'using JuliaFormatter; format(["src", "test", "docs"])'  # deps/Telum is vendored, not ours to restyle
           git diff --exit-code
