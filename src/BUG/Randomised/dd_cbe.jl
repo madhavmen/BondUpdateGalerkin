@@ -1,0 +1,846 @@
+# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/expansion/dd_cbe.jl, src/RSVDCBEBondUpdate/expansion/dd_cbe_controller.jl.
+
+# ── from src/RSVDCBEBondUpdate/expansion/dd_cbe.jl ──
+
+# ── implicit DD-projected, MPO-streamed, QR-only CBE ──
+# The frame grows by Om~ = P^D Om, Z = X Om~ streamed through the MPO, and Y = Q R: neither X nor the
+# DD projector is formed. One side per call, since the two QRs belong to the two half-sweep orientations.
+
+# ── T1.4: per-kernel counters ─────────────────────────────────────────────────────────────
+
+"""
+    KernelCounters
+
+Operator applications, QR ranks, sector additions, seconds and allocated bytes per kernel.
+Plain mutable fields so the hot loop records with no allocation. One instance per half-sweep
+(they may run concurrently) and one for the root, merged after the join.
+
+⚠ Bytes are `Base.gc_bytes()` differences: process-wide, so under `parallel = :half_sweeps`
+each half-sweep's counts include the other thread's allocations in the same interval.
+"""
+mutable struct KernelCounters
+    n_stream::Int          # MPO-streamed two-site actions (one per sketch call, all channels)
+    n_stream_cols::Int     # probe columns those actions carried
+    n_one_site::Int        # one-site H applications (local Krylov)
+    n_root::Int            # zero-site H applications (root solve)
+    n_qr::Int              # DD-QR selections
+    qr_rank::Int           # directions those QRs kept (numerical rank, summed)
+    n_sector_new::Int      # charge sectors a frame gained that it did not hold before
+    t_input_dd::Float64    # P^D on the thin input probe
+    t_stream::Float64
+    t_output_dd::Float64   # P^D on the thin streamed output
+    t_qr::Float64
+    t_one_site::Float64
+    t_root::Float64
+    b_input_dd::Int
+    b_stream::Int
+    b_output_dd::Int
+    b_qr::Int
+    # dissipative plan U17: every phase measured in bytes as well as seconds. The environment
+    # and compression times are the step's `t_env` / `t_trunc`.
+    b_one_site::Int
+    b_root::Int
+    b_env::Int             # environment stacks and channel pushes of the half-sweeps
+    b_compress::Int        # the closing compression
+end
+KernelCounters() = KernelCounters(0, 0, 0, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0, 0, 0,
+                                  0, 0, 0, 0)
+
+function merge_counters!(a::KernelCounters, b::KernelCounters)
+    for f in fieldnames(KernelCounters)
+        setfield!(a, f, getfield(a, f) + getfield(b, f))
+    end
+    return a
+end
+
+"Run `f()` and return `(result, seconds, bytes)`."
+@inline function _measure(f)
+    b0 = Base.gc_bytes()
+    t0 = time_ns()
+    r = f()
+    return r, (time_ns() - t0) / 1e9, Base.gc_bytes() - b0
+end
+
+# ── one operator-action interface ──
+# Each operator is immutable and built per bond visit, so a stale one cannot see a later gauge.
+# Outputs go to a caller-held `Ref`, since Telum contractions allocate their result.
+
+"""
+    TwoSiteSketchOp(f, mpo, i, lenv, renv; adjoint = false, version = 0, counters)
+
+The two-site effective Hamiltonian at bond `(i, i+1)` as a THIN-PROBE action.
+`adjoint = false` is `Z = X Om` for a probe in `V0`'s layout `(g, site_r, link_r)`, returning
+`(link_l, site_l, g)` (the K-sweep); `adjoint = true` is `X' Om` for a probe in `U0`'s layout,
+returned as rows `(g, site_r, link_r)` (the L-sweep). The MPO channels are summed inside the
+contraction chain against the SAME probe.
+"""
+struct TwoSiteSketchOp
+    mpo::MPO
+    bond::Int
+    lenv::MPOLink
+    renv::MPOLink
+    U0::Any
+    V0::Any
+    core::Any            # U0*S0 (adjoint = false) or S0*V0 (adjoint = true)
+    adjoint::Bool
+    symmetry::Symbol
+    version::Int
+    counters::KernelCounters
+end
+
+function TwoSiteSketchOp(f::BondFrame, mpo::MPO, i::Int, lenv::MPOLink, renv::MPOLink;
+                         adjoint::Bool = false, version::Int = 0,
+                         counters::KernelCounters = KernelCounters())
+    core = adjoint ? to_concrete(f.S0 * f.V0) : to_concrete(f.U0 * f.S0)
+    return TwoSiteSketchOp(mpo, i, lenv, renv, f.U0, f.V0, core, adjoint, symmetry_mode(),
+                           version, counters)
+end
+
+"""
+    apply_two_site_sketch!(Y::Ref, Om, op::TwoSiteSketchOp) -> Y
+
+`Y[] = X Om` (or `X' Om` for `op.adjoint`), unprojected, streamed through the MPO channels.
+"""
+function apply_two_site_sketch!(Y::Base.RefValue, Om, op::TwoSiteSketchOp)
+    op.symmetry === symmetry_mode() || throw(ErrorException(
+        "TwoSiteSketchOp was built under $(op.symmetry), the active symmetry is $(symmetry_mode())"))
+    Z, dt, db = _measure(() -> op.adjoint ?
+        _stream_right(op.U0, op.core, op.mpo, op.bond, op.lenv, op.renv, Om) :
+        _stream_left(op.core, op.V0, op.mpo, op.bond, op.lenv, op.renv, Om))
+    kc = op.counters
+    kc.n_stream += 1
+    kc.n_stream_cols += leg_dim(Om, op.adjoint ? 3 : 1)
+    kc.t_stream += dt
+    kc.b_stream += db
+    Y[] = Z
+    return Y
+end
+
+"""
+    OneSiteOp(h, version, counters)
+
+A one-site effective Hamiltonian (`MPOOneSiteH`, possibly `shift_h`-ed) that counts its
+applications. `apply_one_site(op, A)` forwards, so every existing caller works unchanged.
+"""
+struct OneSiteOp{H}
+    h::H
+    version::Int
+    counters::KernelCounters
+end
+
+function apply_one_site(op::OneSiteOp, A)
+    y, dt, db = _measure(() -> apply_one_site(op.h, A))
+    op.counters.n_one_site += 1
+    op.counters.t_one_site += dt
+    op.counters.b_one_site += db
+    return y
+end
+
+"`Y[] = H1 X` through the shared interface."
+apply_one_site!(Y::Base.RefValue, X, op::OneSiteOp) = (Y[] = apply_one_site(op, X); Y)
+
+"""
+    RootOp(h, version, counters)
+
+The root (zero-site) generator with counted applications; `apply_zero_site(op, S)` forwards.
+"""
+struct RootOp{H}
+    h::H
+    version::Int
+    counters::KernelCounters
+end
+
+function apply_zero_site(op::RootOp, S)
+    y, dt, db = _measure(() -> apply_zero_site(op.h, S))
+    op.counters.n_root += 1
+    op.counters.t_root += dt
+    op.counters.b_root += db
+    return y
+end
+
+"`Y[] = H0 S` through the shared interface."
+apply_root!(Y::Base.RefValue, S, op::RootOp) = (Y[] = apply_zero_site(op, S); Y)
+
+# ── the streamed contractions ──
+# As `_fold_sketch_closures` (mpo.jl), but with no final projection and Theta never formed: every
+# intermediate is thin in g.
+
+"`X Om` for `Om` in `V0`'s layout; `K0 = U0 S0`. Legs `(link_l, site_l, g)`."
+function _stream_left(K0, V0, mpo::MPO, i::Int, lenv::MPOLink, renv::MPOLink, Om)
+    W1, W2 = mpo[i], mpo[i + 1]
+    Omd = Om'                                                 # (g, s_bra_r, bra_r)
+    C = if renv.E === nothing
+        X = to_concrete!(contract(Omd, (2,), W2, (3,)))       # (g, bra_r, w_mid, s_ket_r, w_r)
+        to_concrete(deleteSingleton(X, 5))                   # (g, bra_r, w_mid, s_ket_r)
+    else
+        X = to_concrete!(contract(Omd, (3,), renv.E, (1,)))   # (g, s_bra_r, w, ket_r)
+        to_concrete!(contract(X, (2, 3), W2, (3, 4)))         # (g, ket_r, w_mid, s_ket_r)
+    end
+    D1 = to_concrete!(contract(V0, (2, 3), C, (4, 2)))        # (bond, g, w_mid)
+    D = to_concrete!(contract(K0, (3,), D1, (1,)))            # (ℓ_l, s_l, g, w_mid)
+    E = to_concrete!(contract(D, (2, 4), W1, (2, 4)))         # (ℓ_l, g, w_l, s_bra_l)
+    if lenv.E === nothing
+        X = to_concrete(deleteSingleton(E, 3))               # (ℓ_l, g, s_bra_l)
+        return to_concrete(permutedims(X, (1, 3, 2)))        # (ℓ_l, s_bra_l, g)
+    end
+    X = to_concrete!(contract(E, (1, 3), lenv.E, (3, 2)))     # (g, s_bra_l, bra)
+    return _unprime(to_concrete(permutedims(X, (3, 2, 1))), 1)
+end
+
+"`X' Om` for `Om` in `U0`'s layout, as rows; `M0 = S0 V0`. Legs `(g, site_r, link_r)`."
+function _stream_right(U0, M0, mpo::MPO, i::Int, lenv::MPOLink, renv::MPOLink, Om)
+    W1, W2 = mpo[i], mpo[i + 1]
+    Omd = Om'                                                 # (bra_l, s_bra_l, g)
+    C = if lenv.E === nothing
+        X = to_concrete!(contract(Omd, (2,), W1, (3,)))       # (bra_l, g, w_l, s_ket_l, w_mid)
+        to_concrete(deleteSingleton(X, 3))                   # (bra_l, g, s_ket_l, w_mid)
+    else
+        X = to_concrete!(contract(Omd, (1,), lenv.E, (1,)))   # (s_bra_l, g, w, ket_l)
+        Z = to_concrete!(contract(X, (1, 3), W1, (3, 1)))     # (g, ket_l, s_ket_l, w_mid)
+        to_concrete(permutedims(Z, (2, 1, 3, 4)))            # (ket_l, g, s_ket_l, w_mid)
+    end
+    D1 = to_concrete!(contract(U0, (1, 2), C, (1, 3)))        # (bond, g, w_mid)
+    D = to_concrete!(contract(M0, (1,), D1, (1,)))            # (s_r, ℓ_r, g, w_mid)
+    E = to_concrete!(contract(D, (1, 4), W2, (2, 1)))         # (ℓ_r, g, s_bra_r, w_r)
+    if renv.E === nothing
+        X = to_concrete(deleteSingleton(E, 4))               # (ℓ_r, g, s_bra_r)
+        return to_concrete(permutedims(X, (2, 3, 1)))        # (g, s_bra_r, ℓ_r)
+    end
+    X = to_concrete!(contract(E, (1, 4), renv.E, (3, 2)))     # (g, s_bra_r, bra_r)
+    return _unprime(X, 3)
+end
+
+"""
+    dd_reference_sketch(f, mpo, i, lenv, renv, Om, side) -> TLArray
+
+TEST/DEBUG ONLY (plan T2.5 "full-DD exact tiny reference"): `P_L^D X P_R^D Om` (`side = :left`)
+or `P_R^D X' P_L^D Om` (`:right`) through the MATERIALISED `H Theta` and the project-first
+closures of `_sketch_closures`. Never on the production path.
+"""
+function dd_reference_sketch(f::BondFrame, mpo::MPO, i::Int, lenv::MPOLink, renv::MPOLink,
+                             Om, side::Symbol)
+    skl, skr = _sketch_closures(f, () -> apply_h_two_site(frame_theta(f), mpo, i, lenv, renv))
+    return side === :left ? skl(perp_component_right(f.V0, Om)) :
+                            skr(perp_component(f.U0, Om))
+end
+
+# ── T2.3: probes in the discarded space only ──────────────────────────────────────────────
+
+"""
+    _dd_probe(frame, side, w; rng, boost, exact, kc) -> P^D Om, or nothing
+
+A sector-graded Gaussian probe in `frame`'s layout, drawn only in the discarded space: columns are
+allotted by each sector's discarded dimension, then the frame is projected out. `exact = true`
+projects the complete fused basis instead. Returns `nothing` when there is no discarded space.
+
+Unlike `sector_graded_sketch(...; comp_ratio = 1.0)`, a short complement is not topped up from the
+kept space.
+"""
+function _dd_probe(frame, side::Symbol, w::Int; rng::AbstractRNG, boost = nothing,
+                   exact::Bool = false, kc::KernelCounters = KernelCounters())
+    a, b = side === :left ? (1, 2) : (2, 3)
+    F = fusion_basis(frame, a, b; tag = "cbeG")
+    dfull, dT = _frame_sector_dims(frame, side, F, "_dd_probe")
+    dC = Dict(q => max(dfull[q] - dT[q], 0) for q in keys(dfull))
+    sum(values(dC); init = 0) == 0 && return nothing
+    R = if exact
+        F
+    else
+        cols = _alloc_columns(dC, w)
+        boost === nothing || _boost!(cols, boost, dC)
+        _trim_per_sector(_randomize_like(F, rng), 3, cols)
+    end
+    R === nothing && return nothing
+    Om = side === :left ? R : to_concrete(permutedims(R, (3, 1, 2)))
+    perp = side === :left ? perp_component : perp_component_right
+    P, dt, db = _measure(() -> perp(frame, Om))
+    kc.t_input_dd += dt
+    kc.b_input_dd += db
+    return norm(P) > 0 ? P : nothing
+end
+
+# ── T2.4: sectorwise thin Householder QR ──────────────────────────────────────────────────
+
+const _TAG_DD_L, _TAG_DD_R = "cbeQ,L", "cbeQ,R"
+
+"Block `rmt` as a `(rows, d_fl)` matrix: every leg but `fl` fused into rows, `fl` the columns."
+function _block_matrix(rmt::AbstractArray, perm, rows::Int, dfl::Int)
+    return reshape(permutedims(rmt, perm), rows, dfl)
+end
+
+"""
+    _thin_qr(Y, fl, ref, tag, thr) -> Q or nothing
+
+Orthonormal basis of the span of `Y`'s leg-`fl` "columns" (fl = 3: columns of the left
+matricisation; fl = 1: rows of the right one), by column-pivoted Householder QR per charge
+sector of leg `fl`. A direction is kept when its pivot `|R_kk|` exceeds `thr` -- an absolute,
+machine-precision-scaled linear-dependence floor, not a physics cutoff; nothing is ranked.
+
+The new leg is built in `ref`'s arrow convention (`align_charge`), so `[frame | Q]` direct-sums
+directly. Abelian symmetries only (the block of a sector is then a plain matrix);
+callers use `_thin_orth_nonabelian` otherwise.
+"""
+function _thin_qr(Y, fl::Int, ref::TLIndex, tag::AbstractString, thr::Float64)
+    QD = length(Y.inds)
+    syms = symm(Y)
+    ydir = Y.inds[fl].dir
+    others = Tuple(l for l in 1:QD if l != fl)
+    groups = Dict{Any, Vector{Int}}()
+    order = Any[]
+    for k in eachindex(Y.qlabels)
+        Y.isdefined[k] || continue
+        q = Y.qlabels[k][fl]
+        haskey(groups, q) || (groups[q] = Int[]; push!(order, q))
+        push!(groups[q], k)
+    end
+    newq = similar(Y.qlabels, 0)
+    newR = similar(Y.RMTs, 0)
+    keep = Int[]
+    space = similar(Y.spaces[fl], 0)
+    for q in order
+        ks = groups[q]
+        rmt1 = Y.RMTs[ks[1]]
+        nd = ndims(rmt1)
+        all(size(rmt1, l) == 1 for l in (QD + 1):nd) || throw(ArgumentError(
+            "_thin_qr: sector multiplicity axes are not trivial -- non-abelian blocks"))
+        perm = (others..., fl, ((QD + 1):nd)...)
+        dfl = size(rmt1, fl)
+        mats = [_block_matrix(Y.RMTs[k], perm, prod(size(Y.RMTs[k], l) for l in others), dfl)
+                for k in ks]
+        M = reduce(vcat, mats)
+        size(M, 1) == 0 && continue
+        F = qr(M, ColumnNorm())
+        r = count(x -> abs(x) > thr, diag(F.R))
+        r == 0 && continue
+        Qm = Matrix(F.Q)[:, 1:r]
+        qn = align_charge(syms, q, ydir, ref.dir)
+        push!(space, (qn, r))
+        row = 0
+        for (k, Mk) in zip(ks, mats)
+            nr = size(Mk, 1)
+            sz = size(Y.RMTs[k])
+            blk = reshape(Qm[(row + 1):(row + nr), :],
+                          (map(l -> sz[l], others)..., r, sz[(QD + 1):nd]...))
+            row += nr
+            push!(keep, k)
+            push!(newR, permutedims(blk, invperm(collect(perm))))
+            lab = Y.qlabels[k]
+            push!(newq, ntuple(l -> l == fl ? qn : lab[l], QD))
+        end
+    end
+    isempty(keep) && return nothing
+    wd, wi = Telum._copy_wmat_storage(Y, keep; deep = true)
+    inds = ntuple(l -> l == fl ? TLIndex(tag, ref.dir, ref.plev, 0, ref.dual) : Y.inds[l], QD)
+    spaces = ntuple(l -> l == fl ? space : copy(Y.spaces[l]), QD)
+    return TLArray(syms, newq, wd, wi, newR, inds, spaces)
+end
+
+"""
+Plan T2.4 "twice is enough", read as the DGKS/Kahan-Parlett acceptance test: a unit column of `Q1`
+is a direction only if it keeps at least this fraction of its norm through the second `P^D`. A
+genuine direction keeps ~1. Roundoff that cleared the first floor collapses to the frame's own
+orthogonality level, which an absolute `100 eps` floor does not reject: in a sector the frame
+fills, that column is `P^D`'s cancellation noise renormalised, i.e. a unit vector INSIDE the frame.
+MEASURED (dissipative A2 L=32 finite density, closure frontier sweep, dr6z): pass-1 residuals
+3.0e-14 against a floor of 2.65e-14 in the filled sectors, kept by pass 2 with `|frame'Q| = 1`; the
+controller's working frame absorbed them, the next selections projected against a non-isometric
+frame, and the grown frame reached a defect of 14 at site 13 and 1e26 at the root.
+"""
+const _REORTH_KEEP = 1 / sqrt(2)
+
+"""
+    _dd_select(frame, Z, side, kc) -> (Q, backend)
+
+Output DD projection and the two-pass thin QR of plan T2.4: `Y = P^D Z`, `Q1 = qr(Y)` at the
+floor `100 eps max(||Z||, ||Y||)` (the cancellation noise `P^D` leaves when most of `Z` lies in
+the frame), then `Q = qr(P^D Q1)` -- reorthogonalisation against the old frame, "twice is
+enough", keeping the pivots `>= _REORTH_KEEP`. Returns `nothing` when `Y` is numerically zero.
+Under SU(2) the sector blocks are not plain matrices, so the existing numerical-rank SVD
+orthonormalisation (`_preselect_*` at `stol = 0`, no ranking) is used and reported as backend
+`:svd_orth`, never silently.
+"""
+function _dd_select(frame, Z, side::Symbol, kc::KernelCounters)
+    left = side === :left
+    if symmetry_mode() === :SU2
+        (Q, _), dt, db = _measure(() -> left ? _preselect_left(frame, Z, 0.0) :
+                                               _preselect_right(frame, Z, 0.0))
+        kc.t_qr += dt
+        kc.b_qr += db
+        kc.n_qr += 1
+        Q === nothing || (kc.qr_rank += leg_dim(Q, left ? 3 : 1))
+        return (Q, :svd_orth)
+    end
+    fl = left ? 3 : 1
+    perp = left ? perp_component : perp_component_right
+    Y, dt, db = _measure(() -> perp(frame, Z))
+    kc.t_output_dd += dt
+    kc.b_output_dd += db
+    nz, ny = norm(Z), norm(Y)
+    ny <= _CBE_EPS * max(nz, 1.0) && return (nothing, :householder)
+    ref = frame.inds[fl]
+    tag = left ? _TAG_DD_L : _TAG_DD_R
+    Q, dt, db = _measure(() -> begin
+        Q1 = _thin_qr(Y, fl, ref, tag, _CBE_EPS * max(nz, ny))
+        Q1 === nothing ? nothing : _thin_qr(perp(frame, Q1), fl, ref, tag, _REORTH_KEEP)
+    end)
+    kc.t_qr += dt
+    kc.b_qr += db
+    kc.n_qr += 1
+    Q === nothing || (kc.qr_rank += leg_dim(Q, fl))
+    return (Q, :householder)
+end
+
+"The DD-QR backend this symmetry uses (`StepRecord.qr_backend`)."
+_qr_backend() = symmetry_mode() === :SU2 ? :svd_orth : :householder
+
+# ── from src/RSVDCBEBondUpdate/expansion/dd_cbe_controller.jl ──
+
+# dd_cbe_controller.jl: the incremental DD controller, `dd_cbe_expand` and the step record (from `dd_cbe.jl`, included right after it).
+
+# ── T3.1-T3.4: the incremental DD sketch controller ───────────────────────────────────────
+
+"Plan T3.3: the default independent holdout width `s` (an implementation constant; tests 2, 4, 8)."
+const _DD_HOLDOUT = 4
+
+"""
+    _dd_controller(frame, side, draw, sketch, project, w0, wcap, ncap, alloc, ledger;
+                   kc, s, audit, holdout, trace) -> (Q, status)
+
+Grows the DD basis `Q` of one side block by block until an independent holdout says the rest of
+`G = P^D X P^D` fits this side's share `alloc.sample`. Each probe block is streamed through the MPO
+once and its action cached; a failed check draws a fresh holdout before promoting the old one.
+
+Statuses: `:met`; `:work_limited` (`wcap` or `ncap` reached); `:basis_limited` (a pass added no
+direction); `:empty` (no discarded space). Every continuing pass adds a direction, so the loop ends.
+"""
+function _dd_controller(frame, side::Symbol, draw, sketch, project, w0::Int, wcap::Int,
+                        ncap::Int, alloc::BasisAllocation, ledger::Union{Nothing, AdaptiveLedger};
+                        kc::KernelCounters = KernelCounters(), s::Int = _DD_HOLDOUT,
+                        audit::Bool = false, holdout = w -> draw(w, nothing),
+                        trace::Union{Nothing, Vector} = nothing)
+    left = side === :left
+    fl, wleg = left ? (3, 1) : (1, 3)
+    tags = frame.inds[fl].itags
+    aug, Q, n, streamed = frame, nothing, 0, 0
+    boost = Dict{Any, Int}()
+    function absorb!(Z)
+        Qn, _ = _dd_select(aug, Z, side, kc)
+        Qn === nothing && return 0
+        Qn = to_concrete(setitag(Qn, fl, tags))
+        Q = Q === nothing ? Qn : to_concrete(oplus([Q, Qn], (fl,)))
+        aug = to_concrete(oplus([aug, Qn], (fl,)))
+        return leg_dim(Qn, fl)
+    end
+    function stream(Om, field::Symbol)
+        w = leg_dim(Om, wleg)
+        streamed += w
+        ledger === nothing || setfield!(ledger, field, getfield(ledger, field) + w)
+        return sketch(Om)
+    end
+    function fresh(w)
+        Om = holdout(w)
+        return Om === nothing ? nothing : (Om, stream(Om, :n_holdout))
+    end
+    resid(h) = _sample_residual(Q, project, _ -> h[2], _ -> h[1], 1, wleg, side)
+    newsector() = Q !== nothing && any(((q, _),) -> sector_dim(frame, fl, q) == 0, Q.spaces[fl])
+
+    w = clamp(w0, 1, max(wcap, 1))
+    last = draw(w, nothing)
+    last === nothing && return (nothing, :empty)
+    n += absorb!(stream(last, :n_probes))
+    h = fresh(s)
+    h1 = h
+    escalated = false
+    while true
+        h === nothing && return (Q, :met)            # nothing left to validate against
+        est, per, hcols = resid(h)
+        ind = indicator(alloc, est)
+        trace === nothing || push!(trace, (n, ind, indicator(alloc, resid(h1)[1])))
+        ok = ind <= alloc.sample
+        if ok && !escalated && (audit || ind > alloc.sample / 2 || newsector())
+            escalated = true
+            he = fresh(2s)
+            he === nothing || (h = he; continue)
+        end
+        capped = streamed >= wcap || n >= ncap
+        if ok || capped
+            ledger === nothing || _record_sample!(ledger, side, ind, per, hcols, last, wleg, alloc)
+            ok && return (Q, :met)
+            if ledger !== nothing
+                _unmet!(ledger, :sample)
+                ledger.workcap_reached = true
+            end
+            return (Q, :work_limited)
+        end
+        nt = _target_sectors!(boost, per, h[1], wleg, alloc)
+        ledger === nothing || (ledger.n_targeted += nt)
+        hnew = fresh(s)                          # new validation BEFORE the old one is promoted
+        added = absorb!(h[2])
+        nt == 0 && (w = min(2 * w, wcap))
+        blk = draw(w, isempty(boost) ? nothing : boost)
+        if blk !== nothing
+            last = blk
+            added += absorb!(stream(blk, :n_probes))
+        end
+        n += added
+        if added == 0
+            ledger === nothing || (_record_sample!(ledger, side, ind, per, hcols, last, wleg,
+                                                   alloc); _unmet!(ledger, :sample))
+            return (Q, :basis_limited)
+        end
+        h = hnew
+    end
+end
+
+# ── QTT plan §1.2 / §1.2A, arm D3: the hybrid predictor controller ────────────────────────
+
+"Bounded oversampling of D3's first block over its predictor: `clamp(cld(pred, 4), 4, 8)` columns."
+_dd_oversample(pred::Int) = clamp(cld(pred, 4), 4, 8)
+
+"""
+    DDMemory()
+
+Per-bond memory of the D3 hybrid controller (`dd_policy = :hybrid`): the directions accepted last
+time at `(side, bond)` -- the PREDICTOR of the next first block, never a correctness condition --
+and one trace entry per call (`bond`, `side`, `branch`, `ell`, `s`, `retries`, `m`, `n`, `added`,
+`streamed`, `status`) for the first-impressions report (plan §1.2A: reported for every sampled
+bond). Locked, since the two half-sweeps may run concurrently.
+"""
+mutable struct DDMemory
+    accepted::Dict{Tuple{Symbol, Int}, Int}
+    trace::Vector{NamedTuple}
+    lock::ReentrantLock
+end
+DDMemory() = DDMemory(Dict{Tuple{Symbol, Int}, Int}(), NamedTuple[], ReentrantLock())
+
+_dd_predict(mem::DDMemory, side::Symbol, i::Int) =
+    lock(() -> get(mem.accepted, (side, i), nothing), mem.lock)
+
+function _dd_remember!(mem::DDMemory, side::Symbol, i::Int, n::Int, rec::NamedTuple)
+    lock(mem.lock) do
+        mem.accepted[(side, i)] = n
+        push!(mem.trace, rec)
+    end
+    return mem
+end
+
+"""
+    _dd_hybrid(frame, opp, side, draw, sketch, sketch_adj, exhaust_opp, exhaust_self, project,
+               w0, wcap, cap, m, n, alloc, ledger; pred, rng, kc, s) -> (Q, status, record)
+
+Arm D3 of plan §1.2A, on the same `X = mat(F(psi))`, frames and DD-QR kernels as D1:
+
+1. PREFLIGHT. `m`, `n` are the discarded dimensions of this side and of the probe side. When
+   `ell + s + ell_retry >= min(m, n)` sampling cannot undercut the exhaustive DD action (a cost
+   heuristic, not a theorem), so that runs instead: the probe side's whole DD basis (`n` columns),
+   or for `2m < n` the mirrored route (`m` adjoint columns give the row space, then its rank in
+   forward columns). Exhaustive is exact up to the QR floor, so no holdout is drawn.
+2. Otherwise ONE block of `ell = pred + _dd_oversample(pred)` columns (`pred` the rank accepted
+   here last time, else `w0`), QR, and an INDEPENDENT holdout of `s` columns from its own RNG
+   stream, accepted at `alloc.sample` (the time-weighted `eta_DD = h R_DD / ||psi||`).
+3. On failure the holdout's actions are absorbed and a bounded block of `max(ell ÷ 2, s)` new
+   columns appended, with a fresh holdout, until met, `wcap` streamed columns or `cap` directions
+   (`:work_limited`), or a pass adds nothing (`:basis_limited`).
+"""
+function _dd_hybrid(frame, opp, side::Symbol, draw, sketch, sketch_adj, exhaust_opp, exhaust_self,
+                    project, w0::Int, wcap::Int, cap::Int, m::Int, n::Int,
+                    alloc::BasisAllocation, ledger::Union{Nothing, AdaptiveLedger};
+                    pred::Union{Nothing, Int}, rng::AbstractRNG,
+                    kc::KernelCounters = KernelCounters(), s::Int = _DD_HOLDOUT)
+    left = side === :left
+    fl, wleg = left ? (3, 1) : (1, 3)
+    oside = left ? :right : :left
+    tags = frame.inds[fl].itags
+    aug, Q, nq, streamed = frame, nothing, 0, 0
+    function absorb!(Z)
+        Qn, _ = _dd_select(aug, Z, side, kc)
+        Qn === nothing && return 0
+        Qn = to_concrete(setitag(Qn, fl, tags))
+        Q = Q === nothing ? Qn : to_concrete(oplus([Q, Qn], (fl,)))
+        aug = to_concrete(oplus([aug, Qn], (fl,)))
+        return leg_dim(Qn, fl)
+    end
+    function stream(Om, field::Symbol)
+        streamed += leg_dim(Om, wleg)
+        ledger === nothing || setfield!(ledger, field, getfield(ledger, field) + leg_dim(Om, wleg))
+        return sketch(Om)
+    end
+    ell = clamp(pred === nothing ? w0 : pred + _dd_oversample(pred), 1, max(wcap, 1))
+    retry = max(ell ÷ 2, s)
+    rec(branch, st, retries) = (side = side, branch = branch, ell = ell, s = s, retries = retries,
+                                m = m, n = n, added = nq, streamed = streamed, status = st)
+
+    if ell + s + retry >= min(m, n)
+        if n <= 2m
+            B = exhaust_opp()
+            B === nothing && return (nothing, :empty, rec(:exhaustive, :empty, 0))
+            Bq, _ = _dd_select(opp, B, oside, kc)            # orthonormal DD basis, n columns
+            Bq === nothing && return (nothing, :empty, rec(:exhaustive, :empty, 0))
+            nq += absorb!(stream(Bq, :n_probes))
+            return (Q, :met, rec(:exhaustive, :met, 0))
+        end
+        Sx = exhaust_self()
+        Sx === nothing && return (nothing, :empty, rec(:mirrored, :empty, 0))
+        Sq, _ = _dd_select(frame, Sx, side, kc)               # this side's DD basis, m columns
+        Sq === nothing && return (nothing, :empty, rec(:mirrored, :empty, 0))
+        streamed += leg_dim(Sq, fl)
+        ledger === nothing || (ledger.n_probes += leg_dim(Sq, fl))
+        Wq, _ = _dd_select(opp, sketch_adj(Sq), oside, kc)   # the row space of A_DD
+        Wq === nothing && return (nothing, :met, rec(:mirrored, :met, 0))
+        nq += absorb!(stream(Wq, :n_probes))
+        return (Q, :met, rec(:mirrored, :met, 0))
+    end
+
+    hrng = MersenneTwister(rand(rng, UInt64))                 # the holdout's own stream
+    blk = draw(ell, nothing)
+    blk === nothing && return (nothing, :empty, rec(:sampled, :empty, 0))
+    nq += absorb!(stream(blk, :n_probes))
+    retries = 0
+    while true
+        Oh = _dd_probe(opp, oside, s; rng = hrng, kc = kc)
+        Oh === nothing && return (Q, :met, rec(:sampled, :met, retries))
+        Zh = stream(Oh, :n_holdout)
+        est, per, hcols = _sample_residual(Q, project, _ -> Zh, _ -> Oh, 1, wleg, side)
+        ind = indicator(alloc, est)
+        if ind <= alloc.sample || streamed >= wcap || nq >= cap
+            ledger === nothing || _record_sample!(ledger, side, ind, per, hcols, blk, wleg, alloc)
+            ind <= alloc.sample && return (Q, :met, rec(:sampled, :met, retries))
+            if ledger !== nothing
+                _unmet!(ledger, :sample)
+                ledger.workcap_reached = true
+            end
+            return (Q, :work_limited, rec(:sampled, :work_limited, retries))
+        end
+        added = absorb!(Zh)                                   # the failed holdout is kept
+        w = min(retry, max(wcap - streamed, 0))
+        if w > 0
+            b2 = draw(w, nothing)
+            b2 === nothing || (blk = b2; added += absorb!(stream(b2, :n_probes)))
+        end
+        nq += added
+        retries += 1
+        if added == 0
+            ledger === nothing || (_record_sample!(ledger, side, ind, per, hcols, blk, wleg, alloc);
+                                   _unmet!(ledger, :sample))
+            return (Q, :basis_limited, rec(:sampled, :basis_limited, retries))
+        end
+    end
+end
+
+# ── T2.5: one side of the bond expansion ──────────────────────────────────────────────────
+
+const _TAG_W, _TAG_WR = "cbeW,L", "cbeW,R"
+
+"""
+    _trim_by_weight(Q, B, side, n) -> Q or nothing
+
+Keep the `n` directions of `Q` (orthonormal, outside the frame) that carry the most of the DD
+action `M = P^D X P^D`, given `B = Q' M` (rows `(g, site_r, link_r)` for `:left`, columns
+`(link_l, site_l, g)` for `:right`, `g` = `Q`'s leg): Telum's SVD ranks them across ALL sectors
+(`Nkeep`), as the final selection of `cbe_expand` does. `_trim_total` instead fills sectors in
+storage order, so at a binding work ceiling whole charge sectors lose their expansion (the latent
+trap of PLAN-tolerance-control.md §1). MEASURED (dissipative A1 L = 12, dt 0.1, rank probe rp7f):
+frame cut at 1024 against 1679 needed, obs error 2.2e-4 against 1.3e-12 uncut, the spurious
+components then forcing the compressed rank to maxdim off the root.
+"""
+function _trim_by_weight(Q, B, side::Symbol, n::Int)
+    n <= 0 && return nothing
+    left = side === :left
+    leg_dim(Q, left ? 3 : 1) <= n && return Q
+    U = svd(B, left ? (1,) : (3,), _TAG_W, _TAG_WR; cutoff = 0.0, Nkeep = n).U    # (g, k)
+    return left ? to_concrete(contract(Q, (3,), U, (1,))) :     # (link, site, k)
+                  to_concrete(contract(U, (1,), Q, (1,)))       # (k, site, link)
+end
+
+"""
+    dd_cbe_expand(f, mpo, i, lenv, renv, side; alloc, ledger, workcap, growth,
+                  exact, rng, kc) -> CBEExpansion
+
+Grows ONE frame at bond `(i, i+1)`: `U0` for `side = :left` (K-sweep), `V0` for `:right` (L-sweep).
+The other frame is returned unchanged. Rank comes from the QR; the probe width from
+[`_dd_controller`](@ref), or from the numerical rank alone when `alloc === nothing` or `exact`.
+Retained directions are bounded by the local room and the work ceiling; past the ceiling
+`cap_order = :weight` keeps the heaviest ([`_trim_by_weight`](@ref)), `:sector` the first sectors
+in storage order (`_trim_total`).
+
+`dd_width = l > 0` is the fixed-oversampling ablation (xx-efficiency plan Figs. 1A and 4): one
+probe of width `l` through the same DD projection, streamed kernel and QR, no holdout.
+`dd_policy = :hybrid` is the QTT plan's arm D3 ([`_dd_hybrid`](@ref)), its predictor read from and
+written to `dd_memory` (a [`DDMemory`](@ref); `nothing` = no predictor); `:adaptive` is D1; `:off`
+adds nothing (the no-CBE control).
+"""
+function dd_cbe_expand(f::BondFrame, mpo::MPO, i::Int, lenv::MPOLink, renv::MPOLink,
+                       side::Symbol; alloc::Union{Nothing, BasisAllocation} = nothing,
+                       ledger::Union{Nothing, AdaptiveLedger} = nothing,
+                       workcap::Int = 0, growth::Float64 = ADAPTIVE_GROWTH,
+                       exact::Bool = false,
+                       rng::AbstractRNG = MersenneTwister(0x5EED),
+                       kc::KernelCounters = KernelCounters(), version::Int = 0,
+                       holdout_width::Int = _DD_HOLDOUT, audit::Bool = false,
+                       cap_order::Symbol = :sector, dd_width::Int = 0,
+                       dd_policy::Symbol = :adaptive, dd_memory = nothing)
+    side in (:left, :right) || throw(ArgumentError("side must be :left or :right"))
+    cap_order in (:sector, :weight) || throw(ArgumentError(
+        "cap_order must be :sector or :weight, got $cap_order"))
+    dd_policy in (:adaptive, :hybrid, :off) || throw(ArgumentError(
+        "dd_policy must be :adaptive, :hybrid or :off, got $dd_policy"))
+    # `:off` -- the no-CBE control of plan §1.2A (the frame then grows by local Krylov alone)
+    dd_policy === :off && return CBEExpansion(f.U0, f.V0, 0, 0, 0.0, 0.0)
+    left = side === :left
+    U0, V0 = f.U0, f.V0
+    r = f.old_rank
+    frame, opp = left ? (U0, V0) : (V0, U0)
+    oside = left ? :right : :left
+    fl, wleg = left ? (3, 1) : (1, 3)
+    none() = CBEExpansion(U0, V0, 0, 0, 0.0, 0.0)
+
+    # The fused local dimension, as `cbe_expand` reads it (SU(2) counts multiplets).
+    fused(t, a, b) = symmetry_mode() === :SU2 ?
+        sum(d for (_, d) in reachable_sectors(t, a, b); init = 0) : leg_dim(t, a) * leg_dim(t, b)
+    full_self = left ? fused(U0, 1, 2) : fused(V0, 2, 3)
+    full_opp  = left ? fused(V0, 2, 3) : fused(U0, 1, 2)
+    cap = full_self - r
+    wbind = false
+    if alloc !== nothing && workcap > 0
+        wk = max(workcap - r, 0)
+        wbind = wk < cap
+        cap = min(cap, wk)
+    end
+    cap <= 0 && return none()
+
+    dmax = max(leg_dim(U0, 1), r, leg_dim(V0, 3))
+    w0 = ceil(Int, 1.2 * max(ceil(Int, growth * dmax) - r, 1))
+    wcap = exact ? w0 : full_opp
+    (alloc !== nothing && workcap > 0 && !exact) && (wcap = min(wcap, workcap))
+
+    draw(w, b) = exact ? _dd_probe(opp, oside, w; rng = rng, exact = true, kc = kc) :
+                         _dd_probe(opp, oside, w; rng = rng, boost = b, kc = kc)
+    op = TwoSiteSketchOp(f, mpo, i, lenv, renv; adjoint = !left, version = version,
+                         counters = kc)
+    out = Ref{Any}(nothing)
+    sketch(Om) = (apply_two_site_sketch!(out, Om, op); out[])
+    project = left ? (X -> perp_component(U0, X)) : (X -> perp_component_right(V0, X))
+    select(Om) = (first(_dd_select(frame, sketch(Om), side, kc)), 0.0)
+
+    # Plan T3.1: with an allocation the incremental controller decides the width (it is always
+    # thin); without one, or for the exact reference, the numerical-rank stop of `_range_find`
+    # alone.
+    Q, n = if dd_width > 0 && !exact
+        blk = draw(min(dd_width, full_opp), nothing)
+        Qf = blk === nothing ? nothing : first(_dd_select(frame, sketch(blk), side, kc))
+        blk === nothing || ledger === nothing || (ledger.n_probes += leg_dim(blk, wleg))
+        (Qf, Qf === nothing ? 0 : leg_dim(Qf, fl))
+    elseif alloc === nothing || exact
+        Qr, _, nr = _certified_range(draw, wleg, select, fl, project, sketch, side, w0, wcap,
+                                     cap, nothing, ledger)
+        (Qr, nr)
+    elseif dd_policy === :hybrid
+        opA = TwoSiteSketchOp(f, mpo, i, lenv, renv; adjoint = left, version = version,
+                              counters = kc)
+        outA = Ref{Any}(nothing)
+        # anonymous: a named local function inside a branch is hoisted to the whole method
+        sketch_adj = Om -> (apply_two_site_sketch!(outA, Om, opA); outA[])
+        exhaust_opp = () -> _dd_probe(opp, oside, 0; rng = rng, exact = true, kc = kc)
+        exhaust_self = () -> _dd_probe(frame, side, 0; rng = rng, exact = true, kc = kc)
+        pred = dd_memory === nothing ? nothing : _dd_predict(dd_memory, side, i)
+        Qh, _, rec = _dd_hybrid(frame, opp, side, draw, sketch, sketch_adj, exhaust_opp,
+                                exhaust_self, project, w0, wcap, cap, full_self - r,
+                                full_opp - r, alloc, ledger; pred = pred, rng = rng, kc = kc,
+                                s = holdout_width)
+        nh = Qh === nothing ? 0 : leg_dim(Qh, fl)
+        dd_memory === nothing || _dd_remember!(dd_memory, side, i, nh, merge((bond = i,), rec))
+        (Qh, nh)
+    else
+        Qc, _ = _dd_controller(frame, side, draw, sketch, project, w0, wcap, cap, alloc,
+                               ledger; kc = kc, s = holdout_width, audit = audit)
+        (Qc, Qc === nothing ? 0 : leg_dim(Qc, fl))
+    end
+    Q === nothing && return none()
+    if n > cap
+        Q = if cap_order === :weight
+            # B = Q' M exactly: the opposite sketch applied to the `n` directions themselves
+            opT = TwoSiteSketchOp(f, mpo, i, lenv, renv; adjoint = left, version = version,
+                                  counters = kc)
+            B = (apply_two_site_sketch!(out, Q, opT); out[])
+            _trim_by_weight(Q, left ? perp_component_right(V0, B) : perp_component(U0, B),
+                            side, cap)
+        else
+            _trim_total(Q, fl, cap)
+        end
+        Q === nothing && return none()
+    end
+    ledger === nothing || (wbind && n >= cap && (ledger.workcap_reached = true))
+    # Insurance only: the QR floor is per sector and absolute, so roundoff in a saturated sector
+    # does not become a column the way a globally relative SVD cut lets it (`_guarded_block`).
+    Q = _cap_to_local_room(frame, Q, side)
+    Q === nothing && return none()
+    nq = leg_dim(Q, fl)
+    kc.n_sector_new += count(((q, _),) -> sector_dim(frame, fl, q) == 0, Q.spaces[fl])
+    ledger === nothing || (ledger.n_selected += nq)
+    grown = to_concrete(oplus([frame, to_concrete(setitag(Q, fl, frame.inds[fl].itags))], (fl,)))
+    return left ?
+        CBEExpansion(_check_frame(grown, :left, "dd_cbe_expand U_ex"), V0, nq, 0, 0.0, 0.0) :
+        CBEExpansion(U0, _check_frame(grown, :right, "dd_cbe_expand V_ex"), 0, nq, 0.0, 0.0)
+end
+
+# ── T1.4: the typed step record ───────────────────────────────────────────────────────────
+
+"""
+    StepRecord
+
+One `cbe_bug_step!`'s account, typed and allocation-light (plan T1.4): which algorithm ran
+(`policy`, `qr_backend`, `closure_policy` for the order > 1 frontier sweeps, `order`,
+`parallel`), the kernel counters, the ranks `D_old` (largest bond before), `D_stage` (largest
+trial-space frame, untruncated), `D_final` (after compression) and the two limits they are held
+to, `D_max` (`maxdim`, the final rank) and `D_work` (the working-rank ceiling `work_ceiling`
+puts on the frames), root iterations, total seconds and bytes,
+the process `peak_rss` (`Sys.maxrss()`, a high-water mark, not per step), and `limits`: which
+of `:basis_limited`, `:root_limited`, `:truncation_limited`, `:work_limited`, `:rank_limited`
+held the step back (empty when the budget held), and `budget_rule`, how `tol_basis` was
+aggregated over the shares (`:linear`; plan T3.2).
+"""
+struct StepRecord
+    policy::Symbol
+    qr_backend::Symbol
+    closure_policy::Symbol
+    order::Int
+    parallel::Symbol
+    counters::KernelCounters
+    D_old::Int
+    D_stage::Int
+    D_final::Int
+    D_max::Int
+    D_work::Int
+    root_iters::Int
+    t_step::Float64
+    bytes_step::Int
+    peak_rss::Int
+    limits::Vector{Symbol}
+    budget_rule::Symbol
+end
+
+"Plan invariant 4: the separate limit statuses, read off the ledger's failed checks."
+function _step_limits(ledger::AdaptiveLedger)
+    lim = Symbol[]
+    any(u -> u in (:sample, :tail, :krylov, :closure, :projection), ledger.unmet) &&
+        push!(lim, :basis_limited)
+    :expv in ledger.unmet && push!(lim, :root_limited)
+    :trunc in ledger.unmet && push!(lim, :truncation_limited)
+    ledger.maxdim_reached && push!(lim, :rank_limited)
+    ledger.workcap_reached && push!(lim, :work_limited)
+    return lim
+end
+
+"""
+    _resolve_parallel(p) -> Bool
+
+`parallel` of the plan's API: `:serial`/`false`, `:half_sweeps`/`true`. `:full` also runs the
+half-sweeps concurrently; `cbe_bug_step!` then takes the separate parallel K/L/S integrator of
+plan Task 6 (`parallel_kls_step!`).
+"""
+function _resolve_parallel(p)
+    p isa Bool && return p
+    p === :serial && return false
+    p in (:half_sweeps, :full) && return true
+    throw(ArgumentError("parallel must be :serial, :half_sweeps, :full or a Bool, got $p"))
+end
