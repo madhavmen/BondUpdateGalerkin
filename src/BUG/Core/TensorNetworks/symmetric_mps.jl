@@ -160,3 +160,8 @@ orthogonality_center(psi::SymMPS) = psi.center
 canonicalize!(psi::SymMPS, i::Int) = canonical!(psi, i)
 inner_product(bra::SymMPS, ket::SymMPS) = overlap(bra, ket)
 symmetry(psi::SymMPS) = symmetry_trait(symm(psi[1]))
+
+# ── from BUG-Julia@b155550:src/RSVDCBEBondUpdate/baselines/tdvp2.jl ──
+
+"Total stored elements of a TLArray -- the honest size of the object, block-sparse."
+tensor_elements(t) = sum(length(r) for r in t.RMTs; init = 0)
