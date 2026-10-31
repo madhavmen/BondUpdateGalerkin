@@ -14,6 +14,16 @@ repeats; record the machine and thread count with every result and compare only 
 `QTTS/common.jl` holds the shared CSV writer and the independent sparse finite-difference
 references. Run times are not yet recorded.
 
+At small sizes (a few minutes in all; `out` is any results directory):
+
+```bash
+out=/tmp/benchmarks
+julia --project benchmarks/QMB/ClosedSystem/xx_bug_vs_tdvp2.jl "$out" 12 20
+julia --project benchmarks/kernels/step_scaling.jl "$out" 16 "8,16"
+OR_OUT="$out" OR_N=4 OR_T=0.4 julia --project benchmarks/QTTS/ordering_ranks.jl
+VS_OUT="$out" VS_N=5 VS_BOX=16 VS_T=1 VS_SNAP=0.5 VS_HS=0.05 VS_ORDERS=2 VS_RELAX=0.5 VS_REFDT=1e-3 \n    julia --project benchmarks/QTTS/vortex_shedding.jl
+```
+
 Of the 237 benchmark files of BUG-Julia `b155550`, two are ported here and three became test references (`test/common`); the other 232 are not copied. They stay runnable at the tag
 `pre-bondupdategalerkin` of BUG-Julia with its pinned `Manifest.toml`; `docs/dev/inventory_b155550.csv`
 records the decision for each.

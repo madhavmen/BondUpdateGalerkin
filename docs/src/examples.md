@@ -1,7 +1,8 @@
 # Examples
 
 The scripts in `examples/` use only the public API, check their own answer against an exact or
-independent reference, and exit non-zero when the check fails. CI runs all of them.
+independent reference, and exit non-zero when the check fails. `examples/run_all.jl` runs all of them (the pre-commit hook
+`julia-examples`).
 
 | Script | Problem | Reference |
 |---|---|---|

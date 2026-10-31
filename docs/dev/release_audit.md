@@ -19,26 +19,30 @@ The no-symmetry SVD fix matters for this repository specifically: QTT states run
 
 Status on 31 October 2026 (PR 13).
 
-- [x] Every dependency installs with repository access only: `LurCGT` pinned to commit `1375987` in `[sources]`, `Telum` vendored in `deps/Telum` with its MIT `LICENSE`. Checked by the CI `Clean install` job (new depot, no cache, README commands only).
-- [x] `[compat]` for every direct dependency (`LinearAlgebra`, `LurCGT`, `Random`, `SparseArrays`, `Telum`, `julia = 1.11`) and the test extras; CI tests Julia 1.11 and the current release.
-- [x] Clean clone: install, load and the QMB quick start by the README commands (`Clean install` job); `Pkg.test()`, all four examples and the docs build in the `Tests`, `Examples` and `Docs` jobs.
+- [x] Every dependency installs with repository access only: `LurCGT` pinned to commit `1375987` in `[sources]`, `Telum` vendored in `deps/Telum` with its MIT `LICENSE`. Checked by the CI `Clean install` job (new depot, no cache, README commands only) up to its removal on 31 October 2026.
+- [x] `[compat]` for every direct dependency (`LinearAlgebra`, `LurCGT`, `Random`, `SparseArrays`, `Telum`, `julia = 1.11`) and the test extras; CI tested Julia 1.11 and the current release until 31 October 2026.
+- [x] Clean clone: install, load and the QMB quick start by the README commands (`Clean install` job); `Pkg.test()`, all four examples and the docs build in the `Tests`, `Examples` and `Docs` jobs (all green on release PR #13, run 41183438599; now pre-commit hooks).
 - [x] No secrets, private cluster paths or generated output: the tree and the full history scanned for tokens, private keys, cluster host names and home or scratch paths on 31 October 2026 (none found); generated output is ignored (`.gitignore`) and examples write only to a given directory. One author in the history.
 - [x] `CHANGELOG.md` (numerical behaviour first) and `CONTRIBUTING.md` present.
 - [ ] One dry run by a colleague unfamiliar with the code (plan WP9): install from the README, run the XX and Heston examples, read their output, add a small custom problem. Needs a person; not done.
 
 Versioning: `0.1.0` is tagged on `main` once the migration pull requests are merged; later releases follow `CONTRIBUTING.md`.
 
-## Quality gates (WP8, PR 12)
+## Quality gates (WP8; local pre-commit hooks since 31 October 2026)
 
-| Gate | Where | Blocks a merge |
+The GitHub Actions workflows were removed on 31 October 2026 (USER decision, after Actions stopped running for billing reasons): the gates run locally through the pre-commit hooks of `.pre-commit-config.yaml` (setup in `CONTRIBUTING.md`).
+
+| Gate | Where | When |
 |---|---|---|
-| JuliaFormatter on `src`, `test`, `docs`, `examples`, `benchmarks` | CI `Format` (the patch is kept as an artifact) | yes |
-| Unit, physics, PDE and frozen-fixture tests on Julia 1.11 and the current release | CI `Tests` | yes |
-| Module boundaries; `BUG/Core` layering; no BUG step in `Baselines` | `test/quality/import_boundaries.jl` | yes |
-| Aqua: undefined exports, ambiguities, compat entries, piracy | `test/quality/aqua.jl` | yes |
-| Every example checks its own answer | CI `Examples` | yes |
-| Manual builds, doctests pass | CI `Docs` | yes (missing docstrings and cross-references warn) |
-| Maintained benchmarks at small sizes, CSVs kept | `Benchmarks` workflow, weekly and on demand | no (timings on shared runners are noisy) |
+| JuliaFormatter on `src`, `test`, `docs`, `examples`, `benchmarks` | hook `julia-format` | every commit |
+| Unit, physics, PDE and frozen-fixture tests | hook `julia-tests` (`Pkg.test()`, about five minutes) | every commit |
+| Module boundaries; `BUG/Core` layering; no BUG step in `Baselines` | `test/quality/import_boundaries.jl`, in `julia-tests` | every commit |
+| Aqua: undefined exports, ambiguities, compat entries, piracy | `test/quality/aqua.jl`, in `julia-tests` | every commit |
+| Every example checks its own answer | hook `julia-examples` (`examples/run_all.jl`) | on demand, before a pull request |
+| Manual builds, doctests pass | hook `julia-docs` | on demand, before a pull request (missing docstrings and cross-references warn) |
+| Maintained benchmarks at small sizes | commands in `benchmarks/README.md` | on demand (last run: Actions run 41183449175, 31 October 2026, all four CSVs) |
+
+No second Julia version is tested any more: the hooks use the developer's Julia. The `[compat]` floor `julia = 1.11` was last checked by CI on 31 October 2026 (release PR #13, run 41183438599).
 
 **Gate check (31 October 2026).** Draft pull request #11 (`qa/broken-gate`, deleted after the check) put two deliberate defects on top of PR 12: the central first-derivative stencil with its sign flipped, and one mis-indented line, both in `src/QTTS/Tooling/derivatives.jl`. CI run 41158309943 rejected it: `Format` failed with exactly the indentation line in its patch, and `Tests` failed on both Julia versions in `test_derivatives.jl` (1D stencils, 2D derivatives, one-sided convergence) and `test_heston.jl` (generator vs dense). A first attempt used spacing inside a tuple, `( :periodic,:dirichlet0,   :onesided )`, which JuliaFormatter's default style leaves as it is; such a line is not a format violation and cannot test the gate.
 

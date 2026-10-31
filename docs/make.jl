@@ -1,5 +1,6 @@
 # Build the documentation: julia --project=docs docs/make.jl (after Pkg.instantiate in docs/).
-# The site is internal, so it is built and checked in CI but not deployed.
+# The site is internal, so it is built and checked locally (pre-commit hook `julia-docs`) but not
+# deployed.
 
 using Documenter
 using BondUpdateGalerkin

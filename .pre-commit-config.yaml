@@ -1,0 +1,44 @@
+# Local checks in place of CI: every commit is formatted and passes the test suite, which includes
+# the quality checks (module boundaries, Aqua). One-time setup, see CONTRIBUTING.md:
+#   pip install pre-commit && pre-commit install
+#   julia -e 'using Pkg; Pkg.add(name = "JuliaFormatter", version = "1")'
+#   julia --project -e 'using Pkg; Pkg.instantiate()'
+# The slower checks run on demand:
+#   pre-commit run --hook-stage manual julia-examples
+#   pre-commit run --hook-stage manual julia-docs
+repos:
+  - repo: local
+    hooks:
+      # Formats the staged Julia files in place and fails if it changed any: review, `git add`,
+      # commit again. deps/Telum is vendored, not ours to restyle.
+      - id: julia-format
+        name: JuliaFormatter
+        language: system
+        entry: julia --startup-file=no -e 'using JuliaFormatter; exit(format(ARGS) ? 0 : 1)'
+        files: ^(src|test|docs|examples|benchmarks)/.*\.jl$
+
+      # The whole suite (about five minutes), whenever Julia code or a Project.toml is staged.
+      - id: julia-tests
+        name: Test suite (Pkg.test, quality checks included)
+        language: system
+        entry: julia --startup-file=no --project=. -e 'using Pkg; Pkg.test()'
+        files: \.(jl|toml)$
+        pass_filenames: false
+
+      # Every example at small sizes; each checks its own answer.
+      - id: julia-examples
+        name: Examples
+        language: system
+        entry: julia --startup-file=no --project=. examples/run_all.jl
+        pass_filenames: false
+        always_run: true
+        stages: [manual]
+
+      # The manual, doctests included.
+      - id: julia-docs
+        name: Docs build
+        language: system
+        entry: julia --startup-file=no --project=docs -e 'using Pkg; Pkg.instantiate(); include("docs/make.jl")'
+        pass_filenames: false
+        always_run: true
+        stages: [manual]

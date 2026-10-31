@@ -18,7 +18,8 @@ julia --project examples/QTTS/gp_ground_state.jl [OUTPUT_DIR]
 | `QTTS/heston_quickstart.jl` | backward Heston on a 2D grid | the exact discrete flow, and the exponential-affine solution (Riccati) | the generator with one-sided boundary stencils, a QTT BUG step (`qtt_bug_step!`, order 3) on a linear flow, the BUG error kept apart from the spatial error |
 | `QTTS/gp_ground_state.jl` | Gross-Pitaevskii in a harmonic trap, `g = 1` | QTT gradient descent | the nonlinear imaginary-time step with the density rebuilt at every stage, monotone energy |
 
-Run times have not been measured yet; CI runs every script on each pull request (the `Examples` job).
+Run times have not been measured yet. `julia --project examples/run_all.jl` runs every script at
+small sizes (the manual pre-commit hook `julia-examples`); run it before a pull request.
 
 The BUG-Julia examples `oat_z2.jl`, `tfim_z2.jl` and `observables_demo.jl`, their shared `common.jl`
 and the plotting script `plot_examples.py` are not ported: their models are covered by the tests in

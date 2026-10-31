@@ -3,6 +3,17 @@
 All notable changes, numerical behaviour first. Versions follow semantic versioning; before 1.0 a
 minor version may change the public API.
 
+## Unreleased
+
+### Changed
+
+- No CI: the GitHub Actions workflows are removed. Formatting and the test suite (quality checks
+  included) run on every commit through pre-commit hooks (`.pre-commit-config.yaml`); the examples
+  (`examples/run_all.jl`) and the docs build are manual hooks. See `CONTRIBUTING.md`.
+- The test suite is cut to about five minutes: the frozen-trajectory regressions compare their
+  first steps (each frozen row is still checked on its own), and each test file's wall time is
+  printed.
+
 ## 0.1.0 (31 October 2026)
 
 The package as moved from BUG-Julia `b155550` (tag `pre-bondupdategalerkin`), restructured into

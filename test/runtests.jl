@@ -2,7 +2,8 @@ using Test
 using BondUpdateGalerkin
 
 # Each file runs in its own module, so helpers of one file cannot leak into another. Its wall time
-# (compilation included) is printed, so the suite's cost per file shows in every CI log.
+# (compilation included) is printed (`TESTFILE-TIME`), so the suite's cost per file shows in every
+# run; keep the total near five minutes.
 function run_testfile(path)
     m = Module(Symbol(basename(path)))
     Core.eval(m, :(include(p) = Base.include($m, p)))
