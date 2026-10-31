@@ -9,7 +9,9 @@ using BondUpdateGalerkin.Baselines
 makedocs(;
     sitename = "BondUpdateGalerkin",
     modules = [BondUpdateGalerkin, BUG, QMB, QTTS, Baselines],
-    format = Documenter.HTML(; prettyurls = false),
+    # The API pages list every exported docstring of a submodule on one page (api/bug.md is over
+    # Documenter's default 200 KiB limit); the site is internal, so page size is not a concern.
+    format = Documenter.HTML(; prettyurls = false, size_threshold = nothing),
     remotes = nothing,
     doctest = true,
     # Many internal names are exported without a docstring yet, and docstrings cite names that are
