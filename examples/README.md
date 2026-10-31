@@ -15,7 +15,7 @@ julia --project examples/QTTS/gp_ground_state.jl [OUTPUT_DIR]
 |---|---|---|---|
 | `QMB/xx_quickstart.jl` | XX chain from Néel, U(1) | free fermions | the three tolerances, the per-step `budget_status`, and a refused (`:budget_unmet`) request at `maxdim = 4` |
 | `QMB/xx_domain_wall.jl` | XX chain from a domain wall, U(1) | free fermions | BUG order 2 and two-site TDVP on the same state, MPO, step and rank cap while the bond dimension grows |
-| `QTTS/heston_quickstart.jl` | backward Heston on a 2D grid | exponential-affine solution (Riccati) | the generator with one-sided boundary stencils, a BUG step with `hermitian = false`, second-order grid convergence |
+| `QTTS/heston_quickstart.jl` | backward Heston on a 2D grid | the exact discrete flow, and the exponential-affine solution (Riccati) | the generator with one-sided boundary stencils, a QTT BUG step (`qtt_bug_step!`, order 3) on a linear flow, the BUG error kept apart from the spatial error |
 | `QTTS/gp_ground_state.jl` | Gross-Pitaevskii in a harmonic trap, `g = 1` | QTT gradient descent | the nonlinear imaginary-time step with the density rebuilt at every stage, monotone energy |
 
 Run times have not been measured yet; CI runs every script on each pull request (the `Examples` job).

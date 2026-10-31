@@ -7,7 +7,7 @@ independent reference, and exit non-zero when the check fails. CI runs all of th
 |---|---|---|
 | `examples/QMB/xx_quickstart.jl` | XX chain from Néel, U(1): tolerances, statuses, a refused request | free fermions |
 | `examples/QMB/xx_domain_wall.jl` | XX chain from a domain wall: BUG and two-site TDVP side by side | free fermions |
-| `examples/QTTS/heston_quickstart.jl` | backward Heston on a 2D grid, second-order grid convergence | exponential-affine (Riccati) solution |
+| `examples/QTTS/heston_quickstart.jl` | backward Heston on a 2D grid; BUG error and spatial error reported apart | the exact flow of the discrete operator, and the exponential-affine (Riccati) solution |
 | `examples/QTTS/gp_ground_state.jl` | Gross-Pitaevskii ground state in a harmonic trap | QTT gradient descent |
 
 ```bash

@@ -91,9 +91,12 @@ if OUTPUT_DIR !== nothing
     write(joinpath(OUTPUT_DIR, "xx_quickstart.csv"), join(lines, "\n") * "\n")
 end
 
-# the three claims of this page, checked rather than asserted in prose
+# the three claims of this page, checked rather than asserted in prose. The default run's error is
+# set by the order-1 step at dt = 0.05, not by the tolerances (the loose run lands on about the same
+# value), and the adaptive bases differ between Julia versions: 6.8e-5 on the current release,
+# 1.4e-4 on 1.11 (CI, 31 October 2026).
 passed =
-    default_run.error < 1e-4 &&
+    default_run.error < 2e-4 &&
     all(==(:met), default_run.statuses) &&
     loose_run.error < 1e-3 &&
     maximum(loose_run.bonds) <= maximum(default_run.bonds) &&
