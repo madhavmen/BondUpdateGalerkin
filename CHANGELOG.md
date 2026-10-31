@@ -22,6 +22,9 @@ minor version may change the public API.
 - Aqua's three process-based checks (`ambiguities`, `stale_deps`, `persistent_tasks`, about 8 min
   together) moved out of the commit suite into the manual hook `julia-aqua-full`
   (`Pkg.test(test_args = ["aqua-full"])`); the commit suite checks ambiguities in process.
+- The tests read their fixtures with JSON 0.21 (test compat, was "0.21, 1"): JSON 1.x defines
+  `lastindex` on its lazy arrays, which invalidated about 10 000 compiled method instances behind
+  `lastindex(::AbstractVector)` and made the first fixture test recompile the workload.
 
 ## 0.1.0 (31 October 2026)
 

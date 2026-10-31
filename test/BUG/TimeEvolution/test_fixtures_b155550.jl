@@ -75,8 +75,7 @@ end
             time_step *
             Matrix(dense_heisenberg(chain_length; J = 1.0, delta = 0.0)),
         ) * dense_state(neel_state(chain_length))
-    @test norm(dense_state(psi) - exact_state) / norm(exact_state) <=
-          2 * frozen["err_dense"] + 1e-6
+    @test norm(dense_state(psi) - exact_state) / norm(exact_state) <= 2 * frozen["err_dense"] + 1e-6
     set_symmetry!(:U1)
 end
 
