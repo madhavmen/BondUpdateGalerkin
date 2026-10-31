@@ -22,6 +22,10 @@ include("Tooling/cores.jl")
 include("Elementwise/pointwise.jl")
 include("Tooling/mpo_algebra.jl")
 include("Tooling/state_adapter.jl")
+include("Tooling/derivatives.jl")
+include("Tooling/operator_assembly.jl")
+include("Models/Heston/heston.jl")
+include("Models/Heston/heston_reference.jl")
 
 # grids and bit orderings (Tooling/grid.jl)
 export QTTOrdering, QTTGrid, qtt_grid, qtt_length, qtt_sites, qtt_bits, qtt_point
@@ -35,6 +39,11 @@ export tt_scale, tt_conj, tt_add, tt_lincomb
 export op_identity, op_scale, op_add, op_lincomb, op_compress, op_adjoint, op_transpose
 export op_compose, op_diag, op_apply, op_dense, op_ket_bra
 # the BUG state and MPO (Tooling/state_adapter.jl)
-export qtt_mps, qtt_cores, qtt_to_mpo, qtt_mpo_cores, qtt_l2norm
+export qtt_mps, qtt_cores, qtt_to_mpo, qtt_mpo_cores, qtt_l2norm, qtt_apply
+# derivatives and operator assembly (Tooling/derivatives.jl, Tooling/operator_assembly.jl)
+export QTT_BCS, qtt_shift, qtt_derivative, qtt_diag_1d, qtt_d, qtt_coord_diag, qtt_op
+# Heston (Models/Heston)
+export HestonParams, feller, heston_op, heston_mpo
+export heston_riccati, heston_affine_field, heston_call, heston_mass, heston_moment
 
 end

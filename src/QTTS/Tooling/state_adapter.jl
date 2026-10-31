@@ -2,7 +2,7 @@
 #
 # Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/qtt/qtt_telum.jl. The leg templates come from
 # Telum's two-dimensional site space directly instead of a spin model's product state and local
-# space, which QTTS may not reference. `qtt_apply` follows with `apply_mpo` (truncation, PR 4).
+# space, which QTTS may not reference.
 #
 # Under `:none` a TLArray is one dense block with `symm = ()`, so a core is wrapped by giving it the
 # `inds` of a tensor of the same role: a product-state site (state) or an `onsite_mpo` site
@@ -107,6 +107,15 @@ end
 
 "The operator cores `(w_l, out, in, w_r)` of a `:none` MPO (inverse of `qtt_to_mpo`)."
 qtt_mpo_cores(mpo::MPO) = [permutedims(_none_block(mpo[i]), (1, 3, 2, 4)) for i = 1:length(mpo)]
+
+"""
+    qtt_apply(mpo, psi; tol_trunc = 1e-12, maxdim = 10_000) -> SymMPS
+
+`mpo * psi` through the solver's own MPO product and compression ([`apply_mpo`](@ref)), for checks
+that the BUG path and the dense core algebra agree.
+"""
+qtt_apply(mpo::MPO, psi::SymMPS; tol_trunc::Real = 1e-12, maxdim::Int = 10_000) =
+    first(apply_mpo(mpo, psi; tol_trunc = Float64(tol_trunc), maxdim = maxdim))
 
 "`sqrt(dx dy) ||psi||`, the physical L2 norm (the weight is kept OUT of every contraction)."
 qtt_l2norm(psi::SymMPS, g::QTTGrid) = sqrt(qtt_cell(g)) * sqrt(max(real(overlap(psi, psi)), 0.0))

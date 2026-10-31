@@ -43,6 +43,8 @@ end
     run_testfile("QTTS/Tooling/test_grid.jl")
     run_testfile("QTTS/Tooling/test_cores.jl")
     run_testfile("QTTS/Tooling/test_operators.jl")
+    run_testfile("QTTS/Tooling/test_derivatives.jl")
+    run_testfile("QTTS/Models/Heston/test_heston.jl")
 
     run_testfile("quality/import_boundaries.jl")
     run_testfile("quality/aqua.jl")
