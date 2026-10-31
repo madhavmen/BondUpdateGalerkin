@@ -12,7 +12,8 @@ The algorithm appears **once** under `src/BUG/`. QMB and QTTS supply the represe
 - `QMB` extends BUG interfaces for spin/fermion wavefunctions and density operators. `Models/OpenSystem/MPDO` and `Models/OpenSystem/MCWF` call the BUG step rather than carrying their own integrator.
 - `QTTS` extends BUG interfaces for sampled/encoded fields, bit registers, PDE discretizations, boundaries, quadrature and non-Hermitian/nonlinear actions. Pointwise operations live in `QTTS/Elementwise`.
 - `QMB` and `QTTS` never reference each other; shared MPS/MPO storage lives in `BUG/Core/TensorNetworks`.
-- `Baselines` may use `BUG/Core` and `BUG/Randomised`, never `BUG/TimeEvolution` or `BUG/ITE`.
+- `Baselines` may use `BUG/Core`, `BUG/Randomised` and the flow definitions of `BUG/TimeEvolution/flows.jl` (a vector field, not an integrator), never a BUG step; `test/quality/import_boundaries.jl` checks that no baseline names one.
+- The implicit Runge-Kutta stage solver (`BUG/TimeEvolution/stage_solvers.jl`) works through a frame interface (`frame_state`, `frame_project`, `frame_operator_matrix`, `frame_conj`); a representation implements it (`QTTS/Tooling/frames.jl` for dense QTT cores).
 - Tests, examples, benchmarks and studies consume public API, not the inverse.
 
 ## Source checklist

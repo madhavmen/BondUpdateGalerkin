@@ -1,0 +1,34 @@
+name: Benchmarks
+
+# The extended layer of plan Section 7: the maintained benchmark drivers at small sizes, weekly and
+# on demand, with their CSVs kept as artifacts for before/after comparison. Not a merge gate:
+# shared runners are too noisy for timing claims, so compare numbers from the same runner type only.
+on:
+  schedule:
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+
+jobs:
+  benchmarks:
+    name: Benchmarks (small)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1"
+      - uses: julia-actions/cache@v2
+      - uses: julia-actions/julia-buildpkg@v1
+      - name: Run the maintained drivers at small sizes
+        run: |
+          out="$RUNNER_TEMP/benchmarks"
+          julia --project benchmarks/QMB/ClosedSystem/xx_bug_vs_tdvp2.jl "$out" 12 20
+          julia --project benchmarks/kernels/step_scaling.jl "$out" 16 "8,16"
+          OR_OUT="$out" OR_N=4 OR_T=0.4 julia --project benchmarks/QTTS/ordering_ranks.jl
+          VS_OUT="$out" VS_N=5 VS_BOX=16 VS_T=1 VS_SNAP=0.5 VS_HS=0.05 VS_ORDERS=2 VS_RELAX=0.5 VS_REFDT=1e-3 \
+            julia --project benchmarks/QTTS/vortex_shedding.jl
+          echo "runner: $(nproc) cores, $(uname -m)" > "$out/machine.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: ${{ runner.temp }}/benchmarks

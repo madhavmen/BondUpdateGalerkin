@@ -131,3 +131,30 @@ end
         @test isempty(offending)
     end
 end
+
+# ── baselines are independent ──
+# A comparison method must never run the method it is compared with: no file in `src/Baselines`
+# may name a BUG step. The flow definitions (`QTTFlow`, `flow_op`) are allowed: they define the
+# vector field, not how it is integrated.
+const BUG_STEPS = Set([
+    :cbe_bug_step!,
+    :cbe_bug_midpoint_step!,
+    :parallel_kls_step!,
+    :qtt_bug_step!,
+    :rk_stage_solve,
+    :ite_step!,
+    :ite_evolve!,
+])
+
+@testset "Baselines never run a BUG step" begin
+    # control: a file that does name a BUG step is caught
+    control = tempname() * ".jl"
+    write(control, "f(psi, H) = cbe_bug_step!(psi, H, 0.1)\n")
+    @test !isempty(intersect(used_symbols(control), BUG_STEPS))
+    rm(control)
+    for file in julia_files(joinpath(SRC_DIR, "Baselines"))
+        offending = intersect(used_symbols(file), BUG_STEPS)
+        isempty(offending) || @error "a baseline runs a BUG step" file offending = sort!(collect(offending))
+        @test isempty(offending)
+    end
+end

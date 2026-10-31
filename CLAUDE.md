@@ -18,7 +18,8 @@ Maintain a scientifically correct, externally usable Julia package with a single
 
 - Package load: `julia --project=. -e 'using BondUpdateGalerkin'`
 - Default suite: `julia --project=. -e 'using Pkg; Pkg.test()'`
-- Small demonstrations: see `examples/README.md` after migration.
+- Examples (each checks itself): `julia --project=. examples/QMB/xx_quickstart.jl`; list in `examples/README.md`.
+- Manual: `julia --project=docs -e 'using Pkg; Pkg.instantiate()'`, then `julia --project=docs docs/make.jl`.
 
 ## Code locations
 
@@ -26,8 +27,9 @@ Maintain a scientifically correct, externally usable Julia package with a single
 - `src/QMB/`: `Tooling/`, `Models/ClosedSystem/`, `Models/OpenSystem/{MPDO,MCWF}/`, `Observables/`.
 - `src/QTTS/`: `Tooling/` (grids, QTT and MPO construction), `Elementwise/`, `Models/{Heston,GrossPitaevskii}/`.
 - `src/Baselines/`: independent comparison integrators and exact references.
-- `benchmarks/QMB/`, `benchmarks/QTTS/`: benchmark scripts per domain.
+- `benchmarks/QMB/`, `benchmarks/QTTS/`, `benchmarks/kernels/`: maintained benchmark drivers (`benchmarks/README.md`).
+- `examples/QMB/`, `examples/QTTS/`: self-checking examples; `studies/`: research code outside the package; `docs/src/`: the manual.
 
-The full target tree, folder responsibilities and dependency rules are in `docs/dev/implementation_plan.md` Section 2; the legacy-file move map is in Section 8. Consult `agents/architecture.md` for dependency rules and `agents/scientific-validation.md` for scientifically consequential changes. A folder exists only once code has moved into it; do not pretend a target folder already exists.
+The full target tree, folder responsibilities and dependency rules are in `docs/dev/implementation_plan.md` Section 2; the legacy-file move map is in Section 8. Consult `agents/architecture.md` for dependency rules and `agents/scientific-validation.md` for scientifically consequential changes. The migration from BUG-Julia is complete; `docs/dev/migration-map.md` records every legacy file's destination or archive decision.
 
 Do not run cluster-scale simulations or produce generated figures without an explicit task requirement. Prefer deterministic fast tests before expensive verification. Never call a change "validated" if the checks did not run.
