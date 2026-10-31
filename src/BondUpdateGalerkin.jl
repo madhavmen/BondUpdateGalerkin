@@ -33,6 +33,13 @@ include("Baselines/Baselines.jl")
 # be saved into the image.
 using PrecompileTools: @setup_workload, @compile_workload
 
+# Test is loaded before the workload so the image is compiled in a world that already has it.
+# Test defines `keys(::Test.GenericArray)`, and loading it afterwards invalidated 9069 compiled
+# method instances behind every `keys(::AbstractVector)` call in the Telum kernels (SnoopCompile,
+# 17634477): the first BUG step went from 6 s to 95 s, 49 s of it recompilation (17634373), so
+# the test suite, which always loads Test, recompiled most of the workload.
+import Test
+
 "Run one workload block; a failure is reported at precompile time and otherwise ignored."
 function _precompile_block(run_block, name)
     try

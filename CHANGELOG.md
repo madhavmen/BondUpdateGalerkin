@@ -16,8 +16,9 @@ minor version may change the public API.
 - The precompile workload is back (PrecompileTools, plan Section 8): the BUG steps (orders 1-2,
   midpoint, imaginary time), MPO products, the baselines, the Z2 Ising states and the QTT GP and
   Heston steps are compiled into the package image, so a new process no longer recompiles them.
-  The test suite was almost all compilation (28 min warm on the cluster). New dependency:
-  PrecompileTools.
+  The test suite was almost all compilation (28 min warm on the cluster). New dependencies:
+  PrecompileTools, and Test (a standard library), which is loaded before the workload because
+  loading it afterwards invalidated most of the compiled code (`keys(::Test.GenericArray)`).
 - Aqua's three process-based checks (`ambiguities`, `stale_deps`, `persistent_tasks`, about 8 min
   together) moved out of the commit suite into the manual hook `julia-aqua-full`
   (`Pkg.test(test_args = ["aqua-full"])`); the commit suite checks ambiguities in process.

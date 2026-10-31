@@ -11,7 +11,7 @@ Distribution is internal sharing only; no public release is planned (decided 30 
 | LurCGT 1.0.0 | `repo-url = https://github.com/lurlurlurrrrr/LurCGT.jl`, `repo-rev = main` | MIT (GitHub metadata) | Public GitHub repository, not registered | Tracked `main` in BUG-Julia | **Done:** pinned to commit `1375987` in `[sources]` |
 | Telum 0.2.1 | Our fork, vendored as `deps/Telum` (path dependency), original author Kiyeon Kim | MIT (`deps/Telum/LICENSE`) | Vendored in this repository with its MIT notice | BUG-Julia's `deps/build.jl` patches `svd.jl` in place for the no-symmetry case (`docs/telum_nosym_svd.patch`) | **Decided:** keep our fork. Vendor it with the patch applied in the source (no build-time patching) and record the BUG-Julia commit it came from. Later: open a pull request upstream to Telum with the fork's fixes |
 | JSON, PrecompileTools, Preferences | General registry | MIT | Yes | Low | Add only when code that needs them moves in (PrecompileTools added for the precompile workload) |
-| LinearAlgebra, Printf, Random, SparseArrays | Julia stdlib | MIT | Yes | None | — |
+| LinearAlgebra, Printf, Random, SparseArrays, Test | Julia stdlib | MIT | Yes | None | Test is a package dependency only so the precompile workload is compiled with it loaded (see `src/BondUpdateGalerkin.jl`) |
 
 The no-symmetry SVD fix matters for this repository specifically: QTT states run as no-symmetry MPS (`qtt/qtt_telum.jl`), so the QTTS path depends on it.
 

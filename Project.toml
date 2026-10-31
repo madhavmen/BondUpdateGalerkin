@@ -10,6 +10,7 @@ PrecompileTools = "aea7be01-6a6a-4083-8856-8a6e6704d82a"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 Telum = "206e1281-4cfe-4f93-80c6-84968ba7c8d5"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [sources]
 LurCGT = {url = "https://github.com/lurlurlurrrrr/LurCGT.jl", rev = "1375987561c3393cf7b45e66a129ecb6a4fae1d7"}
@@ -30,7 +31,6 @@ julia = "1.11"
 [extras]
 Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
 JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
-Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Aqua", "JSON", "Test"]
+test = ["Aqua", "JSON"]
