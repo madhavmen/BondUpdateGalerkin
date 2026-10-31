@@ -38,7 +38,10 @@ frozen `b155550` runs in `test/fixtures/b155550`.
 ### Added
 
 - Derivative MPOs with second-order one-sided boundary rows, checked for second-order convergence;
-  a manufactured affine solution for the Heston generator.
+  a manufactured affine solution for the Heston generator. Each stencil converges at second
+  order, but the boundary closure without boundary data is not uniformly stable on the Heston
+  generator: the semi-discrete solution's error plateaus (8.6e-5 at 16 x 16, 5.8e-5 at 32 x 32 in
+  the Heston quick start) instead of falling at second order.
 - Self-checking examples (`examples/`), a Documenter manual (`docs/`), maintained benchmark drivers
   (`benchmarks/`), CI jobs for tests on two Julia versions, formatting, examples, docs, and a
   weekly benchmark workflow.
