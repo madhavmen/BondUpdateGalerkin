@@ -40,35 +40,35 @@ function _dense_expv(apply, v::AbstractArray, tau::Number; tol::Real = 1e-12, m:
     while abs(rem) > 0
         abs(dt) > abs(rem) && (dt = rem)
         beta = norm(w)
-        Vs = Array{ComplexF64}[w ./ beta]
+        Vs = Array{ComplexF64}[w./beta]
         Hm = zeros(ComplexF64, m + 1, m)
         k = m
         happy = false
-        for j in 1:m
+        for j = 1:m
             u = ComplexF64.(apply(Vs[j]))
             nap += 1
-            for i in 1:j
+            for i = 1:j
                 Hm[i, j] = dot(Vs[i], u)
                 u .-= Hm[i, j] .* Vs[i]
             end
-            for i in 1:j                                  # one reorthogonalisation pass
+            for i = 1:j                                  # one reorthogonalisation pass
                 c = dot(Vs[i], u)
                 Hm[i, j] += c
                 u .-= c .* Vs[i]
             end
-            Hm[j + 1, j] = norm(u)
-            if abs(Hm[j + 1, j]) <= 1e-14 * max(1.0, opnorm(Hm[1:j, 1:j], 1))
+            Hm[j+1, j] = norm(u)
+            if abs(Hm[j+1, j]) <= 1e-14 * max(1.0, opnorm(Hm[1:j, 1:j], 1))
                 k = j
                 happy = true
                 break
             end
-            push!(Vs, u ./ Hm[j + 1, j])
+            push!(Vs, u ./ Hm[j+1, j])
         end
         while true
             E = exp(dt .* Hm[1:k, 1:k])
-            err = happy ? 0.0 : abs(Hm[k + 1, k] * dt) * abs(E[k, 1])
+            err = happy ? 0.0 : abs(Hm[k+1, k] * dt) * abs(E[k, 1])
             if err <= tol || abs(dt) < 1e-12 * abs(tau)
-                w = beta .* sum(E[i, 1] .* Vs[i] for i in 1:k)
+                w = beta .* sum(E[i, 1] .* Vs[i] for i = 1:k)
                 rem -= dt
                 break
             end
@@ -85,8 +85,15 @@ end
 halved until the estimate `|h_{m+1,m} tau [exp(tau H_m)]_{m,1}|` fits `tol`. A stable global
 reference with no backward substep.
 """
-function tt_expv(apply, C::AbstractVector, tau::Number; m::Int = 16, tol::Real = 1e-10,
-                 maxdim::Int = 256, tol_trunc::Real = 1e-12)
+function tt_expv(
+    apply,
+    C::AbstractVector,
+    tau::Number;
+    m::Int = 16,
+    tol::Real = 1e-10,
+    maxdim::Int = 256,
+    tol_trunc::Real = 1e-12,
+)
     rem = ComplexF64(tau)
     dt = rem
     w = [ComplexF64.(c) for c in C]
@@ -99,27 +106,30 @@ function tt_expv(apply, C::AbstractVector, tau::Number; m::Int = 16, tol::Real =
         Hm = zeros(ComplexF64, m + 1, m)
         k = m
         happy = false
-        for j in 1:m
+        for j = 1:m
             u = first(tt_compress(apply(Vs[j]); tol = tol_trunc, maxdim = maxdim))
             nap += 1
-            for _ in 1:2, i in 1:j
+            for _ = 1:2, i = 1:j
                 c = tt_dot(Vs[i], u)
                 Hm[i, j] += c
                 u = tt_lincomb([(1.0, u), (-c, Vs[i])]; tol = tol_trunc, maxdim = maxdim)
             end
-            Hm[j + 1, j] = tt_norm(u)
-            if abs(Hm[j + 1, j]) <= 1e-13 * max(1.0, opnorm(Hm[1:j, 1:j], 1))
+            Hm[j+1, j] = tt_norm(u)
+            if abs(Hm[j+1, j]) <= 1e-13 * max(1.0, opnorm(Hm[1:j, 1:j], 1))
                 k, happy = j, true
                 break
             end
-            push!(Vs, tt_scale(u, 1 / Hm[j + 1, j]))
+            push!(Vs, tt_scale(u, 1 / Hm[j+1, j]))
         end
         while true
             E = exp(dt .* Hm[1:k, 1:k])
-            err = happy ? 0.0 : abs(Hm[k + 1, k] * dt) * abs(E[k, 1])
+            err = happy ? 0.0 : abs(Hm[k+1, k] * dt) * abs(E[k, 1])
             if err <= tol || abs(dt) < 1e-12 * abs(tau)
-                w = tt_lincomb([(beta * E[i, 1], Vs[i]) for i in 1:k]; tol = tol_trunc,
-                               maxdim = maxdim)
+                w = tt_lincomb(
+                    [(beta * E[i, 1], Vs[i]) for i = 1:k];
+                    tol = tol_trunc,
+                    maxdim = maxdim,
+                )
                 rem -= dt
                 break
             end
@@ -147,11 +157,20 @@ Records `A_back = ||M_after|| / ||M_before||` for every backward substep (plan Â
 self-consistency iterations and the discarded weight. "TDVP2" names the two-site update, not a
 temporal order; the order is measured (V07).
 """
-function qtt_tdvp2_step!(psi::SymMPS, fl::QTTFlow, t::Real, h::Real; density::Symbol = :lagged,
-                         maxdim::Int = 128, tol_trunc::Real = 1e-10, tol_krylov::Real = 1e-12,
-                         tol_sc::Real = 1e-10, maxsc::Int = 12)
-    density in (:lagged, :consistent) || throw(ArgumentError(
-        "density must be :lagged or :consistent, got :$density"))
+function qtt_tdvp2_step!(
+    psi::SymMPS,
+    fl::QTTFlow,
+    t::Real,
+    h::Real;
+    density::Symbol = :lagged,
+    maxdim::Int = 128,
+    tol_trunc::Real = 1e-10,
+    tol_krylov::Real = 1e-12,
+    tol_sc::Real = 1e-10,
+    maxsc::Int = 12,
+)
+    density in (:lagged, :consistent) ||
+        throw(ArgumentError("density must be :lagged or :consistent, got :$density"))
     t0 = time_ns()
     C, _ = tt_compress(qtt_cores(psi); tol = 0.0)          # right-canonical, centre at site 1
     L = length(C)
@@ -178,11 +197,11 @@ function qtt_tdvp2_step!(psi::SymMPS, fl::QTTFlow, t::Real, h::Real; density::Sy
     # environments of the sites outside `lo..hi` for the operator H, bra = ket = the state
     function local_op(H, X, lo, hi)
         E = _unit_env()
-        for k in 1:(lo - 1)
+        for k = 1:(lo-1)
             E = _env_left(E, X[k], H[k], X[k])
         end
         F = _unit_env()
-        for k in L:-1:(hi + 1)
+        for k = L:-1:(hi+1)
             F = _env_right(F, X[k], H[k], X[k])
         end
         return lo == hi ? (z -> _eff1(E, H[lo], F, z)) : (z -> _eff2(E, H[lo], H[hi], F, z))
@@ -197,7 +216,7 @@ function qtt_tdvp2_step!(psi::SymMPS, fl::QTTFlow, t::Real, h::Real; density::Sy
         nap += k
         density === :lagged && (push!(nsc, 0); return y)
         it = 0
-        for _ in 1:maxsc
+        for _ = 1:maxsc
             it += 1
             Xm = assemble((x .+ y) ./ 2, lo, hi)              # the midpoint trial state
             H, _ = flow_op(flow, Xm, ts)
@@ -218,29 +237,34 @@ function qtt_tdvp2_step!(psi::SymMPS, fl::QTTFlow, t::Real, h::Real; density::Sy
         F = svd(reshape(Th, 2cl, 2cr))
         nrm = norm(F.S)
         r = _qtt_rank(F.S, tol_trunc * nrm / sqrt(max(L - 1, 1)), maxdim)
-        disc2 += sum(abs2, @view(F.S[(r + 1):end]); init = 0.0) / max(nrm^2, eps())
+        disc2 += sum(abs2, @view(F.S[(r+1):end]); init = 0.0) / max(nrm^2, eps())
         U, S, Vt = F.U[:, 1:r], F.S[1:r], F.Vt[1:r, :]
         return keep_left ? (reshape(U, cl, 2, r), reshape(Diagonal(S) * Vt, r, 2, cr)) :
-                           (reshape(U * Diagonal(S), cl, 2, r), reshape(Vt, r, 2, cr))
+               (reshape(U * Diagonal(S), cl, 2, r), reshape(Vt, r, 2, cr))
     end
-    theta(i) = reshape(reshape(C[i], :, size(C[i], 3)) * reshape(C[i + 1], size(C[i + 1], 1), :),
-                       size(C[i], 1), 2, 2, size(C[i + 1], 3))
+    theta(i) = reshape(
+        reshape(C[i], :, size(C[i], 3)) * reshape(C[i+1], size(C[i+1], 1), :),
+        size(C[i], 1),
+        2,
+        2,
+        size(C[i+1], 3),
+    )
     tmid = t + half / 2
-    for i in 1:(L - 1)                                     # left to right, h/2
+    for i = 1:(L-1)                                     # left to right, h/2
         Th = substep(theta(i), i, i + 1, half, tmid)
         C[i], M = cut(Th, true)
         if i < L - 1
-            C[i + 1] = M                                   # in place for the environments
+            C[i+1] = M                                   # in place for the environments
             n0 = norm(M)
             M = substep(M, i + 1, i + 1, -half, tmid)      # the BACKWARD centre substep
             push!(back, norm(M) / n0)
         end
-        C[i + 1] = M
+        C[i+1] = M
     end
     tmid = t + 3half / 2
-    for i in (L - 1):-1:1                                  # right to left, h/2
+    for i = (L-1):-1:1                                  # right to left, h/2
         Th = substep(theta(i), i, i + 1, half, tmid)
-        M, C[i + 1] = cut(Th, false)
+        M, C[i+1] = cut(Th, false)
         if i > 1
             C[i] = M
             n0 = norm(M)
@@ -250,9 +274,16 @@ function qtt_tdvp2_step!(psi::SymMPS, fl::QTTFlow, t::Real, h::Real; density::Sy
         C[i] = M
     end
     _replace_state!(psi, qtt_mps(C; center = 1))
-    return (A_back = back, A_max = maximum(back; init = 1.0), sc_iters = nsc,
-            discarded = sqrt(disc2), applications = nap, density = density,
-            t_step = (time_ns() - t0) / 1e9, chi = maximum(bond_dims(psi); init = 1))
+    return (
+        A_back = back,
+        A_max = maximum(back; init = 1.0),
+        sc_iters = nsc,
+        discarded = sqrt(disc2),
+        applications = nap,
+        density = density,
+        t_step = (time_ns() - t0) / 1e9,
+        chi = maximum(bond_dims(psi); init = 1),
+    )
 end
 
 """
@@ -264,19 +295,42 @@ norm-preserving) between two dissipative half-steps `exp(-gamma h/2 H)` taken by
 Krylov exponential (no backward substep). `H` is `H[psi, t]` at the start of each sub-flow
 (lagged within it); labelled `:split_lagged`.
 """
-function qtt_split_tdvp_step!(psi::SymMPS, m::GPModel, t::Real, h::Real; maxdim::Int = 128,
-                              tol_trunc::Real = 1e-10, tol_krylov::Real = 1e-12)
+function qtt_split_tdvp_step!(
+    psi::SymMPS,
+    m::GPModel,
+    t::Real,
+    h::Real;
+    maxdim::Int = 128,
+    tol_trunc::Real = 1e-10,
+    tol_krylov::Real = 1e-12,
+)
     t0 = time_ns()
     diss(A, ts) = begin
         H, _ = gp_hamiltonian_op(m, A, ts)
-        first(tt_expv(X -> first(op_zipup(H, X; tol = tol_krylov)), A, -m.gamma * h / 2; maxdim = maxdim,
-                      tol = tol_krylov, tol_trunc = tol_trunc))
+        first(
+            tt_expv(
+                X -> first(op_zipup(H, X; tol = tol_krylov)),
+                A,
+                -m.gamma * h / 2;
+                maxdim = maxdim,
+                tol = tol_krylov,
+                tol_trunc = tol_trunc,
+            ),
+        )
     end
     A = diss(qtt_cores(psi), t)
     _replace_state!(psi, qtt_mps(A))
     cons = GPFlow(m, ComplexF64(-1im), false)
-    r = qtt_tdvp2_step!(psi, cons, t, h; density = :lagged, maxdim = maxdim,
-                        tol_trunc = tol_trunc, tol_krylov = tol_krylov)
+    r = qtt_tdvp2_step!(
+        psi,
+        cons,
+        t,
+        h;
+        density = :lagged,
+        maxdim = maxdim,
+        tol_trunc = tol_trunc,
+        tol_krylov = tol_krylov,
+    )
     A = diss(qtt_cores(psi), t + h / 2)
     _replace_state!(psi, qtt_mps(first(tt_compress(A; tol = tol_trunc, maxdim = maxdim))))
     return merge(r, (density = :split_lagged, t_step = (time_ns() - t0) / 1e9))
