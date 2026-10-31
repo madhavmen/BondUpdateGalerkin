@@ -41,11 +41,11 @@ src/RSVDCBEBondUpdate/expansion/cbe_range.jl,src,core,BUG/Randomised/range_finde
 src/RSVDCBEBondUpdate/expansion/cbe_sketch.jl,src,core,BUG/Randomised/sketch.jl,Move,Telum
 src/RSVDCBEBondUpdate/expansion/dd_cbe.jl,src,core,BUG/Randomised/dd_cbe.jl,Merge,Telum
 src/RSVDCBEBondUpdate/expansion/dd_cbe_controller.jl,src,core,BUG/Randomised/dd_cbe.jl,Merge,Telum
-src/RSVDCBEBondUpdate/models/breathing_kagome.jl,src,study,studies/,Not in the package until maintained (WP4),
+src/RSVDCBEBondUpdate/models/breathing_kagome.jl,src,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11); port into studies/ when the study resumes,
 src/RSVDCBEBondUpdate/models/dissipative.jl,src,domain,QMB/Models/OpenSystem/jump_channels.jl,Move (channels and jump MPOs serve both MPDO and MCWF),Telum
-src/RSVDCBEBondUpdate/models/haldane_shastry.jl,src,study,studies/,Not in the package until maintained (WP4),Telum
+src/RSVDCBEBondUpdate/models/haldane_shastry.jl,src,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11); port into studies/ when the study resumes,Telum
 src/RSVDCBEBondUpdate/models/hubbard_d4.jl,src,domain,"QMB/Models/ClosedSystem/pxp.jl, mbl.jl, hubbard.jl",Move; `pair_loss_junction` -> `OpenSystem/jump_channels.jl`,Telum
-src/RSVDCBEBondUpdate/models/kagome.jl,src,study,studies/,Not in the package until maintained (WP4),
+src/RSVDCBEBondUpdate/models/kagome.jl,src,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11); port into studies/ when the study resumes,
 src/RSVDCBEBondUpdate/models/liouville.jl,src,domain,"QMB/Models/OpenSystem/MPDO/liouville_space.jl; dissipator_super, lindblad_mpo -> lindblad_mpo.jl",Split,Telum LurCGT
 src/RSVDCBEBondUpdate/models/liouville_blocks.jl,src,domain,QMB/Models/OpenSystem/MPDO/mpdo_observables.jl,Move,
 src/RSVDCBEBondUpdate/models/mbl_scars.jl,src,domain,"QMB/Models/ClosedSystem/pxp.jl, mbl.jl, hubbard.jl",Move; `pair_loss_junction` -> `OpenSystem/jump_channels.jl`,
@@ -53,9 +53,9 @@ src/RSVDCBEBondUpdate/models/oat.jl,src,domain,"QMB/Models/ClosedSystem/tfim.jl,
 src/RSVDCBEBondUpdate/models/pair_mpo.jl,src,domain,QMB/Tooling/pair_mpo.jl,Move,Telum
 src/RSVDCBEBondUpdate/models/pxp_scars.jl,src,domain,"QMB/Models/ClosedSystem/pxp.jl, mbl.jl, hubbard.jl",Move; `pair_loss_junction` -> `OpenSystem/jump_channels.jl`,Telum
 src/RSVDCBEBondUpdate/models/spin_xx.jl,src,domain,QMB/Models/ClosedSystem/xx.jl; spin_space -> QMB/Tooling/local_spaces.jl,Split,Telum
-src/RSVDCBEBondUpdate/models/square_cylinder.jl,src,study,studies/,Not in the package until maintained (WP4),
+src/RSVDCBEBondUpdate/models/square_cylinder.jl,src,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11); port into studies/ when the study resumes,
 src/RSVDCBEBondUpdate/models/tfim.jl,src,domain,"QMB/Models/ClosedSystem/tfim.jl, oat.jl",Move,
-src/RSVDCBEBondUpdate/models/triangular_cylinder.jl,src,study,studies/,Not in the package until maintained (WP4),
+src/RSVDCBEBondUpdate/models/triangular_cylinder.jl,src,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11); port into studies/ when the study resumes,
 src/RSVDCBEBondUpdate/operators/henv.jl,src,core,"XXZTerm, XXZChain, xxz_chain, heisenberg_su2_chain -> QMB/Models/ClosedSystem/xxz.jl; ZeroEnv, ChannelSet, channel pushes -> BUG/Core/Environments/environment_stacks.jl",Split,Telum
 src/RSVDCBEBondUpdate/operators/henv_stacks.jl,src,core,BUG/Core/Environments/environment_stacks.jl,Move,Telum
 src/RSVDCBEBondUpdate/operators/mpo.jl,src,core,"MPO, mpo_from_terms, onsite_mpo, mpo_sum -> BUG/Core/TensorNetworks/mpo.jl; heisenberg_su2_mpo -> QMB/Models/ClosedSystem/xxz.jl; long-range terms and fits -> QMB/Tooling/long_range_mpo.jl",Split,Telum
@@ -129,7 +129,7 @@ tests/sweeps/test_env_inplace.jl,tests,core,test/BUG/Core/Environments/test_envi
 tests/sweeps/test_hq_kernels.jl,tests,core,test/BUG/Randomised/test_dd_cbe.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
 tests/sweeps/test_hq_root.jl,tests,core,test/BUG/Core/LocalSolvers/test_root_methods.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
 tests/sweeps/test_imaginary_time.jl,tests,core,test/BUG/ITE/test_ite_step.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-tests/sweeps/test_kagome.jl,tests,study,studies/ (with kagome.jl),"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_kagome.jl,tests,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11); port into studies/ when the study resumes,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
 tests/sweeps/test_krylov_closure.jl,tests,core,test/BUG/Core/RankAdaptation/test_krylov_enrichment.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
 tests/sweeps/test_krylov_closure_steps.jl,tests,core,test/BUG/Core/RankAdaptation/test_krylov_enrichment.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
 tests/sweeps/test_krylov_recycle.jl,tests,core,test/BUG/Core/LocalSolvers/test_krylov_recycle.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
@@ -142,7 +142,7 @@ tests/sweeps/test_qtt_task1.jl,tests,core,"test/QTTS/ (Tooling, Elementwise and 
 tests/sweeps/test_qtt_task2.jl,tests,core,test/QTTS/ + BUG/TimeEvolution/test_stage_solvers.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
 tests/sweeps/test_spin_jw.jl,tests,core,test/QMB/ClosedSystem/test_xx.jl,"Move, grouped by tested behaviour",
 tests/sweeps/test_spin_xx.jl,tests,core,test/QMB/ClosedSystem/test_xx.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-tests/sweeps/test_square_cylinder.jl,tests,study,studies/ (with square_cylinder.jl),"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+tests/sweeps/test_square_cylinder.jl,tests,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11); port into studies/ when the study resumes,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
 tests/sweeps/test_sweeps.jl,tests,core,test/BUG/TimeEvolution/test_bug_step.jl (BUG parts) + Baselines (DMRG/TDVP parts),"Move, grouped by tested behaviour",RSVDCBEBondUpdate
 tests/sweeps/test_symmetry_parity.jl,tests,core,test/QMB/ClosedSystem/test_symmetry_parity.jl,"Move, grouped by tested behaviour",RSVDCBEBondUpdate
 tests/sweeps/test_tdvp2_order.jl,tests,core,test/Baselines/test_tdvp2.jl,"Move, grouped by tested behaviour",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
@@ -160,281 +160,281 @@ examples/plot_examples.py,examples,obsolete,archive tag,Verify and port (WP7),
 examples/README.md,examples,example,examples/README.md,Verify and port (WP7),
 examples/tfim_z2.jl,examples,example,examples/QMB/tfim_z2.jl,Verify and port (WP7),
 examples/xx_domain_wall.jl,examples,example,examples/QMB/xx_domain_wall.jl,Verify and port (WP7),
-benchmarks/ab_fingerprint.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",
-benchmarks/adaptive_xx_l20.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/alloc_attribution.jl,benchmarks,study,benchmarks/kernels/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum
-benchmarks/analyze_adaptive_xx.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
-benchmarks/analyze_krylov_closure.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
-benchmarks/arnoldi_check.jl,benchmarks,obsolete,archive tag,Not copied (one-off probe),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/bug_closed_exactness.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/bug_exactness_probe.jl,benchmarks,obsolete,archive tag,Not copied (one-off probe),
-benchmarks/cbe_sweeps_l16.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/comp_ratio_study.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate
-benchmarks/composite_order.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/cost_fair.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/cyl88_probe.jl,benchmarks,obsolete,archive tag,Not copied (one-off probe),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/cylinder_8x8.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/cylinder_adaptive.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/cylinder_depth_scan.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/diag_rank_freeze.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum
-benchmarks/dissipative_b1_smoke.jl,benchmarks,study,benchmarks/QMB/OpenSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/dissipative_b2_sector_p0.py,benchmarks,study,benchmarks/QMB/OpenSystem/ or studies/,Curate,
-benchmarks/dissipative_figures.py,benchmarks,study,benchmarks/QMB/OpenSystem/ or studies/,Curate,
-benchmarks/dissipative_heisenberg.jl,benchmarks,study,benchmarks/QMB/OpenSystem/ or studies/,Curate,RSVDCBEBondUpdate Telum
-benchmarks/dissipative_longrange.jl,benchmarks,study,benchmarks/QMB/OpenSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/dissipative_rank_probe.jl,benchmarks,study,benchmarks/QMB/OpenSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/dissipative_restart_check.sh,benchmarks,study,benchmarks/QMB/OpenSystem/ or studies/,Curate,
-benchmarks/dissipative_run.jl,benchmarks,study,benchmarks/QMB/OpenSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/dissipative_t4_figures.py,benchmarks,study,benchmarks/QMB/OpenSystem/ or studies/,Curate,
-benchmarks/dissipative_t6_figures.py,benchmarks,study,benchmarks/QMB/OpenSystem/ or studies/,Curate,
-benchmarks/dissipative_t7_figures.py,benchmarks,study,benchmarks/QMB/OpenSystem/ or studies/,Curate,
-benchmarks/dissipative_t7_parallel.py,benchmarks,study,benchmarks/QMB/OpenSystem/ or studies/,Curate,
-benchmarks/dissipative_t7_tolk.py,benchmarks,study,benchmarks/QMB/OpenSystem/ or studies/,Curate,
-benchmarks/entanglement_dynamics.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/ab_fingerprint.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/adaptive_xx_l20.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/alloc_attribution.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum
+benchmarks/analyze_adaptive_xx.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/analyze_krylov_closure.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/arnoldi_check.jl,benchmarks,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/bug_closed_exactness.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/bug_exactness_probe.jl,benchmarks,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/cbe_sweeps_l16.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/comp_ratio_study.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate
+benchmarks/composite_order.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/cost_fair.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/cyl88_probe.jl,benchmarks,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/cylinder_8x8.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/cylinder_adaptive.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/cylinder_depth_scan.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/diag_rank_freeze.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum
+benchmarks/dissipative_b1_smoke.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/dissipative_b2_sector_p0.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/dissipative_figures.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/dissipative_heisenberg.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),RSVDCBEBondUpdate Telum
+benchmarks/dissipative_longrange.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/dissipative_rank_probe.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/dissipative_restart_check.sh,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/dissipative_run.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/dissipative_t4_figures.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/dissipative_t6_figures.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/dissipative_t7_figures.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/dissipative_t7_parallel.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/dissipative_t7_tolk.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/entanglement_dynamics.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
 benchmarks/exact_sparse.jl,benchmarks,core,test/common/exact_sparse.jl,Move (independent reference included by tests),
-benchmarks/factor_check.jl,benchmarks,obsolete,archive tag,Not copied (one-off probe),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/fold_omega_check.jl,benchmarks,obsolete,archive tag,Not copied (one-off probe),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/fused_common.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/fused_freeze_probe.jl,benchmarks,obsolete,archive tag,Not copied (one-off probe),RSVDCBEBondUpdate Telum
-benchmarks/fused_growth_scan.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",
-benchmarks/fused_jump_convention.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",
-benchmarks/fused_lindblad.jl,benchmarks,study,benchmarks/QMB/OpenSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/ground_state/adaptive_dmrg_tolerance.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/ground_state/analyze_dmrg_tolerance.py,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,
-benchmarks/ground_state/dmrg_knobs.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/ground_state/exact_2209.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,RSVDCBEBondUpdate
-benchmarks/ground_state/gap_n12.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,RSVDCBEBondUpdate
-benchmarks/ground_state/gate_l20.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/ground_state/knob_study.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/ground_state/paper_2209.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/ground_state/plot_fig3_2209.py,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,
-benchmarks/ground_state/su2_gate.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/gse_comp_ratio_scan.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/gse_defer_truncation.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/gse_rsvd_vs_exact.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/half_check.jl,benchmarks,obsolete,archive tag,Not copied (one-off probe),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/heis_square_open.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",
-benchmarks/heisenberg_tolerance.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",Telum
-benchmarks/hq_bench.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/hq_dd_gap_l8.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/hq_dd_scaling.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/hq_rank_monotone_l12.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/hq_task8_figures.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
-benchmarks/hq_xx_reference.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/hq_xx_reference_band.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",
-benchmarks/hs_structure_factor.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",
-benchmarks/hub4_profile.jl,benchmarks,study,benchmarks/kernels/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/hubbard_aa_check.jl,benchmarks,obsolete,archive tag,Not copied (one-off probe),Telum
+benchmarks/factor_check.jl,benchmarks,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/fold_omega_check.jl,benchmarks,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/fused_common.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/fused_freeze_probe.jl,benchmarks,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),RSVDCBEBondUpdate Telum
+benchmarks/fused_growth_scan.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/fused_jump_convention.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/fused_lindblad.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/ground_state/adaptive_dmrg_tolerance.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/ground_state/analyze_dmrg_tolerance.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/ground_state/dmrg_knobs.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/ground_state/exact_2209.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),RSVDCBEBondUpdate
+benchmarks/ground_state/gap_n12.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),RSVDCBEBondUpdate
+benchmarks/ground_state/gate_l20.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/ground_state/knob_study.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/ground_state/paper_2209.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/ground_state/plot_fig3_2209.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/ground_state/su2_gate.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/gse_comp_ratio_scan.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/gse_defer_truncation.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/gse_rsvd_vs_exact.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/half_check.jl,benchmarks,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/heis_square_open.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/heisenberg_tolerance.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),Telum
+benchmarks/hq_bench.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/hq_dd_gap_l8.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/hq_dd_scaling.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/hq_rank_monotone_l12.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/hq_task8_figures.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/hq_xx_reference.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/hq_xx_reference_band.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/hs_structure_factor.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/hub4_profile.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/hubbard_aa_check.jl,benchmarks,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),Telum
 benchmarks/hubbard_aa_exact.jl,benchmarks,core,test/common/hubbard_aa_exact.jl,Move (independent reference included by tests),Telum
-benchmarks/identity_superket.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/imaginary_time/bug_knob_study.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/imaginary_time/certify_xx_reference.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,Telum
-benchmarks/imaginary_time/dissipative_ising.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,RSVDCBEBondUpdate
-benchmarks/imaginary_time/dissipative_xx.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,
-benchmarks/imaginary_time/expv_substep_check.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/imaginary_time/first_step_probe.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/imaginary_time/fusion_tag_probe.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/imaginary_time/grids_common.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,
-benchmarks/imaginary_time/it1_heisenberg_chain.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,
-benchmarks/imaginary_time/it2_square_cylinder.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,
-benchmarks/imaginary_time/it_common.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/imaginary_time/krylov_depth_scan.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/imaginary_time/logtime_ite.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/imaginary_time/logtime_suite.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/imaginary_time/logtime_trajectory.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/imaginary_time/mpdo_validate_fast.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,
-benchmarks/imaginary_time/plot_it1.py,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,
-benchmarks/imaginary_time/plot_logtime.py,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,
-benchmarks/imaginary_time/plot_logtime_traj.py,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,
-benchmarks/imaginary_time/plot_spectrum.py,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,
-benchmarks/imaginary_time/plot_xx_chigrowth.py,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,
-benchmarks/imaginary_time/README.md,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,
-benchmarks/imaginary_time/submit_bug_knob_study.slurm,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,
-benchmarks/imaginary_time/submit_dissipative_xx.slurm,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,
-benchmarks/imaginary_time/submit_logtime_suite.slurm,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,
-benchmarks/imaginary_time/u1_cylinder_repro.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/ or studies/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/kagome_paper_observables.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/keepawake.ps1,benchmarks,obsolete,archive tag,Not copied (local/cluster wrapper or retired note),
-benchmarks/krylov_closure_l16.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/krylov_grow_smoke.jl,benchmarks,obsolete,archive tag,Not copied (one-off probe),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/krylov_stopping.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/l16_timing_probe.jl,benchmarks,obsolete,archive tag,Not copied (one-off probe),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/l18_backward_step.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/l18_campaign.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/l18_krylov_depth.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/l18_matrix.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum
-benchmarks/l18_rank_scan.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/l18_square_open_protocol.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/large_chi_profile.jl,benchmarks,study,benchmarks/kernels/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum
-benchmarks/lattice_study.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/layout_bootstrap.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/lgt_open.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",
-benchmarks/lindblad_common.jl,benchmarks,study,benchmarks/QMB/OpenSystem/ or studies/,Curate,Telum
-benchmarks/lindblad_dephasing.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/lindblad_diag.jl,benchmarks,obsolete,archive tag,Not copied (one-off probe),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/mbl_scars.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/mbl_scars_exact.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",
-benchmarks/method_matrix.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum
-benchmarks/midpoint_bug.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/model_ladder.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/mpo_vs_dense.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/nonunitary_blowup.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/oat_l10.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/open_exact_gate.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/open_system/os1_driven_xx.jl,benchmarks,study,benchmarks/QMB/OpenSystem/MPDO/,Curate,
-benchmarks/open_system/os2_bose_hubbard_loss.jl,benchmarks,study,benchmarks/QMB/OpenSystem/MPDO/,Curate,
-benchmarks/open_system/os3_east_dephasing.jl,benchmarks,study,benchmarks/QMB/OpenSystem/MPDO/,Curate,
-benchmarks/open_system/os_common.jl,benchmarks,study,benchmarks/QMB/OpenSystem/MPDO/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/open_system/plot_os.py,benchmarks,study,benchmarks/QMB/OpenSystem/MPDO/,Curate,
+benchmarks/identity_superket.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/imaginary_time/bug_knob_study.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/imaginary_time/certify_xx_reference.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),Telum
+benchmarks/imaginary_time/dissipative_ising.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),RSVDCBEBondUpdate
+benchmarks/imaginary_time/dissipative_xx.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/imaginary_time/expv_substep_check.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/imaginary_time/first_step_probe.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/imaginary_time/fusion_tag_probe.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/imaginary_time/grids_common.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/imaginary_time/it1_heisenberg_chain.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/imaginary_time/it2_square_cylinder.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/imaginary_time/it_common.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/imaginary_time/krylov_depth_scan.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/imaginary_time/logtime_ite.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/imaginary_time/logtime_suite.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/imaginary_time/logtime_trajectory.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/imaginary_time/mpdo_validate_fast.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/imaginary_time/plot_it1.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/imaginary_time/plot_logtime.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/imaginary_time/plot_logtime_traj.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/imaginary_time/plot_spectrum.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/imaginary_time/plot_xx_chigrowth.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/imaginary_time/README.md,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/imaginary_time/submit_bug_knob_study.slurm,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/imaginary_time/submit_dissipative_xx.slurm,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/imaginary_time/submit_logtime_suite.slurm,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/imaginary_time/u1_cylinder_repro.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/kagome_paper_observables.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/keepawake.ps1,benchmarks,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/krylov_closure_l16.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/krylov_grow_smoke.jl,benchmarks,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/krylov_stopping.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/l16_timing_probe.jl,benchmarks,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/l18_backward_step.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/l18_campaign.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/l18_krylov_depth.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/l18_matrix.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum
+benchmarks/l18_rank_scan.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/l18_square_open_protocol.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/large_chi_profile.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum
+benchmarks/lattice_study.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/layout_bootstrap.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/lgt_open.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/lindblad_common.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),Telum
+benchmarks/lindblad_dephasing.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/lindblad_diag.jl,benchmarks,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/mbl_scars.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/mbl_scars_exact.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/method_matrix.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum
+benchmarks/midpoint_bug.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/model_ladder.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/mpo_vs_dense.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/nonunitary_blowup.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/oat_l10.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/open_exact_gate.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/open_system/os1_driven_xx.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/open_system/os2_bose_hubbard_loss.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/open_system/os3_east_dephasing.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/open_system/os_common.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/open_system/plot_os.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
 benchmarks/open_system/sparse_lindblad.jl,benchmarks,core,test/common/sparse_lindblad.jl,Move (independent reference included by tests),
-benchmarks/open_system.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/plot_bug_wins.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
-benchmarks/plot_cbe_sweeps_l16.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
-benchmarks/plot_dissip_heis.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
-benchmarks/plot_dissipative_longrange.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
-benchmarks/plot_dt_order.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
-benchmarks/plot_gse_comp_ratio.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
-benchmarks/plot_gse_seed.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
-benchmarks/plot_heis_profiles.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
-benchmarks/plot_heisenberg_tolerance.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
-benchmarks/plot_hs_skw.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
-benchmarks/plot_knob_cube.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
-benchmarks/plot_krylov_matrix.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
-benchmarks/plot_l18.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
-benchmarks/plot_l18_campaign.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
-benchmarks/plot_l18_special.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
-benchmarks/plot_large_chi.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
-benchmarks/plot_mbl_scars.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
-benchmarks/plot_models_separate.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
-benchmarks/plot_oat.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
-benchmarks/plot_open_suite.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
-benchmarks/plot_rsvd_parallel.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
-benchmarks/plot_rsvd_scan.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
-benchmarks/plot_svg_panels.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
-benchmarks/plot_three_models.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
-benchmarks/plot_xx_l18_campaign.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
-benchmarks/plot_xx_lightcone.py,benchmarks,study,studies/ or archive tag,Curate with its driver,
-benchmarks/probe_edge_refusal.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate
-benchmarks/profile_buckets.jl,benchmarks,study,benchmarks/kernels/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum
-benchmarks/profile_step.jl,benchmarks,study,benchmarks/kernels/,Curate,
-benchmarks/qtt/common.jl,benchmarks,study,benchmarks/QTTS/,Curate,BondUpdateBUG RSVDCBEBondUpdate
-benchmarks/qtt/diag_heston_step.jl,benchmarks,study,benchmarks/QTTS/,Curate,
-benchmarks/qtt/first_impressions.jl,benchmarks,study,benchmarks/QTTS/,Curate,BondUpdateBUG RSVDCBEBondUpdate
-benchmarks/qtt/gp_ground_state.jl,benchmarks,study,benchmarks/QTTS/,Curate,
-benchmarks/qtt/heston_pilot.jl,benchmarks,study,benchmarks/QTTS/,Curate,
-benchmarks/qtt/impressions_report.py,benchmarks,study,benchmarks/QTTS/,Curate,
-benchmarks/qtt/plot_qtt.py,benchmarks,study,benchmarks/QTTS/,Curate,
-benchmarks/qtt/production.jl,benchmarks,study,benchmarks/QTTS/,Curate,
-benchmarks/qtt/restart_check.jl,benchmarks,study,benchmarks/QTTS/,Curate,RSVDCBEBondUpdate
-benchmarks/qtt/task2_study.jl,benchmarks,study,benchmarks/QTTS/,Curate,
-benchmarks/qtt/vortex_shedding.jl,benchmarks,study,benchmarks/QTTS/,Curate,
-benchmarks/random_mpo.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum
-benchmarks/random_mps.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum
-benchmarks/response_check.jl,benchmarks,obsolete,archive tag,Not copied (one-off probe),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/retired_cbe_project_first.jl.txt,benchmarks,obsolete,archive tag,Not copied (local/cluster wrapper or retired note),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/rsvd_lgt.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",
-benchmarks/rsvd_models.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",
-benchmarks/rsvd_optimal.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",
-benchmarks/rsvd_parallel.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",
-benchmarks/rsvd_param_scan.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/rsvd_probe_microbench.jl,benchmarks,study,benchmarks/kernels/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/rsvd_sketch_width.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/rsvd_speedup_2d.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/run_2209_campaign.sh,benchmarks,obsolete,archive tag,Not copied (local/cluster wrapper or retired note),
-benchmarks/run_dissipative_l16.ps1,benchmarks,obsolete,archive tag,Not copied (local/cluster wrapper or retired note),
-benchmarks/run_hs_structure_factor.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/smoke_hermitian.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/smoke_lindblad.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/sparse_krylov.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",
-benchmarks/spectral/bug_knobs.jl,benchmarks,study,studies/,Archive tag unless promoted,
-benchmarks/spectral/bug_profile_2d.jl,benchmarks,study,studies/,Archive tag unless promoted,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/spectral/fig45_2209.jl,benchmarks,study,studies/,Archive tag unless promoted,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/spectral/fig4_2209.jl,benchmarks,study,studies/,Archive tag unless promoted,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/spectral/fig5a_static.jl,benchmarks,study,studies/,Archive tag unless promoted,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/spectral/growth_vs_exact.py,benchmarks,study,studies/,Archive tag unless promoted,
-benchmarks/spectral/knobs_l20.jl,benchmarks,study,studies/,Archive tag unless promoted,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/spectral/lattice2d.jl,benchmarks,study,studies/,Archive tag unless promoted,RSVDCBEBondUpdate
-benchmarks/spectral/matched_error.py,benchmarks,study,studies/,Archive tag unless promoted,
-benchmarks/spectral/order_ladder_2d.jl,benchmarks,study,studies/,Archive tag unless promoted,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/spectral/plot_fig45_2209.py,benchmarks,study,studies/,Archive tag unless promoted,
-benchmarks/spectral/plot_fig4_2209.py,benchmarks,study,studies/,Archive tag unless promoted,
-benchmarks/spectral/plot_fig5a.py,benchmarks,study,studies/,Archive tag unless promoted,RSVDCBEBondUpdate
-benchmarks/spectral/plot_knobs_l20.py,benchmarks,study,studies/,Archive tag unless promoted,
-benchmarks/spectral/select_knobs.py,benchmarks,study,studies/,Archive tag unless promoted,
-benchmarks/spectral/xc_gate.jl,benchmarks,study,studies/,Archive tag unless promoted,RSVDCBEBondUpdate Telum LurCGT
-benchmarks/study_models.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",
-benchmarks/su2_cylinder.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/su2_knob_cube.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/submit_cbe_sweeps_l16.slurm,benchmarks,obsolete,archive tag,Not copied (local/cluster wrapper or retired note),
-benchmarks/submit_dissipative_heisenberg.slurm,benchmarks,obsolete,archive tag,Not copied (local/cluster wrapper or retired note),
-benchmarks/submit_heisenberg_tolerance.slurm,benchmarks,obsolete,archive tag,Not copied (local/cluster wrapper or retired note),
-benchmarks/submit_hs_structure_factor.slurm,benchmarks,obsolete,archive tag,Not copied (local/cluster wrapper or retired note),
-benchmarks/submit_oat_large.slurm,benchmarks,obsolete,archive tag,Not copied (local/cluster wrapper or retired note),
-benchmarks/submit_rsvd_scan.slurm,benchmarks,obsolete,archive tag,Not copied (local/cluster wrapper or retired note),
-benchmarks/symmetric_composition.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/tdvp2_order_probe.jl,benchmarks,obsolete,archive tag,Not copied (one-off probe),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/tfim_accumulate.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/tfim_anomaly.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/tfim_bisect.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/tfim_observables.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/three_models.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/tolerance_driven_selection.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/trace_preservation.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",
-benchmarks/trace_superket_test.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/transport_check.jl,benchmarks,obsolete,archive tag,Not copied (one-off probe),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/validate_analytic_ref.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",
-benchmarks/xx20_rsvd_adaptive.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate
-benchmarks/xx_efficiency/common.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/xx_efficiency/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/xx_efficiency/diag_recycle_unmet.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/xx_efficiency/,Curate,
-benchmarks/xx_efficiency/fig1_dd.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/xx_efficiency/,Curate,
-benchmarks/xx_efficiency/fig2_krylov.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/xx_efficiency/,Curate,
-benchmarks/xx_efficiency/fig3_recycle.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/xx_efficiency/,Curate,
-benchmarks/xx_efficiency/fig4_endtoend.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/xx_efficiency/,Curate,
-benchmarks/xx_efficiency/plot_figs.py,benchmarks,study,benchmarks/QMB/ClosedSystem/xx_efficiency/,Curate,
-benchmarks/xx_efficiency/s6_first_step.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/xx_efficiency/,Curate,
-benchmarks/xx_efficiency/s6_s7_order.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/xx_efficiency/,Curate,
-benchmarks/xx_efficiency/snapshots.jl,benchmarks,study,benchmarks/QMB/ClosedSystem/xx_efficiency/,Curate,BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/xx_l18_campaign.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate
-benchmarks/xx_open_exact_gate.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
-benchmarks/xx_open_transport.jl,benchmarks,unknown,WP8 review,"Unclassified research driver: keep, move to studies/ or archive, decided in WP8",
-notebooks/.gitignore,notebooks,study,docs/ tutorials (WP7),Rewrite against the new API; one source format,
-notebooks/01_rsvd_lubich.ipynb,notebooks,study,docs/ tutorials (WP7),Rewrite against the new API; one source format,
-notebooks/01_rsvd_lubich.jl,notebooks,study,docs/ tutorials (WP7),Rewrite against the new API; one source format,
-notebooks/02_rsvd_gate.ipynb,notebooks,study,docs/ tutorials (WP7),Rewrite against the new API; one source format,
-notebooks/02_rsvd_gate.jl,notebooks,study,docs/ tutorials (WP7),Rewrite against the new API; one source format,
-notebooks/03_imaginary_time.ipynb,notebooks,study,docs/ tutorials (WP7),Rewrite against the new API; one source format,
-notebooks/03_imaginary_time.jl,notebooks,study,docs/ tutorials (WP7),Rewrite against the new API; one source format,
-notebooks/04_ground_state_dmrg.ipynb,notebooks,study,docs/ tutorials (WP7),Rewrite against the new API; one source format,
-notebooks/04_ground_state_dmrg.jl,notebooks,study,docs/ tutorials (WP7),Rewrite against the new API; one source format,
-notebooks/build_notebooks.py,notebooks,study,docs/ tutorials (WP7),Rewrite against the new API; one source format,
-notebooks/submit_notebook.slurm,notebooks,study,docs/ tutorials (WP7),Rewrite against the new API; one source format,
-scripts/add_json.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
-scripts/aug_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
-scripts/chi_scan_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
-scripts/driver_norm_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
-scripts/dup_column_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
-scripts/expv_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
-scripts/expv_reference_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
-scripts/gate_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
-scripts/gate_diag2.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
-scripts/install_deps.jl,scripts,obsolete,not copied,Superseded by Project.toml + README install,
-scripts/l6_accuracy_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
-scripts/l6_exactness_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
-scripts/missing_sector_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
-scripts/norm_blowup_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
-scripts/parity_gap_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
-scripts/run_julia.sbatch,scripts,study,studies/runners/,Only if a kept study needs it,
-scripts/run_python.sbatch,scripts,study,studies/runners/,Only if a kept study needs it,
-scripts/sector_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
-scripts/sector_diag2.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
-scripts/sector_waste_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
-scripts/seed_blame_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
-scripts/seed_spread_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
-scripts/seed_starve_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
+benchmarks/open_system.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/plot_bug_wins.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/plot_cbe_sweeps_l16.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/plot_dissip_heis.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/plot_dissipative_longrange.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/plot_dt_order.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/plot_gse_comp_ratio.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/plot_gse_seed.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/plot_heis_profiles.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/plot_heisenberg_tolerance.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/plot_hs_skw.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/plot_knob_cube.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/plot_krylov_matrix.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/plot_l18.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/plot_l18_campaign.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/plot_l18_special.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/plot_large_chi.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/plot_mbl_scars.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/plot_models_separate.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/plot_oat.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/plot_open_suite.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/plot_rsvd_parallel.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/plot_rsvd_scan.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/plot_svg_panels.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/plot_three_models.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/plot_xx_l18_campaign.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/plot_xx_lightcone.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/probe_edge_refusal.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate
+benchmarks/profile_buckets.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum
+benchmarks/profile_step.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/qtt/common.jl,benchmarks,study,benchmarks/QTTS/common.jl,Ported to the public API (PR 11),BondUpdateBUG RSVDCBEBondUpdate
+benchmarks/qtt/diag_heston_step.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/qtt/first_impressions.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate
+benchmarks/qtt/gp_ground_state.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/qtt/heston_pilot.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/qtt/impressions_report.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/qtt/plot_qtt.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/qtt/production.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/qtt/restart_check.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),RSVDCBEBondUpdate
+benchmarks/qtt/task2_study.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/qtt/vortex_shedding.jl,benchmarks,study,benchmarks/QTTS/vortex_shedding.jl,Ported to the public API (PR 11),
+benchmarks/random_mpo.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum
+benchmarks/random_mps.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum
+benchmarks/response_check.jl,benchmarks,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/retired_cbe_project_first.jl.txt,benchmarks,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/rsvd_lgt.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/rsvd_models.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/rsvd_optimal.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/rsvd_parallel.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/rsvd_param_scan.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/rsvd_probe_microbench.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/rsvd_sketch_width.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/rsvd_speedup_2d.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/run_2209_campaign.sh,benchmarks,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/run_dissipative_l16.ps1,benchmarks,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/run_hs_structure_factor.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/smoke_hermitian.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/smoke_lindblad.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/sparse_krylov.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/spectral/bug_knobs.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/spectral/bug_profile_2d.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/spectral/fig45_2209.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/spectral/fig4_2209.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/spectral/fig5a_static.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/spectral/growth_vs_exact.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/spectral/knobs_l20.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/spectral/lattice2d.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),RSVDCBEBondUpdate
+benchmarks/spectral/matched_error.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/spectral/order_ladder_2d.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/spectral/plot_fig45_2209.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/spectral/plot_fig4_2209.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/spectral/plot_fig5a.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),RSVDCBEBondUpdate
+benchmarks/spectral/plot_knobs_l20.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/spectral/select_knobs.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/spectral/xc_gate.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),RSVDCBEBondUpdate Telum LurCGT
+benchmarks/study_models.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/su2_cylinder.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/su2_knob_cube.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/submit_cbe_sweeps_l16.slurm,benchmarks,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/submit_dissipative_heisenberg.slurm,benchmarks,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/submit_heisenberg_tolerance.slurm,benchmarks,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/submit_hs_structure_factor.slurm,benchmarks,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/submit_oat_large.slurm,benchmarks,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/submit_rsvd_scan.slurm,benchmarks,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/symmetric_composition.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/tdvp2_order_probe.jl,benchmarks,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/tfim_accumulate.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/tfim_anomaly.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/tfim_bisect.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/tfim_observables.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/three_models.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/tolerance_driven_selection.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/trace_preservation.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/trace_superket_test.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/transport_check.jl,benchmarks,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/validate_analytic_ref.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/xx20_rsvd_adaptive.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate
+benchmarks/xx_efficiency/common.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/xx_efficiency/diag_recycle_unmet.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/xx_efficiency/fig1_dd.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/xx_efficiency/fig2_krylov.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/xx_efficiency/fig3_recycle.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/xx_efficiency/fig4_endtoend.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/xx_efficiency/plot_figs.py,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/xx_efficiency/s6_first_step.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/xx_efficiency/s6_s7_order.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+benchmarks/xx_efficiency/snapshots.jl,benchmarks,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/xx_l18_campaign.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate
+benchmarks/xx_open_exact_gate.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),BondUpdateBUG RSVDCBEBondUpdate Telum LurCGT
+benchmarks/xx_open_transport.jl,benchmarks,unknown,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+notebooks/.gitignore,notebooks,study,archive tag,Archived; the manual in docs/ replaces the tutorials (PR 10),
+notebooks/01_rsvd_lubich.ipynb,notebooks,study,archive tag,Archived; the manual in docs/ replaces the tutorials (PR 10),
+notebooks/01_rsvd_lubich.jl,notebooks,study,archive tag,Archived; the manual in docs/ replaces the tutorials (PR 10),
+notebooks/02_rsvd_gate.ipynb,notebooks,study,archive tag,Archived; the manual in docs/ replaces the tutorials (PR 10),
+notebooks/02_rsvd_gate.jl,notebooks,study,archive tag,Archived; the manual in docs/ replaces the tutorials (PR 10),
+notebooks/03_imaginary_time.ipynb,notebooks,study,archive tag,Archived; the manual in docs/ replaces the tutorials (PR 10),
+notebooks/03_imaginary_time.jl,notebooks,study,archive tag,Archived; the manual in docs/ replaces the tutorials (PR 10),
+notebooks/04_ground_state_dmrg.ipynb,notebooks,study,archive tag,Archived; the manual in docs/ replaces the tutorials (PR 10),
+notebooks/04_ground_state_dmrg.jl,notebooks,study,archive tag,Archived; the manual in docs/ replaces the tutorials (PR 10),
+notebooks/build_notebooks.py,notebooks,study,archive tag,Archived; the manual in docs/ replaces the tutorials (PR 10),
+notebooks/submit_notebook.slurm,notebooks,study,archive tag,Archived; the manual in docs/ replaces the tutorials (PR 10),
+scripts/add_json.jl,scripts,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+scripts/aug_diag.jl,scripts,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+scripts/chi_scan_diag.jl,scripts,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+scripts/driver_norm_diag.jl,scripts,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+scripts/dup_column_diag.jl,scripts,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+scripts/expv_diag.jl,scripts,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+scripts/expv_reference_diag.jl,scripts,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+scripts/gate_diag.jl,scripts,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+scripts/gate_diag2.jl,scripts,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+scripts/install_deps.jl,scripts,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+scripts/l6_accuracy_diag.jl,scripts,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+scripts/l6_exactness_diag.jl,scripts,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+scripts/missing_sector_diag.jl,scripts,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+scripts/norm_blowup_diag.jl,scripts,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+scripts/parity_gap_diag.jl,scripts,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+scripts/run_julia.sbatch,scripts,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+scripts/run_python.sbatch,scripts,study,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+scripts/sector_diag.jl,scripts,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+scripts/sector_diag2.jl,scripts,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+scripts/sector_waste_diag.jl,scripts,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+scripts/seed_blame_diag.jl,scripts,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+scripts/seed_spread_diag.jl,scripts,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+scripts/seed_starve_diag.jl,scripts,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
 scripts/smoke_examples.jl,scripts,core,test/examples (WP7 examples check),Port,
-scripts/sulz_check_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
-scripts/symmetry_check_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
-scripts/symmetry_gap_diag.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
-scripts/telum_probe.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
-scripts/telum_probe2.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
-scripts/telum_smoke.jl,scripts,obsolete,archive tag,Not copied (diagnostic probe),
+scripts/sulz_check_diag.jl,scripts,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+scripts/symmetry_check_diag.jl,scripts,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+scripts/symmetry_gap_diag.jl,scripts,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+scripts/telum_probe.jl,scripts,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+scripts/telum_probe2.jl,scripts,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
+scripts/telum_smoke.jl,scripts,obsolete,archive tag,Archived at BUG-Julia tag pre-bondupdategalerkin (PR 11),
