@@ -34,7 +34,15 @@ clear_fusion_cache!()
     @testset "density, products, H[psi], F(psi) and the real-linear JVP" begin
         g = qtt_grid(3, 3; x = (-2.0, 2.0), y = (-2.0, 2.0))
         paddle = GPPaddle(4.0, -1.0, 1.0, 0.5, 0.5, 0.6, 0.8, 0.0, 0.15)
-        m = gp_model(g; gnl = 1.5, gamma = 0.1, mu = 0.4, omega = 1.0, paddle = paddle, rho_tol = 1e-13)
+        m = gp_model(
+            g;
+            gnl = 1.5,
+            gamma = 0.1,
+            mu = 0.4,
+            omega = 1.0,
+            paddle = paddle,
+            rho_tol = 1e-13,
+        )
         state_one = _random_tt(_tt_ranks(6, 4); rng = MersenneTwister(41))
         state_two = _random_tt(_tt_ranks(6, 4); rng = MersenneTwister(42))
         values_one, values_two = vec(tt_dense(state_one)), vec(tt_dense(state_two))
@@ -59,10 +67,12 @@ clear_fusion_cache!()
         @test _relerr(op_dense(H1), linear + m.g * Diagonal(abs2.(values_one))) < 1e-11
         applied, _ = op_zipup(H1, state_one; tol = 1e-13)
         @test _relerr(vec(tt_dense(applied)), op_dense(H1) * values_one) < 1e-11
-        @test _relerr(vec(tt_dense(gp_vector_field(m, state_one, t))), dense_field(values_one)) < 1e-10
+        @test _relerr(vec(tt_dense(gp_vector_field(m, state_one, t))), dense_field(values_one)) <
+              1e-10
         # g = 0 is the linear path exactly
         linear_model = gp_model(g; gnl = 0.0, gamma = 0.1, mu = 0.4, omega = 1.0, paddle = paddle)
-        @test _relerr(op_dense(first(gp_hamiltonian_op(linear_model, state_one, t))), linear) < 1e-13
+        @test _relerr(op_dense(first(gp_hamiltonian_op(linear_model, state_one, t))), linear) <
+              1e-13
         # the density follows the trial state; a frozen one does not
         H2, _ = gp_hamiltonian_op(m, state_two, t)
         @test _relerr(op_dense(H2), linear + m.g * Diagonal(abs2.(values_two))) < 1e-11
@@ -77,8 +87,10 @@ clear_fusion_cache!()
         jvp = vec(tt_dense(gp_jvp(m, state_one, direction, t)))
         step = 1e-6
         difference =
-            (dense_field(values_one .+ step .* direction_values) .- dense_field(values_one .- step .* direction_values)) ./
-            (2step)
+            (
+                dense_field(values_one .+ step .* direction_values) .-
+                dense_field(values_one .- step .* direction_values)
+            ) ./ (2step)
         @test _relerr(jvp, difference) < 1e-7
         jvp_imaginary = vec(tt_dense(gp_jvp(m, state_one, tt_scale(direction, 1im), t)))
         difference_imaginary =

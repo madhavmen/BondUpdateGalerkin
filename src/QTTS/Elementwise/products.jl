@@ -68,7 +68,12 @@ end
 `w chi` cores of [`op_apply`](@ref). The per-bond tails bound the error only when `W`'s right parts
 are contractions, so for a general operator the bound is an estimate.
 """
-function op_zipup(W::AbstractVector, A0::AbstractVector; tol::Real = 1e-12, maxdim::Int = typemax(Int))
+function op_zipup(
+    W::AbstractVector,
+    A0::AbstractVector;
+    tol::Real = 1e-12,
+    maxdim::Int = typemax(Int),
+)
     start = time_ns()
     A, _ = tt_compress(A0; tol = 0.0)
     return _zip_rc(cut -> _apply_zipup(W, A, cut, maxdim), tol, maxdim, start)
@@ -105,7 +110,13 @@ function _product_zipup(A::AbstractVector, B::AbstractVector, tol::Real, maxdim:
         b_left, _, b_right = size(b)
         r = size(carry, 1)
         # Y[r, a, s, b'] = sum_b carry[r, a, b] B[b, s, b']
-        Y = reshape(reshape(carry, r * a_left, b_left) * reshape(b, b_left, d * b_right), r, a_left, d, b_right)
+        Y = reshape(
+            reshape(carry, r * a_left, b_left) * reshape(b, b_left, d * b_right),
+            r,
+            a_left,
+            d,
+            b_right,
+        )
         site = zeros(T, r, d, a_right, b_right)          # (r, s, a', b')
         for s = 1:d
             Ys = reshape(permutedims(Y[:, :, s, :], (1, 3, 2)), r * b_right, a_left)   # (r b', a)
@@ -142,7 +153,8 @@ function _apply_zipup(W::AbstractVector, A::AbstractVector, tol::Real, maxdim::I
         r = size(carry, 1)
         # Y[r, w, i, a'] = sum_a carry[r, a, w] A[a, i, a']
         Y = reshape(
-            reshape(permutedims(carry, (1, 3, 2)), r * w_left, a_left) * reshape(a, a_left, d * a_right),
+            reshape(permutedims(carry, (1, 3, 2)), r * w_left, a_left) *
+            reshape(a, a_left, d * a_right),
             r,
             w_left,
             d,

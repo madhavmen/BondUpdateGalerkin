@@ -68,19 +68,37 @@ end
         @test stats.converged && stats.newton <= 2                 # linear: Newton exact in one pass
         @test stats.precond === :linear_part
         @test _relerr(vec(tt_dense(frame_state(frames, Y[end]))), exact) < 1e-10
-        plain, plain_stats =
-            rk_stage_solve(GPFlow(m), frames, projected, 0.0, h, method; tol = 1e-13, precond = :none)
+        plain, plain_stats = rk_stage_solve(
+            GPFlow(m),
+            frames,
+            projected,
+            0.0,
+            h,
+            method;
+            tol = 1e-13,
+            precond = :none,
+        )
         @test plain_stats.precond === :none && plain_stats.converged
         @test _relerr(plain[end], Y[end]) < 1e-10
         @test stats.gmres <= plain_stats.gmres
         # LinearFlow of the same generator is the same map
-        linear, _ = rk_stage_solve(LinearFlow(m.H0, -1im - m.gamma), frames, projected, 0.0, h, method; tol = 1e-13)
+        linear, _ = rk_stage_solve(
+            LinearFlow(m.H0, -1im - m.gamma),
+            frames,
+            projected,
+            0.0,
+            h,
+            method;
+            tol = 1e-13,
+        )
         @test _relerr(linear[end], Y[end]) < 1e-10
     end
 
     @testset "imaginary time, $method" for method in (:trapezoid, :radau2, :radau3)
         flow = GPFlow(m; imaginary = true, normalized = false)
-        @test flow.pref == -1 && !flow_normalized(flow) && flow_normalized(GPFlow(m; imaginary = true))
+        @test flow.pref == -1 &&
+              !flow_normalized(flow) &&
+              flow_normalized(GPFlow(m; imaginary = true))
         exact = rational_map(method, -op_dense(m.H0), h) * initial_values
         Y, stats = rk_stage_solve(flow, frames, projected, 0.0, h, method; tol = 1e-13)
         @test stats.converged

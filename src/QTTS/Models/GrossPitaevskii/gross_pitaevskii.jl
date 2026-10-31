@@ -108,7 +108,13 @@ function gp_hamiltonian_op(m::GPModel, A::AbstractVector, t::Real; rho = nothing
     linear = gp_linear_op(m, t)
     if m.g == 0
         return linear,
-        (chi_rho = 0, rho_err = 0.0, t_rho = 0.0, retried = false, w = maximum(tt_ranks(linear); init = 1))
+        (
+            chi_rho = 0,
+            rho_err = 0.0,
+            t_rho = 0.0,
+            retried = false,
+            w = maximum(tt_ranks(linear); init = 1),
+        )
     end
     density_info = (
         chi = maximum(tt_ranks(rho === nothing ? A : rho); init = 1),
@@ -196,7 +202,8 @@ function gp_jvp(m::GPModel, A::AbstractVector, dA::AbstractVector, t::Real; tol:
     # diag(f) dA = f .* dA by zip-up products, never the exact chi_rho chi_dA cores
     density_term, _ = tt_product(rho, dA; tol = tol)
     conjugate_term, _ = tt_product(psi_squared, tt_conj(dA); tol = tol)
-    total = tt_lincomb([(1.0, linear_part), (2 * m.g, density_term), (m.g, conjugate_term)]; tol = tol)
+    total =
+        tt_lincomb([(1.0, linear_part), (2 * m.g, density_term), (m.g, conjugate_term)]; tol = tol)
     return first(tt_compress(tt_scale(total, -1im - m.gamma); tol = tol))
 end
 

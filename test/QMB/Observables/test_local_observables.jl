@@ -5,6 +5,10 @@
 using Test, LinearAlgebra, LurCGT, Telum
 using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
 
+# The states below are U(1) states; set the mode rather than inherit the previous file's.
+set_symmetry!(:U1)
+clear_fusion_cache!()
+
 @testset "spin-1/2 local observables" begin
 
     @testset "observables read the domain wall correctly" begin

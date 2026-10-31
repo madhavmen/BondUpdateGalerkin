@@ -120,9 +120,13 @@ function qtt_bug_step!(
         stage_keep = Any[keep...]
         for (j, Yj) in enumerate(Y)
             stage_cores = frame_state(frames, Yj)
-            push!(stage_keep, qtt_mps(first(tt_compress(stage_cores; tol = keep_tol, maxdim = 4 * maxdim))))
+            push!(
+                stage_keep,
+                qtt_mps(first(tt_compress(stage_cores; tol = keep_tol, maxdim = 4 * maxdim))),
+            )
             G, _, _ = reduced_field(fl, frames, Yj, t + tableau.c[j] * h)
-            field_cores = first(tt_compress(frame_state(frames, G); tol = keep_tol, maxdim = 4 * maxdim))
+            field_cores =
+                first(tt_compress(frame_state(frames, G); tol = keep_tol, maxdim = 4 * maxdim))
             tt_norm(field_cores) > 0 && push!(stage_keep, qtt_mps(field_cores))
         end
         basis_start = time_ns()
@@ -131,8 +135,16 @@ function qtt_bug_step!(
         corrected_input = frame_project(corrected, nothing, input_cores)
         start_values = [frame_project(corrected, nothing, frame_state(frames, Yj)) for Yj in Y]
         root_start = time_ns()
-        Y, stage_stats =
-            rk_stage_solve(fl, corrected, corrected_input, t, h, root; tol = tol_stage, Y0 = start_values)
+        Y, stage_stats = rk_stage_solve(
+            fl,
+            corrected,
+            corrected_input,
+            t,
+            h,
+            root;
+            tol = tol_stage,
+            Y0 = start_values,
+        )
         t_root += (time_ns() - root_start) / 1e9
         push!(stats, stage_stats)
         frames = corrected

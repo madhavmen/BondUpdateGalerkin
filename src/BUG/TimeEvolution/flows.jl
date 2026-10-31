@@ -42,10 +42,8 @@ density rank `chi_rho`, its error bound `rho_err`, its build seconds `t_rho`, wh
 `retried`, and the operator's bond dimension `w`.
 """
 function flow_op end
-flow_op(fl::LinearFlow, A, t) = (
-    fl.H,
-    (chi_rho = 0, rho_err = 0.0, t_rho = 0.0, retried = false, w = _op_bond_max(fl.H)),
-)
+flow_op(fl::LinearFlow, A, t) =
+    (fl.H, (chi_rho = 0, rho_err = 0.0, t_rho = 0.0, retried = false, w = _op_bond_max(fl.H)))
 
 """
     flow_jac_ops(fl, A, t) -> (J1, J2)

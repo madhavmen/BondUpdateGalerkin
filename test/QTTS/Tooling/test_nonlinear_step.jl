@@ -29,8 +29,9 @@ function run_steps(step!, initial, h, nsteps)
 end
 
 "Observed convergence rates `log(e_k / e_{k+1}) / log(h_k / h_{k+1})`."
-rates(step_sizes, errors) =
-    [log(errors[k] / errors[k+1]) / log(step_sizes[k] / step_sizes[k+1]) for k = 1:(length(errors)-1)]
+rates(step_sizes, errors) = [
+    log(errors[k] / errors[k+1]) / log(step_sizes[k] / step_sizes[k+1]) for k = 1:(length(errors)-1)
+]
 
 @testset "nonlinear QTT BUG step" begin
     @testset "damped nonlinear plane wave: order 2, lost by a frozen density" begin
@@ -47,16 +48,28 @@ rates(step_sizes, errors) =
         phase(t) = log(rho(t) / rho0) / (2gamma)
         initial = qtt_separable(g, x -> sqrt(rho0) * exp(1im * x), y -> exp(1im * y))
         final_time = 0.4
-        exact = vec(tt_dense(qtt_separable(
-            g,
-            x -> sqrt(rho(final_time)) * exp(1im * (x + phase(final_time))),
-            y -> exp(1im * y),
-        )))
+        exact = vec(
+            tt_dense(
+                qtt_separable(
+                    g,
+                    x -> sqrt(rho(final_time)) * exp(1im * (x + phase(final_time))),
+                    y -> exp(1im * y),
+                ),
+            ),
+        )
         step_sizes = [0.1, 0.05]
         consistent = [
             norm(
                 run_steps(
-                    (psi, t, h) -> qtt_bug_step!(psi, GPFlow(m), t, h; order = 2, tol_trunc = 1e-14, tol_stage = 1e-13),
+                    (psi, t, h) -> qtt_bug_step!(
+                        psi,
+                        GPFlow(m),
+                        t,
+                        h;
+                        order = 2,
+                        tol_trunc = 1e-14,
+                        tol_stage = 1e-13,
+                    ),
                     initial,
                     h,
                     round(Int, final_time / h),
@@ -92,14 +105,30 @@ rates(step_sizes, errors) =
         legacy = JSON.parsefile(joinpath(FIXTURE_DIR, "qtt_heston_backward.json"))
         bits = legacy["N"]
         params = HestonParams(0.03, 0.0, 1.5, 0.09, 0.5, -0.7)
-        g = qtt_grid(bits, bits; x = (-3.0, 3.0), y = (0.0, 1.0), periodic_x = false, periodic_y = false)
+        g = qtt_grid(
+            bits,
+            bits;
+            x = (-3.0, 3.0),
+            y = (0.0, 1.0),
+            periodic_x = false,
+            periodic_y = false,
+        )
         softplus(z) = z > 30 ? z : log1p(exp(z))
-        initial = qtt_separable(g, x -> 0.02 * softplus((exp(x) - 1.0) / 0.02), v -> 1.0; tol = 1e-12)
+        initial =
+            qtt_separable(g, x -> 0.02 * softplus((exp(x) - 1.0) / 0.02), v -> 1.0; tol = 1e-12)
         flow = LinearFlow(heston_op(g, params))
         psi = qtt_mps(initial)
         h = legacy["h"]
         for k = 0:(legacy["steps"]-1)
-            qtt_bug_step!(psi, flow, k * h, h; order = legacy["order"], maxdim = 64, tol_trunc = 1e-10)
+            qtt_bug_step!(
+                psi,
+                flow,
+                k * h,
+                h;
+                order = legacy["order"],
+                maxdim = 64,
+                tol_trunc = 1e-10,
+            )
         end
         final = vec(tt_dense(qtt_cores(psi)))
         reference = frozen_vector(legacy["final_state"])
@@ -120,15 +149,28 @@ rates(step_sizes, errors) =
         ])
         psi = qtt_mps(initial)
         for k = 0:3
-            qtt_bug_step!(psi, GPFlow(m), k * 0.1, 0.1; order = 2, maxdim = 64, tol_basis = 1e-10, tol_trunc = 1e-12)
+            qtt_bug_step!(
+                psi,
+                GPFlow(m),
+                k * 0.1,
+                0.1;
+                order = 2,
+                maxdim = 64,
+                tol_basis = 1e-10,
+                tol_trunc = 1e-12,
+            )
         end
         @test _relerr(vec(tt_dense(qtt_cores(psi))), frozen_vector(legacy["final_state"])) < 1e-6
-        history = gp_ground_state!(qtt_mps(initial), m, uniform_schedule(0.5, 10); order = 2, maxdim = 64)
+        history =
+            gp_ground_state!(qtt_mps(initial), m, uniform_schedule(0.5, 10); order = 2, maxdim = 64)
         energies = [entry.E for entry in history if entry.accepted]
         frozen_energies = Float64.(legacy["ground_state_energies"])
         @test length(energies) == length(frozen_energies)
         @test maximum(abs.(energies .- frozen_energies)) < 1e-6
         # imaginary time lowers the energy monotonically
-        @test all(k -> energies[k+1] <= energies[k] + 1e-10 * abs(energies[k]), 1:(length(energies)-1))
+        @test all(
+            k -> energies[k+1] <= energies[k] + 1e-10 * abs(energies[k]),
+            1:(length(energies)-1),
+        )
     end
 end

@@ -12,7 +12,10 @@ function gp_parts(m::GPModel)
         g = m.grid
         kinetic = qtt_op(
             g,
-            [(-0.5, qtt_d(g, :x, 2; bc = :periodic), nothing), (-0.5, nothing, qtt_d(g, :y, 2; bc = :periodic))],
+            [
+                (-0.5, qtt_d(g, :x, 2; bc = :periodic), nothing),
+                (-0.5, nothing, qtt_d(g, :y, 2; bc = :periodic)),
+            ],
         )
         trap =
             m.omega == 0 ? nothing :

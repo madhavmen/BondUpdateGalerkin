@@ -66,7 +66,12 @@ end
 function frame_state(fr::QTTFrames, Y::AbstractMatrix)
     c = length(fr.W)
     centre = fr.W[c]
-    root = reshape(reshape(centre, :, size(centre, 3)) * Y, size(centre, 1), size(centre, 2), size(Y, 2))
+    root = reshape(
+        reshape(centre, :, size(centre, 3)) * Y,
+        size(centre, 1),
+        size(centre, 2),
+        size(Y, 2),
+    )
     return vcat(fr.W[1:(c-1)], [root], fr.Z)
 end
 

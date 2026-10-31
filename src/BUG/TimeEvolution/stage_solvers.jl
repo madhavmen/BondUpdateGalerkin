@@ -127,9 +127,9 @@ function _gmres_real(
         basis[:, 1] .= residual ./ beta
         rhs[1] = beta
         used = 0
+        stalled = false
         for j = 1:cycle
             iterations += 1
-            used = j
             w = apply(basis[:, j])
             # modified Gram-Schmidt against the Krylov basis
             for i = 1:j
@@ -145,15 +145,27 @@ function _gmres_real(
                 hessenberg[i, j] = rotated
             end
             radius = hypot(hessenberg[j, j], hessenberg[j+1, j])
+            # The Krylov space closed (zero subdiagonal) on a direction the operator maps into the
+            # earlier ones: the new column adds nothing, and keeping it would make the triangular
+            # solve singular. The solution in the first j - 1 vectors is the best this space holds.
+            if radius == 0
+                stalled = true
+                break
+            end
+            used = j
             cosines[j], sines[j] = hessenberg[j, j] / radius, hessenberg[j+1, j] / radius
             hessenberg[j, j], hessenberg[j+1, j] = radius, 0.0
             rhs[j+1] = -sines[j] * rhs[j]
             rhs[j] = cosines[j] * rhs[j]
             abs(rhs[j+1]) <= tol * norm_b && break
         end
-        coefficients = UpperTriangular(hessenberg[1:used, 1:used]) \ rhs[1:used]
-        x .+= basis[:, 1:used] * coefficients
-        abs(rhs[used+1]) <= tol * norm_b && return x, iterations, abs(rhs[used+1]) / norm_b
+        if used > 0
+            coefficients = UpperTriangular(hessenberg[1:used, 1:used]) \ rhs[1:used]
+            x .+= basis[:, 1:used] * coefficients
+        end
+        # a stalled space cannot improve on restart: return what it holds
+        (stalled || abs(rhs[used+1]) <= tol * norm_b) &&
+            return x, iterations, abs(rhs[used+1]) / norm_b
     end
     return x, iterations, norm(b .- apply(x)) / norm_b
 end
@@ -219,8 +231,8 @@ function rk_stage_solve(
         J1, _ = flow_jac_ops(fl, frame_state(fr, S), t + h / 2)
         linear_part = frame_operator_matrix(fr, J1)
         mu0 =
-            flow_normalized(fl) ?
-            real(dot(vec(S), linear_part * vec(S))) / max(norm(S)^2, eps()) : 0.0
+            flow_normalized(fl) ? real(dot(vec(S), linear_part * vec(S))) / max(norm(S)^2, eps()) :
+            0.0
         stage_jacobian = fl.pref .* (linear_part - mu0 * I)
         factorised = lu(
             Matrix{ComplexF64}(I, nstages * root_size, nstages * root_size) .-
@@ -232,7 +244,9 @@ function rk_stage_solve(
         factorised === nothing && return x
         stacked = vcat((vec(D) for D in _unpack(x, dims))...)
         solved = factorised \ stacked
-        return _pack([reshape(solved[((j-1)*root_size+1):(j*root_size)], dims[j]) for j = 1:nstages])
+        return _pack([
+            reshape(solved[((j-1)*root_size+1):(j*root_size)], dims[j]) for j = 1:nstages
+        ])
     end
     for newton = 0:maxnewton
         fields, mus = Matrix{ComplexF64}[], Float64[]
@@ -265,8 +279,8 @@ function rk_stage_solve(
         function newton_operator(x)
             directions = _unpack(x, dims)
             actions = [
-                any(!iszero, butcher[:, l]) ? jacobians[l](directions[l]) : zero(directions[l]) for
-                l = 1:nstages
+                any(!iszero, butcher[:, l]) ? jacobians[l](directions[l]) : zero(directions[l])
+                for l = 1:nstages
             ]
             return _pack([
                 directions[j] .- h .* sum(butcher[j, l] .* actions[l] for l = 1:nstages) for
