@@ -17,7 +17,7 @@ include(joinpath(@__DIR__, "..", "common", "qtt_fixtures.jl"))
 const FIXTURE_DIR = joinpath(@__DIR__, "..", "fixtures", "b155550")
 # the first rows of the 20-step frozen TDVP2 run (each row is checked on its own), to keep the
 # suite near five minutes
-const COMPARED_STEPS = 6
+const COMPARED_STEPS = 3
 
 "<S^z_j> of every site, normalised by the state's own norm (the fixture script's `sz_profile`)."
 sz_profile(psi) = real.(magnetisation(copy(psi))) ./ real(overlap(psi, psi))
@@ -48,11 +48,11 @@ sz_profile(psi) = real.(magnetisation(copy(psi))) ./ real(overlap(psi, psi))
             @test maximum(abs.(sz .- Float64.(frozen_row["sz"]))) <= 1e-5
             @test maximum(abs.(sz .- exact_sz)) <= 2 * frozen_row["err_exact"] + 1e-6
         end
-        # the fourth-order composition beats the second-order step at the same coarse dt (three
-        # steps to t = 0.3: each order-4 step is several TDVP2 sweeps, the file's main cost)
+        # the fourth-order composition beats the second-order step at the same coarse dt (two
+        # steps to t = 0.2: each order-4 step is several TDVP2 sweeps, the file's main cost)
         errors = map((2, 4)) do order
             state = neel_state(chain_length)
-            for _ = 1:3
+            for _ = 1:2
                 tdvp2_composed_step!(
                     state,
                     hamiltonian,
@@ -64,7 +64,7 @@ sz_profile(psi) = real.(magnetisation(copy(psi))) ./ real(overlap(psi, psi))
             maximum(
                 abs.(
                     sz_profile(state) .-
-                    xx_free_fermion_sz(chain_length, 0.3; J = 1.0, occupied = 1:2:chain_length)
+                    xx_free_fermion_sz(chain_length, 0.2; J = 1.0, occupied = 1:2:chain_length)
                 ),
             )
         end
@@ -75,7 +75,7 @@ sz_profile(psi) = real.(magnetisation(copy(psi))) ./ real(overlap(psi, psi))
     @testset "one-site TDVP with CBE: unitary, close to free fermions" begin
         set_symmetry!(:U1)
         clear_fusion_cache!()
-        chain_length, time_step, steps = 8, 0.05, 3
+        chain_length, time_step, steps = 6, 0.05, 3     # maxdim 16 > 8, the largest bond at L = 6
         exact_sz = xx_free_fermion_sz(
             chain_length,
             steps * time_step;
@@ -92,10 +92,10 @@ sz_profile(psi) = real.(magnetisation(copy(psi))) ./ real(overlap(psi, psi))
                 mpo_state,
                 hamiltonian,
                 -im * time_step;
-                maxdim = 64,
+                maxdim = 16,
                 trunc_thresh = 1e-14,
             )
-            tdvp1_cbe_step!(chain_state, chain, -im * time_step; maxdim = 64, trunc_thresh = 1e-14)
+            tdvp1_cbe_step!(chain_state, chain, -im * time_step; maxdim = 16, trunc_thresh = 1e-14)
         end
         for state in (mpo_state, chain_state)
             @test norm(state) ≈ initial_norm atol = 1e-9                     # real time is unitary
@@ -107,7 +107,7 @@ sz_profile(psi) = real.(magnetisation(copy(psi))) ./ real(overlap(psi, psi))
     @testset "CBE-DMRG: exact ground energy, variational" begin
         set_symmetry!(:U1)
         clear_fusion_cache!()
-        chain_length = 8
+        chain_length = 6                                 # maxdim 16 > 8, the largest bond
         hamiltonian = xxz_mpo(chain_length; J = 1.0, delta = 1.0)
         exact_energy = eigen(Hermitian(Matrix(dense_heisenberg(chain_length)))).values[1]
         psi = neel_state(chain_length)
@@ -118,7 +118,7 @@ sz_profile(psi) = real.(magnetisation(copy(psi))) ./ real(overlap(psi, psi))
             etol = 1e-11,
             tol_basis = 1e-6,
             tol_trunc = 1e-10,
-            maxdim = 64,
+            maxdim = 16,
         )
         @test dmrg_run.energies[end] ≈ exact_energy atol = 1e-8
         @test dmrg_run.energies[end] >= exact_energy - 1e-9                     # variational

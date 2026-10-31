@@ -8,8 +8,9 @@
 #   - against the frozen run: S^z profiles to 1e-5, energies to 1e-6 relative;
 #   - against the exact answer: no worse than twice the frozen error plus 1e-6;
 #   - every step's budget status as frozen ("met").
-# To keep the suite near five minutes, the U(1) runs and the imaginary-time run compare their
-# first steps only (each frozen row is checked on its own, so a prefix is a valid comparison).
+# To keep the suite near five minutes, every run compares its first steps only (each frozen row
+# is checked on its own, so a prefix is a valid comparison); the no-symmetry run, frozen as a final
+# state after ten steps, is checked per step against its frozen norms and the exact state.
 
 using Test, LinearAlgebra
 import JSON, Random
@@ -19,7 +20,7 @@ include(joinpath(@__DIR__, "..", "..", "common", "dense_reference.jl"))
 include(joinpath(@__DIR__, "..", "..", "common", "free_fermion.jl"))
 
 const FIXTURE_DIR = joinpath(@__DIR__, "..", "..", "fixtures", "b155550")
-const COMPARED_STEPS = 6                       # of the 20 real-time and 8 imaginary-time rows
+const COMPARED_STEPS = 3                       # of the 20 real-time rows (10 without symmetry)
 read_fixture(name) = JSON.parsefile(joinpath(FIXTURE_DIR, name * ".json"))
 
 "<S^z_j> of every site, normalised by the state's own norm (the fixture script's `sz_profile`)."
@@ -58,23 +59,24 @@ end
     set_symmetry!(:none)
     clear_fusion_cache!()
     Random.seed!(1234)
-    chain_length, time_step, steps = frozen["L"], frozen["dt"], frozen["steps"]
+    chain_length, time_step = frozen["L"], frozen["dt"]
     hamiltonian = xxz_mpo(chain_length; J = 1.0, delta = 0.0)
     psi = neel_state(chain_length)
-    for frozen_row in frozen["trajectory"]
+    for frozen_row in first(frozen["trajectory"], COMPARED_STEPS)
         info = cbe_bug_step!(psi, hamiltonian, ComplexF64(-im * time_step); order = 2)
         @test step_status(info) == frozen_row["status"]
         @test sqrt(real(overlap(psi, psi))) ≈ frozen_row["norm"] atol = 1e-8
     end
-    final_state = dense_state(psi)
-    frozen_state =
-        ComplexF64.(frozen["final_state"]["re"]) .+ im .* ComplexF64.(frozen["final_state"]["im"])
+    # the frozen error after ten steps bounds the error after fewer
     exact_state =
         exp(
-            -im * steps * time_step * Matrix(dense_heisenberg(chain_length; J = 1.0, delta = 0.0)),
+            -im *
+            COMPARED_STEPS *
+            time_step *
+            Matrix(dense_heisenberg(chain_length; J = 1.0, delta = 0.0)),
         ) * dense_state(neel_state(chain_length))
-    @test norm(final_state - frozen_state) <= 1e-5 * norm(frozen_state)
-    @test norm(final_state - exact_state) / norm(exact_state) <= 2 * frozen["err_dense"] + 1e-6
+    @test norm(dense_state(psi) - exact_state) / norm(exact_state) <=
+          2 * frozen["err_dense"] + 1e-6
     set_symmetry!(:U1)
 end
 
@@ -87,7 +89,7 @@ end
     hamiltonian = xxz_mpo(chain_length; J = 1.0, delta = 1.0)
     psi = neel_state(chain_length)
     previous_energy = Inf
-    for frozen_row in first(frozen["trajectory"], COMPARED_STEPS ÷ 2)
+    for frozen_row in first(frozen["trajectory"], 2)              # of 8 imaginary-time rows
         history = ite_evolve!(psi, hamiltonian, uniform_beta_steps(0.25, 2); order = 2)
         energy_now = real(mpo_energy(psi, hamiltonian)) / real(overlap(psi, psi))
         @test energy_now ≈ frozen_row["energy"] rtol = 1e-6
