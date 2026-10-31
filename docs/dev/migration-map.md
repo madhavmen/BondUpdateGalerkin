@@ -69,17 +69,18 @@ The `target` column of the index holds the per-file map. The grouping:
 
 ## Baseline
 
-The pass/fail state of every legacy test at `b155550`, unchanged, from cluster job 17610132 (2 threads, `x86-64-v3`, 6 h cap per stage). The job ended `OUT_OF_MEMORY` at its 6 G request inside the sweeps stage; the sweeps files it did not reach run in follow-up job 17629894, one process each, and are added below when it finishes. A failure here is the legacy state, not a migration defect: the moved code is checked by this repository's own tests.
+The pass/fail state of every legacy test at `b155550`, unchanged, from cluster job 17610132 (2 threads, `x86-64-v3`, 6 h cap per stage). The job ended `OUT_OF_MEMORY` at its 6 G request inside the sweeps stage; the sweeps files it did not reach ran in follow-up job 17629894 (10 G, one process each), which was cancelled after 9 of its 17 files (USER 31 October 2026: the legacy suite is not needed in full; it takes too long). A failure here is the legacy state, not a migration defect: the moved code is checked by this repository's own tests.
 
 | Stage / file | Result | Wall | MaxRSS | Cause |
 |---|---|---|---|---|
 | `tests/runtests.jl` (BondUpdateBUG suite) | fail: 423 pass, 6 error | 871 s | 2.3 G | the six `test_sectors.jl` testsets call `_complement_basis`, which `sectors.jl` uses but no file at `b155550` defines (`UndefVarError`) |
 | sweeps runner, `test_analytic_reference` (common) to `test_spin_xx`, 15 files | pass | 14915 s (stage) | | `test_spin_xx` alone took 10776 s |
-| sweeps runner, `test_spin_jw` | killed (OOM at 6 G) | | 6.55 G (stage) | rerun in 17629894 |
-| sweeps runner, the 16 files after `test_spin_jw` | not run | | | run in 17629894 |
+| sweeps runner, `test_spin_jw` | killed (OOM at 6 G) | | 6.55 G (stage) | the runner's process had accumulated memory; alone (17629894) it passes in 48 s at 5.4 G |
+| `test_imaginary_time`, `test_adaptive_dmrg`, `test_adaptive_parallel`, `test_adaptive_search`, `test_tdvp2_order`, `test_tdvp2_truncation`, `test_pair_mpo`, `test_tfim_mpo` (17629894, one process each) | pass (all 8) | 325–2720 s | 1.9–2.5 G | `test_tdvp2_order` alone took 2720 s |
+| `test_env_inplace`, `test_sweeps`, `test_cbe_bug_exact_refs`, `test_square_cylinder`, `test_kagome`, `test_symmetry_parity`, `test_physics`, `test_oat` | not run | | | 17629894 cancelled before them |
 | `test_dissipative_{t1,t2,t2_g12,t3_a1,t3_a2,t4,t4_b,t4_conv,t5,t6,u18}` | pass (all 11) | 404–8400 s | 2.3–3.5 G | |
 | `test_hq_kernels`, `test_qtt_task1`, `test_qtt_task2`, `test_xx_efficiency` | pass | 245–8582 s | 2.1–3.8 G | |
-| `test_liouville` | fail: OS-U3 | 472 s | 2.7 G | positivity check `min_eig > -1e-4` evaluated `-1.76e-4` (`tests/sweeps/test_liouville.jl:112`) |
+| `test_liouville` | fail: OS-U3 | 472 s | 2.7 G | positivity check `min_eig > -1e-4` evaluated `-1.76e-4` (`tests/sweeps/test_liouville.jl:112`); the same value PR 6 found and pinned (row 6b) |
 | `tests/common/test_dense_reference.jl` | pass | 138 s | 2.1 G | |
 | `tests/common/test_exact_sparse.jl` | timeout | 21600 s | 0.55 G | killed at the 6 h stage cap |
 | `test/test_contract_threaded.jl`, `test/test_fused_dim_fast.jl`, `test/test_to_concrete_inplace.jl` | fail: 1 error each | 212–298 s | 2.1–2.3 G | they call `cbe_bug_step!(psi, H, dt; trunc_thresh, maxiter, exact, ...)`, a keyword set the `b155550` method no longer accepts (`MethodError`) |
