@@ -24,7 +24,11 @@ jobs:
           version: ${{ matrix.version }}
       - uses: julia-actions/cache@v2
       - uses: julia-actions/julia-buildpkg@v1
+      # no coverage: nothing reads it, and instrumented code cannot use the precompiled package
+      # images, so every method is compiled again inside the test run
       - uses: julia-actions/julia-runtest@v1
+        with:
+          coverage: false
 
   examples:
     name: Examples
