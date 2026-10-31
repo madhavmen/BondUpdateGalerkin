@@ -60,6 +60,23 @@ jobs:
           julia --project=docs -e 'using Pkg; Pkg.instantiate()'
           julia --project=docs docs/make.jl
 
+  clean-install:
+    name: Clean install (README commands)
+    runs-on: ubuntu-latest
+    env:
+      # a depot nothing has been installed into: dependencies must resolve from Project.toml alone
+      JULIA_DEPOT_PATH: ${{ github.workspace }}/../fresh-depot
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1.11"
+      - name: Install, load and run the quick start as the README says
+        run: |
+          julia --project -e 'using Pkg; Pkg.instantiate()'
+          julia --project -e 'using BondUpdateGalerkin'
+          julia --project examples/QMB/xx_quickstart.jl
+
   format:
     name: Format
     runs-on: ubuntu-latest
