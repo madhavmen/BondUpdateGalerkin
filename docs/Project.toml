@@ -1,0 +1,13 @@
+[deps]
+BondUpdateGalerkin = "1e716c53-f7fe-4870-a059-040ee0ffff16"
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+LurCGT = "4f3ab192-95b7-495a-a0ca-04b4b33dd828"
+Telum = "206e1281-4cfe-4f93-80c6-84968ba7c8d5"
+
+[sources]
+BondUpdateGalerkin = {path = ".."}
+LurCGT = {url = "https://github.com/lurlurlurrrrr/LurCGT.jl", rev = "1375987561c3393cf7b45e66a129ecb6a4fae1d7"}
+Telum = {path = "../deps/Telum"}
+
+[compat]
+Documenter = "1"

@@ -1,25 +1,97 @@
 # BondUpdateGalerkin
 
-A Basis Update Galerkin scheme that is developed in such a way that contains Randomised Controlled Bond Expansion, General P order integration scheme
-and parallelization of full K/L/S solves.
+Rank-adaptive basis-update-and-Galerkin (BUG) time integration of tensor trains, with randomised
+controlled bond expansion and order-p integration, for quantum many-body matrix product states and
+quantics tensor trains of PDE fields, on one shared engine.
 
-**Status:** package skeleton. Code is being migrated from the BUG-Julia research repository following [docs/dev/implementation_plan.md](docs/dev/implementation_plan.md), which also contains the target layout (Section 2) and the file-by-file move map (Section 8).
+**Scope.** Real- and imaginary-time evolution of MPS under MPOs (U(1), Z2, SU(2) or no symmetry),
+Lindblad dynamics (density operators or quantum-jump trajectories), and linear and nonlinear PDEs
+on quantics grids (Heston, Gross-Pitaevskii). TDVP and CBE-DMRG are included as baselines.
 
-## Layout
+## Install
 
-| Module | Contents |
+Internal: access to this repository is required. Julia 1.11 or later.
+
+```bash
+git clone https://github.com/madhavmen/BondUpdateGalerkin.git
+cd BondUpdateGalerkin
+julia --project -e 'using Pkg; Pkg.instantiate()'
+```
+
+`Telum` is vendored in `deps/Telum` (our fork, MIT licence); `LurCGT` is fetched from GitHub at a
+pinned commit. Both are resolved by `Project.toml`'s `[sources]`.
+
+## Quick start: a spin chain
+
+```julia
+using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
+
+set_symmetry!(:U1)
+hamiltonian = xxz_mpo(20; J = 1.0, delta = 0.0)        # the XX chain
+psi = neel_state(20)
+for _ = 1:20
+    info = cbe_bug_step!(psi, hamiltonian, ComplexF64(-im * 0.05); order = 2)
+    @assert budget_status(info.ledger) === :met
+end
+magnetisation(psi)
+```
+
+## Quick start: a PDE on a quantics grid
+
+```julia
+using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QTTS
+
+set_symmetry!(:none)
+grid = qtt_grid(5, 5; x = (-1.0, 1.0), y = (0.0, 0.5), periodic_x = false, periodic_y = false)
+params = HestonParams(0.03, 0.01, 2.0, 0.09, 0.4, -0.7)  # r, q, kappa, theta, sigma, rho
+psi = qtt_mps(qtt_separable(grid, x -> exp(0.5x), v -> exp(-v)))
+for _ = 1:10
+    cbe_bug_step!(psi, heston_mpo(grid, params), ComplexF64(0.02); hermitian = false)
+end
+```
+
+## Choosing a method
+
+| Task | Call |
 |---|---|
-| `src/BUG/` | The engine: `Core/`, `Randomised/`, `TimeEvolution/`, `ITE/` |
-| `src/QMB/` | Quantum many-body: `Tooling/`, `Models/ClosedSystem/`, `Models/OpenSystem/{MPDO,MCWF}/`, `Observables/` |
-| `src/QTTS/` | Quantics tensor trains: `Tooling/`, `Elementwise/`, `Models/{Heston,GrossPitaevskii}/` |
-| `src/Baselines/` | TDVP, DMRG and exact references for comparison |
+| real or imaginary time on an MPS | `cbe_bug_step!(psi, mpo, tau; order)`, `tau = -im*dt` or `-dbeta` |
+| normalised imaginary time with step control | `ite_step!`, `ite_evolve!` |
+| Lindblad dynamics | `lindblad_mpo` + `cbe_bug_step!(...; hermitian = false)` (MPDO), or `jump_trajectory` (MCWF) |
+| linear PDE on a quantics grid | the model's MPO + `cbe_bug_step!(...; hermitian = false)` |
+| nonlinear PDE | `qtt_bug_step!(psi, GPFlow(model), t, h; order)` |
+| comparison | `Baselines`: `tdvp2_step!`, `tdvp_cbe1s_step!`, `dmrg_cbe1s!`, `qtt_tdvp2_step!` |
+
+## Diagnostics
+
+Every `cbe_bug_step!` returns an info record whose `ledger` holds the step's verdict
+(`budget_status`: `:met` or `:budget_unmet`, with `budget_diagnostic` naming the unmet test), the
+discarded weight, the expanded and final ranks, and the Krylov work. `qtt_bug_step!` returns the
+stage-solver statistics, the frame audits and timings.
+
+## Documentation and examples
+
+- `docs/`: the manual (`julia --project=docs docs/make.jl` after instantiating `docs/`).
+- `examples/`: runnable scripts, each checked against an exact or independent reference.
+- `docs/dev/`: the implementation plan, interface contracts and the migration map from BUG-Julia.
 
 ## Tests
 
-```julia
-julia --project=. -e 'using Pkg; Pkg.test()'
+```bash
+julia --project -e 'using Pkg; Pkg.test()'
 ```
+
+## Reproducibility
+
+The randomised expansion draws from a seeded stream owned by the step (`rng` keyword); the same
+inputs give the same result on the same machine. Regression fixtures frozen from BUG-Julia
+`b155550` are in `test/fixtures/b155550` with the versions they were made with.
 
 ## Contributing
 
 Contributor and coding-agent rules are in [AGENTS.md](AGENTS.md) and [agents/](agents/).
+
+## Limitations
+
+- QTT states carry no symmetry.
+- The Gross-Pitaevskii vortex-shedding study is a research benchmark, not a validated example.
+- Run times of the examples and benchmarks are not yet recorded.

@@ -5,3 +5,5 @@
 
 # The root Manifest policy is decided in WP0/WP9; until then it stays local.
 /Manifest.toml
+docs/build/
+docs/Manifest.toml
