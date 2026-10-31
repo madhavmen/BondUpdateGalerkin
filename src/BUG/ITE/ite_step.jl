@@ -174,9 +174,14 @@ function ite_step!(
         parallel = parallel,
         rng = rng,
     )
-    restore!() = (for i = 1:length(psi)
-        psi[i] = saved[i]
-    end; psi.center = saved.center)
+    # Put the saved tensors and gauge centre back after a rejected attempt.
+    function restore!()
+        for i = 1:length(psi)
+            psi[i] = saved[i]
+        end
+        psi.center = saved.center
+        return nothing
+    end
 
     attempts = Any[]
     a = _ite_attempt!(psi, mpo, Float64(dbeta); akw..., closure_checks = false, kwargs...)
