@@ -31,6 +31,7 @@ end
     run_testfile("BUG/ITE/test_schedules.jl")
     run_testfile("BUG/TimeEvolution/test_parallel_half_sweeps.jl")
     run_testfile("BUG/TimeEvolution/test_fixtures_b155550.jl")
+    run_testfile("BUG/TimeEvolution/test_stage_solvers.jl")
     # QMB
     run_testfile("QMB/Observables/test_local_observables.jl")
     run_testfile("QMB/ClosedSystem/test_xx.jl")
@@ -45,6 +46,8 @@ end
     run_testfile("QTTS/Tooling/test_operators.jl")
     run_testfile("QTTS/Tooling/test_derivatives.jl")
     run_testfile("QTTS/Models/Heston/test_heston.jl")
+    run_testfile("QTTS/Models/GrossPitaevskii/test_gross_pitaevskii.jl")
+    run_testfile("QTTS/Tooling/test_nonlinear_step.jl")
 
     run_testfile("quality/import_boundaries.jl")
     run_testfile("quality/aqua.jl")

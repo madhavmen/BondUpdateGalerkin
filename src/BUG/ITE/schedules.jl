@@ -36,3 +36,17 @@ end
 
 "The grid points `0, b_1, ..., beta_max` a step list reaches (`cumsum` with the origin)."
 beta_grid(steps::AbstractVector{<:Real}) = vcat(0.0, cumsum(Float64.(steps)))
+
+# From BUG-Julia@b155550:src/RSVDCBEBondUpdate/qtt/qtt_imaginary.jl (the ground-state schedules).
+
+"`n` steps of `h` (the uniform policy)."
+uniform_schedule(h::Real, n::Int) = fill(Float64(h), n)
+
+"""
+    geometric_schedule(h0, q, hmax, n) -> Vector{Float64}
+
+`dtau_k = min(hmax, h0 q^k)`, `k = 0..n-1`: the logarithmically expanding policy. `q` is an
+experiment-level schedule parameter, not an accuracy tolerance.
+"""
+geometric_schedule(h0::Real, q::Real, hmax::Real, n::Int) =
+    [min(Float64(hmax), h0 * q^k) for k = 0:(n-1)]

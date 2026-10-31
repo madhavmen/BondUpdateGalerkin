@@ -14,18 +14,30 @@ Include directories:
 module QTTS
 
 using ..BUG
+# the frame and flow interface of the BUG stage solver, extended for dense QTT cores
+import ..BUG: frame_state, frame_project, frame_operator_matrix, frame_conj
+import ..BUG: flow_op, flow_jac_ops, flow_normalized
+using ..BUG: KLFrames, _replace_state!
 using LinearAlgebra
 using Telum
 
 include("Tooling/grid.jl")
 include("Tooling/cores.jl")
 include("Elementwise/pointwise.jl")
+include("Elementwise/products.jl")
 include("Tooling/mpo_algebra.jl")
 include("Tooling/state_adapter.jl")
+include("Tooling/sampling.jl")
 include("Tooling/derivatives.jl")
 include("Tooling/operator_assembly.jl")
+include("Tooling/frames.jl")
+include("Tooling/nonlinear_step.jl")
 include("Models/Heston/heston.jl")
 include("Models/Heston/heston_reference.jl")
+include("Models/GrossPitaevskii/paddle.jl")
+include("Models/GrossPitaevskii/gross_pitaevskii.jl")
+include("Models/GrossPitaevskii/observables.jl")
+include("Models/GrossPitaevskii/ground_state.jl")
 
 # grids and bit orderings (Tooling/grid.jl)
 export QTTOrdering, QTTGrid, qtt_grid, qtt_length, qtt_sites, qtt_bits, qtt_point
@@ -45,5 +57,16 @@ export QTT_BCS, qtt_shift, qtt_derivative, qtt_diag_1d, qtt_d, qtt_coord_diag, q
 # Heston (Models/Heston)
 export HestonParams, feller, heston_op, heston_mpo
 export heston_riccati, heston_affine_field, heston_call, heston_mass, heston_moment
+# elementwise products and the compressed operator application (Elementwise/products.jl)
+export tt_hadamard, tt_product, tt_density, op_zipup
+# normalisation and sampling (Tooling/sampling.jl)
+export qtt_normalize!, qtt_sample
+# dense root-space frames and the nonlinear step (Tooling/frames.jl, nonlinear_step.jl)
+export QTTFrames, frame_miss, frame_defect, qtt_bug_step!
+# Gross-Pitaevskii (Models/GrossPitaevskii)
+export GPPaddle, paddle_state, gp_paddle_op, GPModel, gp_model, gp_linear_op, gp_density
+export gp_hamiltonian_op, GPHamiltonianCache, qtt_state_tag, gp_hamiltonian
+export gp_vector_field, gp_jvp, gp_density_audit, GPFlow
+export gp_parts, gp_observables, vortex_count, gp_ground_state!, gp_gradient_descent!
 
 end

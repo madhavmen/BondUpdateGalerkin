@@ -630,3 +630,15 @@ the omitted block `missing` and whether the step fell back to the standard augme
 """
 parallel_kls_step!(psi::SymMPS, mpo, tau; schedule::Symbol = :concurrent, kwargs...) =
     cbe_bug_step!(psi, mpo, tau; kwargs..., kls = schedule)
+
+# From BUG-Julia@b155550:src/RSVDCBEBondUpdate/qtt/qtt_flows.jl.
+"Overwrite `psi` with the tensors and gauge centre of `src` (same length)."
+function _replace_state!(psi::SymMPS, src::SymMPS)
+    length(psi) == length(src) ||
+        throw(DimensionMismatch("_replace_state!: $(length(psi)) vs $(length(src)) sites"))
+    for i = 1:length(psi)
+        psi[i] = src[i]
+    end
+    psi.center = src.center
+    return psi
+end

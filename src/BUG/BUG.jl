@@ -51,6 +51,8 @@ include("Randomised/cbe.jl")
 include("Randomised/dd_cbe.jl")
 include("TimeEvolution/bug_step.jl")
 include("TimeEvolution/midpoint.jl")
+include("TimeEvolution/flows.jl")
+include("TimeEvolution/stage_solvers.jl")
 include("ITE/schedules.jl")
 include("ITE/ite_step.jl")
 
@@ -101,6 +103,11 @@ export apply_two_site_sketch!, apply_one_site!, apply_root!
 export BondExpansionInfo, expand_bond!, lanczos_lowest
 # real and imaginary time (TimeEvolution, ITE)
 export cbe_bug_step!, cbe_bug_midpoint_step!
-export ite_step!, ite_evolve!, log_panel_steps, uniform_beta_steps, beta_grid
+export ite_step!, ite_evolve!, log_panel_steps, uniform_beta_steps, beta_grid, uniform_schedule
+export geometric_schedule
+# flows and implicit stage equations in the root space (TimeEvolution)
+export QTTFlow, LinearFlow, flow_op, flow_jac_ops, flow_normalized, frozen_flow
+export frame_state, frame_project, frame_operator_matrix, frame_conj
+export reduced_field, reduced_jacobian, RK_TABLEAUX, qtt_root_for_order, rk_stage_solve
 
 end
