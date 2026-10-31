@@ -3,7 +3,7 @@
 All notable changes, numerical behaviour first. Versions follow semantic versioning; before 1.0 a
 minor version may change the public API.
 
-## 0.1.0 (unreleased)
+## 0.1.0 (31 October 2026)
 
 The package as moved from BUG-Julia `b155550` (tag `pre-bondupdategalerkin`), restructured into
 `BUG`, `QMB`, `QTTS` and `Baselines` by `docs/dev/implementation_plan.md`. Every legacy file's
