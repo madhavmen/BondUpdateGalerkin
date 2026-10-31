@@ -31,7 +31,16 @@ for order in (:grouped, :interleaved)
     wall = 0.0
     for step = 1:round(Int, FINAL_TIME / STEP)
         t = (step - 1) * STEP
-        wall += @elapsed qtt_bug_step!(psi, GPFlow(model), t, STEP; order = 2, maxdim = MAXDIM, tol_basis = 1e-8, tol_trunc = 1e-10)
+        wall += @elapsed qtt_bug_step!(
+            psi,
+            GPFlow(model),
+            t,
+            STEP;
+            order = 2,
+            maxdim = MAXDIM,
+            tol_basis = 1e-8,
+            tol_trunc = 1e-10,
+        )
         reference = gp_dense_rk4(model, reference, t, t + STEP; dt = 1e-4)
         values = grid_vec(qtt_cores(psi), g)
         push!(

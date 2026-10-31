@@ -34,19 +34,39 @@ descent_state = start()
 descent = gp_gradient_descent!(descent_state, model; eta = 0.05, maxiter = 2000, tol = 1e-8)
 descent_final = gp_observables(model, qtt_cores(descent_state), 0.0)
 
-println("imaginary-time BUG: E = $(bug_final.E), mu = $(bug_final.mu), R_mu = $(bug_final.R_mu), rejected steps $(count(entry -> !entry.accepted, ledger))")
-println("gradient descent:   E = $(descent_final.E), mu = $(descent_final.mu), R_mu = $(descent_final.R_mu), iterations $(length(descent) - 1)")
+println(
+    "imaginary-time BUG: E = $(bug_final.E), mu = $(bug_final.mu), R_mu = $(bug_final.R_mu), rejected steps $(count(entry -> !entry.accepted, ledger))",
+)
+println(
+    "gradient descent:   E = $(descent_final.E), mu = $(descent_final.mu), R_mu = $(descent_final.R_mu), iterations $(length(descent) - 1)",
+)
 
 if OUTPUT_DIR !== nothing
     mkpath(OUTPUT_DIR)
     lines = ["tau,h,accepted,reason,E,mu,R_mu,chi"]
     for entry in ledger
-        push!(lines, join(string.((entry.tau, entry.h, entry.accepted, entry.reason, entry.E, entry.mu, entry.R_mu, entry.chi)), ","))
+        push!(
+            lines,
+            join(
+                string.((
+                    entry.tau,
+                    entry.h,
+                    entry.accepted,
+                    entry.reason,
+                    entry.E,
+                    entry.mu,
+                    entry.R_mu,
+                    entry.chi,
+                )),
+                ",",
+            ),
+        )
     end
     write(joinpath(OUTPUT_DIR, "gp_ground_state.csv"), join(lines, "\n") * "\n")
 end
 
-monotone = all(k -> accepted[k+1].E <= accepted[k].E + 1e-10 * abs(accepted[k].E), 1:(length(accepted)-1))
+monotone =
+    all(k -> accepted[k+1].E <= accepted[k].E + 1e-10 * abs(accepted[k].E), 1:(length(accepted)-1))
 agree = abs(bug_final.E - descent_final.E) < 1e-6 * abs(descent_final.E)
 passed = monotone && agree
 println(passed ? "GP-OK" : "GP-FAILED")

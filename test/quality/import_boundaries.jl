@@ -154,7 +154,8 @@ const BUG_STEPS = Set([
     rm(control)
     for file in julia_files(joinpath(SRC_DIR, "Baselines"))
         offending = intersect(used_symbols(file), BUG_STEPS)
-        isempty(offending) || @error "a baseline runs a BUG step" file offending = sort!(collect(offending))
+        isempty(offending) ||
+            @error "a baseline runs a BUG step" file offending = sort!(collect(offending))
         @test isempty(offending)
     end
 end

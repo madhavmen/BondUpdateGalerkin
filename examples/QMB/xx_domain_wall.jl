@@ -54,8 +54,16 @@ for step = 1:round(Int, FINAL_TIME / TIME_STEP)
     t = step * TIME_STEP
     exact = exact_left_magnetisation(CHAIN_LENGTH, t)
     bug, tdvp = left_magnetisation(copy(bug_state)), left_magnetisation(copy(tdvp_state))
-    row = (t, exact, bug, tdvp, abs(bug - exact), abs(tdvp - exact),
-           maximum(bond_dims(bug_state)), maximum(bond_dims(tdvp_state)))
+    row = (
+        t,
+        exact,
+        bug,
+        tdvp,
+        abs(bug - exact),
+        abs(tdvp - exact),
+        maximum(bond_dims(bug_state)),
+        maximum(bond_dims(tdvp_state)),
+    )
     global worst_error = max(worst_error, row[5], row[6])
     push!(lines, join(string.(row), ","))
     println("t = $t  BUG error $(row[5]) (bond $(row[7]))  TDVP2 error $(row[6]) (bond $(row[8]))")

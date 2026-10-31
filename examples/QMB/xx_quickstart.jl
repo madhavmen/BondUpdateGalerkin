@@ -72,7 +72,13 @@ if OUTPUT_DIR !== nothing
     exact = exact_sz(CHAIN_LENGTH, FINAL_TIME)
     lines = ["site,exact,default,loose,capped"]
     for site = 1:CHAIN_LENGTH
-        values = (site, exact[site], default_run.profile[site], loose_run.profile[site], capped_run.profile[site])
+        values = (
+            site,
+            exact[site],
+            default_run.profile[site],
+            loose_run.profile[site],
+            capped_run.profile[site],
+        )
         push!(lines, join(string.(values), ","))
     end
     write(joinpath(OUTPUT_DIR, "xx_quickstart.csv"), join(lines, "\n") * "\n")

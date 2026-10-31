@@ -26,13 +26,28 @@ clear_fusion_cache!()
 
 "Evolve the affine initial field on 2^bits x 2^bits points; return grid, solution and exact field."
 function solve_on_grid(bits)
-    g = qtt_grid(bits, bits; x = (-1.0, 1.0), y = (0.0, 0.5), periodic_x = false, periodic_y = false)
+    g = qtt_grid(
+        bits,
+        bits;
+        x = (-1.0, 1.0),
+        y = (0.0, 0.5),
+        periodic_x = false,
+        periodic_y = false,
+    )
     initial = qtt_separable(g, x -> exp(SLOPE_X * x), v -> exp(SLOPE_V * v))
     generator = heston_mpo(g, PARAMS)
     psi = qtt_mps(initial)
     for _ = 1:STEPS
         # real dt: u(tau + dt) = exp(dt A_H) u; A_H is not Hermitian
-        cbe_bug_step!(psi, generator, ComplexF64(TAU / STEPS); hermitian = false, tol_basis = 1e-9, tol_trunc = 1e-12, maxdim = 64)
+        cbe_bug_step!(
+            psi,
+            generator,
+            ComplexF64(TAU / STEPS);
+            hermitian = false,
+            tol_basis = 1e-9,
+            tol_trunc = 1e-12,
+            maxdim = 64,
+        )
     end
     B, C = heston_riccati(PARAMS, SLOPE_X, SLOPE_V, TAU)
     exact = qtt_values(heston_affine_field(g, SLOPE_X, B, C), g)

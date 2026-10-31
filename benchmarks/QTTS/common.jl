@@ -11,7 +11,8 @@ set_symmetry!(:none)
 env_string(key, default) = get(ENV, key, default)
 env_int(key, default) = parse(Int, env_string(key, string(default)))
 env_float(key, default) = parse(Float64, env_string(key, string(default)))
-env_list(key, default) = [parse(Float64, item) for item in split(env_string(key, default), ",") if !isempty(item)]
+env_list(key, default) =
+    [parse(Float64, item) for item in split(env_string(key, default), ",") if !isempty(item)]
 
 "Write NamedTuple rows to a CSV (header from the union of keys, in first-seen order)."
 function write_csv(path, rows)
@@ -35,7 +36,8 @@ and boundary condition `bc` (`:periodic`, `:dirichlet0`, `:onesided`), row by ro
 """
 function sparse_stencil(N::Int, h::Real, order::Int, bc::Symbol)
     rows, cols, weights = Int[], Int[], Float64[]
-    central = order == 1 ? ((1, 1 / (2h)), (-1, -1 / (2h))) : ((1, 1 / h^2), (0, -2 / h^2), (-1, 1 / h^2))
+    central =
+        order == 1 ? ((1, 1 / (2h)), (-1, -1 / (2h))) : ((1, 1 / h^2), (0, -2 / h^2), (-1, 1 / h^2))
     onesided_first = order == 1 ? [-3, 4, -1] ./ (2h) : [2, -5, 4, -1] ./ h^2
     for row = 1:N
         if bc === :onesided && (row == 1 || row == N)
@@ -70,13 +72,15 @@ grid_kron(g, Ax, Ay) = kron(
 function gp_sparse_linear(m::GPModel, t::Real)
     g = m.grid
     xs, ys = qtt_coords(g)
-    second_x, second_y = sparse_stencil(2^g.nx, g.dx, 2, :periodic), sparse_stencil(2^g.ny, g.dy, 2, :periodic)
+    second_x, second_y =
+        sparse_stencil(2^g.nx, g.dx, 2, :periodic), sparse_stencil(2^g.ny, g.dy, 2, :periodic)
     X, Y = spdiagm(0 => collect(xs)), spdiagm(0 => collect(ys))
     H =
         -0.5 * (grid_kron(g, second_x, nothing) + grid_kron(g, nothing, second_y)) +
         (m.omega^2 / 2) * (grid_kron(g, X^2, nothing) + grid_kron(g, nothing, Y^2)) - m.mu * I
     if m.Omega != 0
-        first_x, first_y = sparse_stencil(2^g.nx, g.dx, 1, :periodic), sparse_stencil(2^g.ny, g.dy, 1, :periodic)
+        first_x, first_y =
+            sparse_stencil(2^g.nx, g.dx, 1, :periodic), sparse_stencil(2^g.ny, g.dy, 1, :periodic)
         H = H + 1im * m.Omega * (grid_kron(g, X, first_y) - grid_kron(g, first_x, Y))
     end
     if m.paddle !== nothing
@@ -99,7 +103,10 @@ function gp_dense_rk4(m::GPModel, v0::AbstractVector, t0::Real, T::Real; dt::Rea
     h = (T - t0) / nsteps
     static_operator = m.paddle === nothing ? gp_sparse_linear(m, t0) : nothing
     field(t, w) =
-        pref .* ((static_operator === nothing ? gp_sparse_linear(m, t) : static_operator) * w .+ m.g .* abs2.(w) .* w)
+        pref .* (
+            (static_operator === nothing ? gp_sparse_linear(m, t) : static_operator) * w .+
+            m.g .* abs2.(w) .* w
+        )
     t = Float64(t0)
     for _ = 1:nsteps
         k1 = field(t, v)
