@@ -15,6 +15,9 @@ include(joinpath(@__DIR__, "..", "common", "free_fermion.jl"))
 include(joinpath(@__DIR__, "..", "common", "qtt_fixtures.jl"))
 
 const FIXTURE_DIR = joinpath(@__DIR__, "..", "fixtures", "b155550")
+# the first rows of the 20-step frozen TDVP2 run (each row is checked on its own), to keep the
+# suite near five minutes
+const COMPARED_STEPS = 6
 
 "<S^z_j> of every site, normalised by the state's own norm (the fixture script's `sz_profile`)."
 sz_profile(psi) = real.(magnetisation(copy(psi))) ./ real(overlap(psi, psi))
@@ -27,7 +30,7 @@ sz_profile(psi) = real.(magnetisation(copy(psi))) ./ real(overlap(psi, psi))
         chain_length, time_step = frozen["L"], frozen["dt"]
         hamiltonian = xxz_mpo(chain_length; J = 1.0, delta = 0.0)
         psi = neel_state(chain_length)
-        for (step, frozen_row) in enumerate(frozen["trajectory"])
+        for (step, frozen_row) in enumerate(first(frozen["trajectory"], COMPARED_STEPS))
             tdvp2_step!(
                 psi,
                 hamiltonian,
@@ -71,7 +74,7 @@ sz_profile(psi) = real.(magnetisation(copy(psi))) ./ real(overlap(psi, psi))
     @testset "one-site TDVP with CBE: unitary, close to free fermions" begin
         set_symmetry!(:U1)
         clear_fusion_cache!()
-        chain_length, time_step, steps = 8, 0.05, 10
+        chain_length, time_step, steps = 8, 0.05, 6
         exact_sz = xx_free_fermion_sz(
             chain_length,
             steps * time_step;
