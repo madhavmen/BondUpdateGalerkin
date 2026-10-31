@@ -48,6 +48,8 @@ end
     run_testfile("QTTS/Models/Heston/test_heston.jl")
     run_testfile("QTTS/Models/GrossPitaevskii/test_gross_pitaevskii.jl")
     run_testfile("QTTS/Tooling/test_nonlinear_step.jl")
+    # Baselines
+    run_testfile("Baselines/test_baselines.jl")
 
     run_testfile("quality/import_boundaries.jl")
     run_testfile("quality/aqua.jl")
