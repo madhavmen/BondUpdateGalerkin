@@ -37,7 +37,14 @@ function evolve(; settings...)
     psi = neel_state(CHAIN_LENGTH)
     statuses = Symbol[]
     for _ = 1:round(Int, FINAL_TIME / TIME_STEP)
-        info = cbe_bug_step!(psi, hamiltonian, ComplexF64(-im * TIME_STEP); settings...)
+        # parallel half-sweeps, as in the legacy quickstart the error claims below were made for
+        info = cbe_bug_step!(
+            psi,
+            hamiltonian,
+            ComplexF64(-im * TIME_STEP);
+            parallel = true,
+            settings...,
+        )
         push!(statuses, budget_status(info.ledger))
     end
     profile = sz_profile(psi)
@@ -72,7 +79,13 @@ if OUTPUT_DIR !== nothing
     exact = exact_sz(CHAIN_LENGTH, FINAL_TIME)
     lines = ["site,exact,default,loose,capped"]
     for site = 1:CHAIN_LENGTH
-        values = (site, exact[site], default_run.profile[site], loose_run.profile[site], capped_run.profile[site])
+        values = (
+            site,
+            exact[site],
+            default_run.profile[site],
+            loose_run.profile[site],
+            capped_run.profile[site],
+        )
         push!(lines, join(string.(values), ","))
     end
     write(joinpath(OUTPUT_DIR, "xx_quickstart.csv"), join(lines, "\n") * "\n")
