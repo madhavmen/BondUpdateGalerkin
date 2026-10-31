@@ -37,7 +37,8 @@ The GitHub Actions workflows were removed on 31 October 2026 (USER decision, aft
 | JuliaFormatter on `src`, `test`, `docs`, `examples`, `benchmarks` | hook `julia-format` | every commit |
 | Unit, physics, PDE and frozen-fixture tests | hook `julia-tests` (`Pkg.test()`, about five minutes) | every commit |
 | Module boundaries; `BUG/Core` layering; no BUG step in `Baselines` | `test/quality/import_boundaries.jl`, in `julia-tests` | every commit |
-| Aqua: undefined exports, ambiguities, compat entries, piracy | `test/quality/aqua.jl`, in `julia-tests` | every commit |
+| Aqua: undefined exports, ambiguities (in process), compat entries, piracy | `test/quality/aqua.jl`, in `julia-tests` | every commit |
+| Aqua in full: also stale dependencies and persistent tasks (fresh processes) | `test/quality/aqua.jl` via `julia-aqua-full` | manual, before a pull request |
 | Every example checks its own answer | hook `julia-examples` (`examples/run_all.jl`) | on demand, before a pull request |
 | Manual builds, doctests pass | hook `julia-docs` | on demand, before a pull request (missing docstrings and cross-references warn) |
 | Maintained benchmarks at small sizes | commands in `benchmarks/README.md` | on demand (last run: Actions run 41183449175, 31 October 2026, all four CSVs) |

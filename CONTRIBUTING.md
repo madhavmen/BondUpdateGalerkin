@@ -11,7 +11,7 @@ architecture and dependency directions are in [agents/architecture.md](agents/ar
    analytic, free-fermion, manufactured or a frozen fixture).
 3. Add or update a test for every behaviour change, beside the code it tests (`test/` mirrors `src/`).
 4. Commit through the pre-commit hooks (below): every commit is formatted and passes the test
-   suite. Before a pull request, also run the examples and the docs build.
+   suite. Before a pull request, also run the full Aqua checks, the examples and the docs build.
 5. Open a pull request with the template filled in, listing the checks you ran.
 6. Record numerical-behaviour and API changes in [CHANGELOG.md](CHANGELOG.md).
 
@@ -29,7 +29,8 @@ julia --project -e 'using Pkg; Pkg.instantiate()'
 | Hook | When | Runs |
 |---|---|---|
 | `julia-format` | every commit with staged `.jl` files | JuliaFormatter (`.JuliaFormatter.toml`, margin 100) on the staged files; if it reformats, review and `git add` again |
-| `julia-tests` | every commit with staged `.jl` or `.toml` files | `Pkg.test()`: unit, physics, PDE and frozen-fixture tests, module boundaries, Aqua (about five minutes) |
+| `julia-tests` | every commit with staged `.jl` or `.toml` files | `Pkg.test()`: unit, physics, PDE and frozen-fixture tests, module boundaries, Aqua without its process-based checks (about five minutes) |
+| `julia-aqua-full` | `pre-commit run --hook-stage manual julia-aqua-full` | all of Aqua, including `ambiguities`, `stale_deps` and `persistent_tasks`, which each start a fresh Julia process |
 | `julia-examples` | `pre-commit run --hook-stage manual julia-examples` | every example at small sizes (`examples/run_all.jl`) |
 | `julia-docs` | `pre-commit run --hook-stage manual julia-docs` | the manual, doctests included |
 

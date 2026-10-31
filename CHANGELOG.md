@@ -18,8 +18,9 @@ minor version may change the public API.
   Heston steps are compiled into the package image, so a new process no longer recompiles them.
   The test suite was almost all compilation (28 min warm on the cluster). New dependency:
   PrecompileTools.
-- Aqua's `persistent_tasks` check is off: it rebuilt the package image, workload included, on
-  every test run.
+- Aqua's three process-based checks (`ambiguities`, `stale_deps`, `persistent_tasks`, about 8 min
+  together) moved out of the commit suite into the manual hook `julia-aqua-full`
+  (`Pkg.test(test_args = ["aqua-full"])`); the commit suite checks ambiguities in process.
 
 ## 0.1.0 (31 October 2026)
 

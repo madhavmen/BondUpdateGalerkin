@@ -1,12 +1,27 @@
 # Package hygiene: undefined exports, ambiguities, compat entries, type piracy (plan Section 7).
 #
-# `persistent_tasks` is off: it precompiles the package again in a scratch environment, workload
-# included, which cost 463 s of a 26 min suite on the cluster (17632492) on every run, warm or
-# cold. What it guards, precompilation left waiting on a running task, still shows: `Pkg.test`
-# precompiles the package first, and Julia reports a precompile that does not finish.
+# Aqua runs `ambiguities`, `stale_deps` and `persistent_tasks` each in a fresh Julia process, which
+# cost 152 s, 160 s and ~140 s of a ~20 min suite on the cluster (17634349, 17632492). On every
+# commit the ambiguity check therefore runs here, in this process, through the same
+# `Test.detect_ambiguities` call Aqua makes; the three process-based checks run in full with
+# `Pkg.test(test_args = ["aqua-full"])`, the manual pre-commit hook `julia-aqua-full`.
 using Test, Aqua
 using BondUpdateGalerkin
 
+const FULL_AQUA = "aqua-full" in ARGS
+
 @testset "Aqua" begin
-    Aqua.test_all(BondUpdateGalerkin; persistent_tasks = false)
+    if FULL_AQUA
+        Aqua.test_all(BondUpdateGalerkin)
+    else
+        Aqua.test_all(
+            BondUpdateGalerkin;
+            ambiguities = false,
+            stale_deps = false,
+            persistent_tasks = false,
+        )
+        @testset "method ambiguities (in process)" begin
+            @test isempty(Test.detect_ambiguities(BondUpdateGalerkin; recursive = true))
+        end
+    end
 end

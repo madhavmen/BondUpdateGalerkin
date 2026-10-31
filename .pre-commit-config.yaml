@@ -4,6 +4,7 @@
 #   julia -e 'using Pkg; Pkg.add(name = "JuliaFormatter", version = "1")'
 #   julia --project -e 'using Pkg; Pkg.instantiate()'
 # The slower checks run on demand:
+#   pre-commit run --hook-stage manual julia-aqua-full
 #   pre-commit run --hook-stage manual julia-examples
 #   pre-commit run --hook-stage manual julia-docs
 repos:
@@ -24,6 +25,16 @@ repos:
         entry: julia --startup-file=no --project=. -e 'using Pkg; Pkg.test()'
         files: \.(jl|toml)$
         pass_filenames: false
+
+      # The full Aqua checks, including the three that each start a fresh Julia process
+      # (ambiguities, stale_deps, persistent_tasks: about 8 min); the commit suite runs the rest.
+      - id: julia-aqua-full
+        name: Aqua, full
+        language: system
+        entry: julia --startup-file=no --project=. -e 'using Pkg; Pkg.test(test_args = ["aqua-full"])'
+        pass_filenames: false
+        always_run: true
+        stages: [manual]
 
       # Every example at small sizes; each checks its own answer.
       - id: julia-examples

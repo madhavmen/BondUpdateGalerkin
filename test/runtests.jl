@@ -12,6 +12,15 @@ function run_testfile(path)
     return nothing
 end
 
+# `Pkg.test(test_args = ["aqua-full"])` runs only the full Aqua checks (the manual pre-commit hook
+# `julia-aqua-full`); see quality/aqua.jl.
+if "aqua-full" in ARGS
+    @testset "BondUpdateGalerkin full Aqua" begin
+        run_testfile("quality/aqua.jl")
+    end
+    exit()     # reached only when it passed: a failing outermost testset throws first
+end
+
 @testset "BondUpdateGalerkin" begin
     @testset "package loads" begin
         for name in (:BUG, :QMB, :QTTS, :Baselines)
