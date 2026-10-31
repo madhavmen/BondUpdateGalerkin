@@ -37,6 +37,12 @@ julia --project -e 'using Pkg; Pkg.instantiate()'
 `pre-commit run --all-files` checks the whole tree. `test/runtests.jl` prints each test file's wall
 time (`TESTFILE-TIME`); keep the suite near five minutes.
 
+The hooks test the Julia you have installed; the package supports 1.11 and later. To test a second
+Julia version on the same machine, give it its own LurCGT cache: LurCGT stores Clebsch-Gordan
+tables in `~/.LurCGT_sqlite` with `Serialization`, and an older Julia cannot read what a newer one
+wrote ("Cannot read stream serialized with a newer version of Julia"). For example
+`LURCGT_LOCALDB_DIR=/tmp/lurcgt111/local LURCGT_GLOBALDB_DIR=/tmp/lurcgt111/global julia +1.11 ...`.
+
 ## Commands
 
 ```bash
