@@ -38,8 +38,19 @@ paddle = GPPaddle(10.0, -BOX / 4, 1.5, BOX / 3 / 1.5, 2.0, 1.0, BOX / 6, 0.0, 0.
 model = gp_model(g; gnl = 1.0, gamma = 0.1, mu = 1.0, omega = 0.0, paddle = paddle)
 # start: the uniform condensate n = mu / g, relaxed in imaginary time around the resting paddle
 psi_start = qtt_mps(qtt_separable(g, x -> 1.0 + 0im, y -> 1.0 + 0im))
-resting_paddle = GPPaddle(paddle.height, paddle.x_start, 0.0, 1e9, 0.0, paddle.width_x, paddle.width_y, paddle.y_c, paddle.smooth)
-relaxation_model = gp_model(g; gnl = 1.0, gamma = 0.0, mu = 1.0, omega = 0.0, paddle = resting_paddle)
+resting_paddle = GPPaddle(
+    paddle.height,
+    paddle.x_start,
+    0.0,
+    1e9,
+    0.0,
+    paddle.width_x,
+    paddle.width_y,
+    paddle.y_c,
+    paddle.smooth,
+)
+relaxation_model =
+    gp_model(g; gnl = 1.0, gamma = 0.0, mu = 1.0, omega = 0.0, paddle = resting_paddle)
 start_norm = qtt_l2norm(psi_start, g)^2
 relaxation_time = env_float("VS_RELAX", 2.0)
 relaxation_time > 0 && gp_ground_state!(
@@ -59,7 +70,8 @@ reference = Dict{Float64,Vector{ComplexF64}}()
 reference_state = grid_vec(start_cores, g)
 reference_time = 0.0
 reference_seconds = @elapsed for snapshot in snapshot_times
-    global reference_state = gp_dense_rk4(model, reference_state, reference_time, snapshot; dt = reference_dt)
+    global reference_state =
+        gp_dense_rk4(model, reference_state, reference_time, snapshot; dt = reference_dt)
     global reference_time = snapshot
     reference[snapshot] = copy(reference_state)
 end
@@ -95,7 +107,8 @@ function observe!(rows, arm, h, t, psi, wall, extra = (;))
                 ref_vortices_plus = reference_plus,
                 ref_vortices_minus = reference_minus,
                 err_state = norm(values - reference_values) / norm(reference_values),
-                err_density = norm(abs2.(values) - abs2.(reference_values)) / norm(abs2.(reference_values)),
+                err_density = norm(abs2.(values) - abs2.(reference_values)) /
+                              norm(abs2.(reference_values)),
                 chi_max = observed.chi,
                 chi_profile = join(bond_dims(psi), ";"),
                 wall = wall,
@@ -114,21 +127,52 @@ for order in ORDERS, h in STEP_SIZES
         (
             Symbol("bug$order"),
             h,
-            (psi, t, step) ->
-                qtt_bug_step!(psi, GPFlow(model), t, step; order = order, maxdim = MAXDIM, tol_basis = 1e-6, tol_trunc = 1e-8),
+            (psi, t, step) -> qtt_bug_step!(
+                psi,
+                GPFlow(model),
+                t,
+                step;
+                order = order,
+                maxdim = MAXDIM,
+                tol_basis = 1e-6,
+                tol_trunc = 1e-8,
+            ),
         ),
     )
 end
 for h in STEP_SIZES
-    push!(arms, (:tdvp2_lagged, h, (psi, t, step) -> qtt_tdvp2_step!(psi, GPFlow(model), t, step; maxdim = MAXDIM, tol_trunc = 1e-8)))
-    push!(arms, (:split, h, (psi, t, step) -> qtt_split_tdvp_step!(psi, model, t, step; maxdim = MAXDIM, tol_trunc = 1e-8)))
+    push!(
+        arms,
+        (
+            :tdvp2_lagged,
+            h,
+            (psi, t, step) ->
+                qtt_tdvp2_step!(psi, GPFlow(model), t, step; maxdim = MAXDIM, tol_trunc = 1e-8),
+        ),
+    )
+    push!(
+        arms,
+        (
+            :split,
+            h,
+            (psi, t, step) ->
+                qtt_split_tdvp_step!(psi, model, t, step; maxdim = MAXDIM, tol_trunc = 1e-8),
+        ),
+    )
     env_int("VS_CONSISTENT", 0) == 1 && push!(
         arms,
         (
             :tdvp2_consistent,
             h,
-            (psi, t, step) ->
-                qtt_tdvp2_step!(psi, GPFlow(model), t, step; density = :consistent, maxdim = MAXDIM, tol_trunc = 1e-8),
+            (psi, t, step) -> qtt_tdvp2_step!(
+                psi,
+                GPFlow(model),
+                t,
+                step;
+                density = :consistent,
+                maxdim = MAXDIM,
+                tol_trunc = 1e-8,
+            ),
         ),
     )
 end
@@ -156,7 +200,15 @@ for (arm, h, step!) in arms
             steps_taken += 1
         end
         failed && break
-        observe!(rows, arm, h, snapshot, psi, wall, (steps = steps_taken, A_max = backward_amplification))
+        observe!(
+            rows,
+            arm,
+            h,
+            snapshot,
+            psi,
+            wall,
+            (steps = steps_taken, A_max = backward_amplification),
+        )
     end
     write_csv(joinpath(OUTPUT_DIR, "shedding.csv"), rows)
 end

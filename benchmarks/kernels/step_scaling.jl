@@ -22,8 +22,18 @@ const TIME_STEP, TOL_TRUNC, REPEATS = 0.05, 1e-8, 5
 const TAU = ComplexF64(-im * TIME_STEP)
 
 const METHODS = (
-    "bug_order2" => (psi, hamiltonian, chi) -> cbe_bug_step!(psi, hamiltonian, TAU; order = 2, maxdim = chi, tol_trunc = TOL_TRUNC),
-    "tdvp2" => (psi, hamiltonian, chi) -> tdvp2_step!(psi, hamiltonian, TAU; maxdim = chi, weight_tol = TOL_TRUNC),
+    "bug_order2" =>
+        (psi, hamiltonian, chi) -> cbe_bug_step!(
+            psi,
+            hamiltonian,
+            TAU;
+            order = 2,
+            maxdim = chi,
+            tol_trunc = TOL_TRUNC,
+        ),
+    "tdvp2" =>
+        (psi, hamiltonian, chi) ->
+            tdvp2_step!(psi, hamiltonian, TAU; maxdim = chi, weight_tol = TOL_TRUNC),
 )
 
 "A Neel state evolved by TDVP2 until its largest bond reaches `chi` (at most 200 steps)."
@@ -54,7 +64,15 @@ for (name, step!) in METHODS
             repeat == 1 && (bytes = stats.bytes)
         end
         median_seconds = sort(seconds)[cld(REPEATS, 2)]
-        fields = (name, CHAIN_LENGTH, chi, maximum(bond_dims(start)), round(median_seconds; digits = 4), bytes, Threads.nthreads())
+        fields = (
+            name,
+            CHAIN_LENGTH,
+            chi,
+            maximum(bond_dims(start)),
+            round(median_seconds; digits = 4),
+            bytes,
+            Threads.nthreads(),
+        )
         push!(lines, join(string.(fields), ","))
         println(lines[end])
     end

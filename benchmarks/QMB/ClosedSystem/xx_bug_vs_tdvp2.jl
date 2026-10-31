@@ -57,7 +57,8 @@ function run_method(step!, chain_length, steps)
         step!(psi, hamiltonian)
     end
     seconds = (time_ns() - start) / 1e9
-    exact = xx_free_fermion_sz(chain_length, steps * TIME_STEP; J = 1.0, occupied = 1:2:chain_length)
+    exact =
+        xx_free_fermion_sz(chain_length, steps * TIME_STEP; J = 1.0, occupied = 1:2:chain_length)
     return (
         error = maximum(abs.(sz_profile(psi) .- exact)),
         max_bond = maximum(bond_dims(psi)),
@@ -73,8 +74,17 @@ for (name, step!) in METHODS
     results = [run_method(step!, CHAIN_LENGTH, STEPS) for _ = 1:REPEATS]
     median_seconds = sort([r.seconds for r in results])[cld(REPEATS, 2)]
     last_result = results[end]
-    fields = (name, CHAIN_LENGTH, STEPS, TIME_STEP, MAXDIM, TOL_TRUNC, last_result.error,
-              last_result.max_bond, round(median_seconds; digits = 3))
+    fields = (
+        name,
+        CHAIN_LENGTH,
+        STEPS,
+        TIME_STEP,
+        MAXDIM,
+        TOL_TRUNC,
+        last_result.error,
+        last_result.max_bond,
+        round(median_seconds; digits = 3),
+    )
     line = join(string.(fields), ",")
     push!(rows, line)
     println(line)
