@@ -40,5 +40,7 @@ Versioning: `0.1.0` is tagged on `main` once the migration pull requests are mer
 | Manual builds, doctests pass | CI `Docs` | yes (missing docstrings and cross-references warn) |
 | Maintained benchmarks at small sizes, CSVs kept | `Benchmarks` workflow, weekly and on demand | no (timings on shared runners are noisy) |
 
+**Gate check (31 October 2026).** Draft pull request #11 (`qa/broken-gate`, deleted after the check) put two deliberate defects on top of PR 12: the central first-derivative stencil with its sign flipped, and one mis-indented line, both in `src/QTTS/Tooling/derivatives.jl`. CI run 41158309943 rejected it: `Format` failed with exactly the indentation line in its patch, and `Tests` failed on both Julia versions in `test_derivatives.jl` (1D stencils, 2D derivatives, one-sided convergence) and `test_heston.jl` (generator vs dense). A first attempt used spacing inside a tuple, `( :periodic,:dirichlet0,   :onesided )`, which JuliaFormatter's default style leaves as it is; such a line is not a format violation and cannot test the gate.
+
 JET is not configured: its supported Julia versions trail the ones this package tests, and plan Section 7 asks for it only where supported.
 
