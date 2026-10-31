@@ -1,11 +1,13 @@
 using Test
 using BondUpdateGalerkin
 
-# Each file runs in its own module, so helpers of one file cannot leak into another.
+# Each file runs in its own module, so helpers of one file cannot leak into another. Its wall time
+# (compilation included) is printed, so the suite's cost per file shows in every CI log.
 function run_testfile(path)
     m = Module(Symbol(basename(path)))
     Core.eval(m, :(include(p) = Base.include($m, p)))
-    Base.include(m, joinpath(@__DIR__, path))
+    seconds = @elapsed Base.include(m, joinpath(@__DIR__, path))
+    println("TESTFILE-TIME $(round(seconds; digits = 1)) s  $path")
     return nothing
 end
 
