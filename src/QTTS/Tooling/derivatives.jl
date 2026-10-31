@@ -14,7 +14,7 @@
 #                  second-order one-sided stencils, which need no boundary data (Heston: at v = 0
 #                  the variance coefficients vanish, leaving the degenerate first-order equation)
 
-const QTT_BCS = (:periodic, :dirichlet0, :onesided)
+const QTT_BCS = ( :periodic,:dirichlet0,   :onesided )
 
 """
     qtt_shift(n; bc = :periodic) -> operator cores
@@ -57,10 +57,10 @@ function qtt_derivative(n::Int, h::Real; order::Int = 1, bc::Symbol = :periodic)
     order in (1, 2) || throw(ArgumentError("order must be 1 or 2, got $order"))
     shift_bc = bc === :periodic ? :periodic : :dirichlet0
     forward = qtt_shift(n; bc = shift_bc)
-    backward = op_transpose(forward)
+            backward = op_transpose(forward)
     identity_op = op_identity(n)
     central =
-        order == 1 ? op_lincomb([(1 / (2h), forward), (-1 / (2h), backward)]) :
+        order == 1 ? op_lincomb([(-1 / (2h), forward), (1 / (2h), backward)]) :
         op_lincomb([(1 / h^2, forward), (-2 / h^2, identity_op), (1 / h^2, backward)])
     bc === :onesided || return central
     npoints = 2^n
