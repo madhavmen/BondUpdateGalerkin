@@ -13,9 +13,13 @@ minor version may change the public API.
 - The test suite is cut to about five minutes: the frozen-trajectory regressions compare their
   first steps (each frozen row is still checked on its own), and each test file's wall time is
   printed.
-- The precompile workload is back (PrecompileTools, plan Section 8): the BUG step, TDVP2 and
-  one-site TDVP-CBE in `:U1` and `:none` are compiled into the package image, so a new process no
-  longer recompiles them. New dependency: PrecompileTools.
+- The precompile workload is back (PrecompileTools, plan Section 8): the BUG steps (orders 1-2,
+  midpoint, imaginary time), MPO products, the baselines, the Z2 Ising states and the QTT GP and
+  Heston steps are compiled into the package image, so a new process no longer recompiles them.
+  The test suite was almost all compilation (28 min warm on the cluster). New dependency:
+  PrecompileTools.
+- Aqua's `persistent_tasks` check is off: it rebuilt the package image, workload included, on
+  every test run.
 
 ## 0.1.0 (31 October 2026)
 
