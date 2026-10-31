@@ -23,3 +23,18 @@ The no-symmetry SVD fix matters for this repository specifically: QTT states run
 - [ ] No secrets, private cluster paths or generated output in the history.
 - [ ] `CHANGELOG.md` and `CONTRIBUTING.md` present.
 - [ ] One dry run by a colleague unfamiliar with the code (plan WP9).
+
+## Quality gates (WP8, PR 12)
+
+| Gate | Where | Blocks a merge |
+|---|---|---|
+| JuliaFormatter on `src`, `test`, `docs`, `examples`, `benchmarks` | CI `Format` (the patch is kept as an artifact) | yes |
+| Unit, physics, PDE and frozen-fixture tests on Julia 1.11 and the current release | CI `Tests` | yes |
+| Module boundaries; `BUG/Core` layering; no BUG step in `Baselines` | `test/quality/import_boundaries.jl` | yes |
+| Aqua: undefined exports, ambiguities, compat entries, piracy | `test/quality/aqua.jl` | yes |
+| Every example checks its own answer | CI `Examples` | yes |
+| Manual builds, doctests pass | CI `Docs` | yes (missing docstrings and cross-references warn) |
+| Maintained benchmarks at small sizes, CSVs kept | `Benchmarks` workflow, weekly and on demand | no (timings on shared runners are noisy) |
+
+JET is not configured: its supported Julia versions trail the ones this package tests, and plan Section 7 asks for it only where supported.
+
