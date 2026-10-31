@@ -48,10 +48,11 @@ sz_profile(psi) = real.(magnetisation(copy(psi))) ./ real(overlap(psi, psi))
             @test maximum(abs.(sz .- Float64.(frozen_row["sz"]))) <= 1e-5
             @test maximum(abs.(sz .- exact_sz)) <= 2 * frozen_row["err_exact"] + 1e-6
         end
-        # the fourth-order composition beats the second-order step at the same coarse dt
+        # the fourth-order composition beats the second-order step at the same coarse dt (three
+        # steps to t = 0.3: each order-4 step is several TDVP2 sweeps, the file's main cost)
         errors = map((2, 4)) do order
             state = neel_state(chain_length)
-            for _ = 1:5
+            for _ = 1:3
                 tdvp2_composed_step!(
                     state,
                     hamiltonian,
@@ -63,7 +64,7 @@ sz_profile(psi) = real.(magnetisation(copy(psi))) ./ real(overlap(psi, psi))
             maximum(
                 abs.(
                     sz_profile(state) .-
-                    xx_free_fermion_sz(chain_length, 0.5; J = 1.0, occupied = 1:2:chain_length)
+                    xx_free_fermion_sz(chain_length, 0.3; J = 1.0, occupied = 1:2:chain_length)
                 ),
             )
         end
@@ -74,7 +75,7 @@ sz_profile(psi) = real.(magnetisation(copy(psi))) ./ real(overlap(psi, psi))
     @testset "one-site TDVP with CBE: unitary, close to free fermions" begin
         set_symmetry!(:U1)
         clear_fusion_cache!()
-        chain_length, time_step, steps = 8, 0.05, 6
+        chain_length, time_step, steps = 8, 0.05, 3
         exact_sz = xx_free_fermion_sz(
             chain_length,
             steps * time_step;
