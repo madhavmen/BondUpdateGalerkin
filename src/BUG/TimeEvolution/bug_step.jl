@@ -145,46 +145,29 @@ function cbe_bug_step!(
     expansion::BasisExpansion = DDQRExpansion(),
     rng::AbstractRNG = MersenneTwister(0x5EED),
 )
-    L = length(psi)
-    length(mpo) == L || throw(DimensionMismatch("MPO has $(length(mpo)) sites, state has $L"))
-    L >= 2 || throw(ArgumentError("cbe_bug_step! needs at least two sites"))
-    c = root === nothing ? _bug_root_link(L) : root
-    1 <= c <= L - 1 || throw(ArgumentError("root must be a bond in 1:$(L - 1), got $c"))
-    parallel_sym = parallel isa Symbol ? parallel : (parallel ? :half_sweeps : :serial)
-    parallel = _resolve_parallel(parallel)
-    parallel_sym === :full && (kls = something(kls, :concurrent))
-    (tol_root !== nothing && tol_expv !== nothing) &&
-        throw(ArgumentError("tol_root and tol_expv name the same tolerance; pass one"))
-    tol_root === nothing || (tol_expv = tol_root)
-
-    budget = AdaptiveBudget(
-        something(tol_basis, TOL_DEFAULTS.basis),
-        something(tol_trunc, TOL_DEFAULTS.trunc),
-        something(tol_expv, TOL_DEFAULTS.expv),
+    # Check the keywords against each other and resolve their `nothing` defaults
+    # (`bug_step_stages.jl`).
+    options = _resolve_step_options(
+        psi,
+        mpo,
+        root,
+        parallel,
+        kls;
+        tol_basis = tol_basis,
+        tol_trunc = tol_trunc,
+        tol_expv = tol_expv,
+        tol_root = tol_root,
+        order = order,
+        fold_omega = fold_omega,
+        exact = exact,
+        frame_state = frame_state,
+        closure_probe = closure_probe,
+        outside_residual = outside_residual,
+        maxdim = maxdim,
     )
-    order >= 1 || throw(ArgumentError("order must be >= 1, got $order"))
-    fold_omega = something(fold_omega, order > 1 && !exact)
-    order == 1 ||
-        frame_state === nothing ||
-        throw(
-            ArgumentError(
-                "order > 1 is a single-step method and does not combine with the midpoint predictor",
-            ),
-        )
-    closure_probe >= 0 ||
-        throw(ArgumentError("closure_probe must be a non-negative count, got $closure_probe"))
-    if kls !== nothing
-        kls in KLS_SCHEDULES ||
-            throw(ArgumentError("the K/L/S schedule must be one of $(KLS_SCHEDULES), got $kls"))
-        frame_state === nothing && !outside_residual || throw(
-            ArgumentError(
-                "the parallel K/L/S step does not combine with the midpoint predictor or the " *
-                "outside-residual re-enrichment",
-            ),
-        )
-    end
-    # Plan §1 signature: `maxdim = 128`.
-    maxdim = something(maxdim, 128)
+    L, c, budget = options.site_count, options.root_link, options.budget
+    parallel_sym, parallel, kls = options.parallel_mode, options.run_parallel, options.kls
+    fold_omega, maxdim = options.fold_omega, options.maxdim
 
     # The per-bond, per-test allowances `tol_basis` buys, and the `|tau|/||psi||` scale every
     # residual is measured in. The norm comes from the centre tensor, which carries the whole norm
@@ -306,67 +289,36 @@ function cbe_bug_step!(
     AL = _overlap_left(psi, W, c)                                     # (b_L, link_{c+1})
     S0 = to_concrete!(contract(AL, (2,), AR, (1,)))                   # (b_L, b_R)
 
-    # ── GENERAL ORDER (plan: krylov_closure_cbe_bug_realtime_L16_plan.md) ───────────────────
-    # The half-sweeps closed the frontier j = 0 (psi itself). For `order > 1` the frontiers
-    # j = 1..order-1 of the ROOT generator are closed against the GLOBAL operator, growing `W`
-    # and `Z` in place; the root environments and `S0` come back rebuilt in the final frames,
-    # and the single root solve below runs in them.
+    # ── GENERAL ORDER: for `order > 1` close the root generator's frontiers j = 1..order-1,
+    # growing `W` and `Z` in place; `closure_probe` only measures them (`bug_step_stages.jl`).
     nclose = 0
-    if order > 1
-        fr = KLFrames(W, Z, c, lenv_root, renv_root, 0, nothing, nothing, Float64(eshift))
-        # Plan T4.1: the frontier sweeps expand by the same DD-QR CBE as the half-sweeps.
-        ckw = merge(
-            exkw,
-            (
-                expansion = expansion,
-                krylov_reuse = krylov_reuse,
-                recycle = rec,
-                krylov_depth = krylov_depth,
-            ),
-        )
-        cl = _krylov_closure!(
-            fr,
-            psi,
-            mpo,
-            S0,
-            tau,
-            alloc,
-            ckw;
-            order = order,
-            workcap = wcap_step,
-            nrm = _nrm,
-            parallel = parallel,
-            rng = rng,
-            ledger = ledger,
-            fold = fold_omega,
-            checks = closure_checks,
-        )
-        lenv_root, renv_root, S0 = fr.lenv, fr.renv, cl.S0
-        for i = 1:(c-1)
-            expanded[i] = leg_dim(W[i], 3)
-        end
-        for j = (c+1):(L-1)
-            expanded[j] = leg_dim(Z[j], 1)
-        end
-        nclose = cl.n_h1 + cl.n_root
-        recycle_report === nothing || rec === nothing || (recycle_report[] = rec.log)
-    elseif closure_probe > 0
-        # A copied `rng` and untouched frames: the step itself stays bit-identical.
-        pr = _measure_frontiers(
-            KLFrames(W, Z, c, lenv_root, renv_root, 0, nothing, nothing, Float64(eshift)),
-            psi,
-            mpo,
-            S0,
-            tau,
-            alloc,
-            (expansion = expansion,),
-            closure_probe;
-            nrm = _nrm,
-            parallel = parallel,
-            rng = copy(rng),
-            fold = fold_omega,
-        )
-        merge_ledger!(ledger, pr.ledger)
+    closure = _close_root_frontiers!(
+        KLFrames(W, Z, c, lenv_root, renv_root, 0, nothing, nothing, Float64(eshift)),
+        psi,
+        mpo,
+        S0,
+        tau,
+        alloc,
+        exkw,
+        expanded,
+        ledger;
+        order = order,
+        closure_probe = closure_probe,
+        closure_checks = closure_checks,
+        expansion = expansion,
+        krylov_reuse = krylov_reuse,
+        recycle = rec,
+        recycle_report = recycle_report,
+        krylov_depth = krylov_depth,
+        workcap = wcap_step,
+        norm_scale = _nrm,
+        parallel = parallel,
+        rng = rng,
+        fold = fold_omega,
+    )
+    if closure !== nothing
+        lenv_root, renv_root, S0 = closure.lenv, closure.renv, closure.root_start
+        nclose = closure.operator_applications
     end
     # PLAN §5 `state_projection_error`: how much of `psi` the frames miss. On the ordinary step the
     # frames contain `psi`, so this is roundoff; on the midpoint's second stage it is the genuine
@@ -405,96 +357,49 @@ function cbe_bug_step!(
     nroot = Ref(0)
     rootrep = Ref{Any}(nothing)
     _t0root = time_ns()
-    solve_root(S) = kls_stage(x -> (nroot[] += 1; apply_zero_site(H0, x)), S, rootrep)
-    S1 = solve_root(S0)
+    # The root solver for any root operator; it counts every application in `nroot`.
+    solve_with(operator, S) =
+        kls_stage(x -> (nroot[] += 1; apply_zero_site(operator, x)), S, rootrep)
+    S1 = solve_with(H0, S0)
     troot[] = (time_ns() - _t0root) / 1e9
     if root_report !== nothing
-        # Rayleigh quotients in the Galerkin space: `S0` and `S1` ARE the state before the root
-        # and after it (before the compression), and `<S|H_0|S> = <psi|P H P|psi> = <psi|H|psi>`
-        # for `psi` in the frames' span, so these are exact energies, not projections of them.
-        rq(S) = (n2 = norm(S)^2;
-        n2 > 0 ? real(tensor_inner(S, apply_zero_site(H0, S))) / n2 + Float64(eshift) : NaN)
-        e_pre = rq(S0)
-        outside_of(S) = estimate_global_complement_action(
+        # Energies, the outside-Galerkin residual and its re-enrichment (`bug_step_stages.jl`).
+        report = _report_root!(
+            root_report,
             psi,
             mpo,
-            KLFrames(W, Z, c, lenv_root, renv_root, 0, nothing, nothing, Float64(eshift)),
-            S;
+            W,
+            Z,
+            c,
+            lenv_root,
+            renv_root,
+            H0,
+            S0,
+            S1,
+            solve_with;
+            tau = tau,
+            eshift = eshift,
+            alloc = alloc,
+            expansion_settings = exkw,
             expansion = expansion,
-            rng = copy(rng),
-        )
-        out = outside_residual ? outside_of(S1) : nothing
-        resid_of(o, S) = o === nothing ? NaN : abs(tau) * o.bound / max(norm(S), eps())
-        resid0 = resid_of(out, S1)
-        # ── re-enrich and re-solve on the failing residual (plan Task 1) ──
-        # The closure can meet its shares while the outside action fails: grow frames by S1's own
-        # sweep, re-solve the root until the defect fits, nothing is added, or the ceiling binds.
-        npass, nadded = 0, 0
-        if outside_residual
-            while !(resid_of(out, S1) <= budget.basis) && npass < _closure_maxpass(order)
-                fr = KLFrames(W, Z, c, lenv_root, renv_root, 0, nothing, nothing, Float64(eshift))
-                npass += 1
-                r = _frontier_sweep!(
-                    fr,
-                    psi,
-                    mpo,
-                    KrylovFrontier(S1, 0, fr.gen),
-                    tau,
-                    alloc,
-                    merge(exkw, (expansion = expansion, krylov_depth = krylov_depth));
-                    enrich = true,
-                    workcap = wcap_step,
-                    nrm = _nrm,
-                    parallel = parallel,
-                    rng = rng,
-                    pass = npass,
-                    fold = fold_omega,
-                )
-                merge_ledger!(ledger, r.ledger)
-                r.added == 0 && break
-                nadded += r.added
-                lenv_root, renv_root = fr.lenv, fr.renv
-                S0 = _project_root(psi, fr)
-                H0 = shift_h(zero_site_h(mpo, c, lenv_root, renv_root, W[c], Z[c]), eshift)
-                _t0root = time_ns()
-                S1 = solve_root(S0)
-                troot[] += (time_ns() - _t0root) / 1e9
-                out = outside_of(S1)
-                r.capped && break
-            end
-            if nadded > 0
-                for i = 1:(c-1)
-                    expanded[i] = leg_dim(W[i], 3)
-                end
-                for j = (c+1):(L-1)
-                    expanded[j] = leg_dim(Z[j], 1)
-                end
-                ledger.r_aug = max(maximum(expanded; init = 0), leg_dim(Z[c], 1))
-            end
-        end
-        e_root = rq(S1)
-        n1 = max(norm(S1), eps())
-        root_report[] = (
+            krylov_depth = krylov_depth,
+            expanded = expanded,
+            ledger = ledger,
+            root_seconds = troot,
+            outside_residual = outside_residual,
+            tol_basis = budget.basis,
+            order = order,
+            workcap = wcap_step,
+            norm_scale = _nrm,
+            parallel = parallel,
+            rng = rng,
+            fold = fold_omega,
             root_method = root_method,
-            eshift = Float64(eshift),
-            e_pre = e_pre,
-            e_root = e_root,
-            solve = rootrep[],
-            n_root = nroot[],
-            # the defect before the re-enrichment above, its passes and directions
-            resid_initial = resid0,
-            outside_passes = npass,
-            outside_added = nadded,
-            outside = out === nothing ? NaN : out.bound / n1,
-            outside_left = out === nothing ? NaN : out.left / n1,
-            outside_right = out === nothing ? NaN : out.right / n1,
-            # per bond (left frames 1..c, right frames c..L-1), scale-free like the
-            # above
-            per_left = out === nothing ? Float64[] : out.per_left ./ n1,
-            per_right = out === nothing ? Float64[] : out.per_right ./ n1,
-            # the step's outside-Galerkin defect, `|tau| ||(I-P) H psi_1|| / ||psi_1||`
-            resid = out === nothing ? NaN : abs(tau) * out.bound / n1,
+            root_solve_report = rootrep,
+            root_applications = nroot,
         )
+        S0, S1 = report.root_start, report.root_result
+        lenv_root, renv_root = report.lenv, report.renv
     end
     nkls = 0
     if klsst !== nothing
