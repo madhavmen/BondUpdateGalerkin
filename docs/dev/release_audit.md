@@ -24,7 +24,7 @@ Status on 31 October 2026 (PR 13).
 - [x] Clean clone: install, load and the QMB quick start by the README commands (`Clean install` job); `Pkg.test()`, all four examples and the docs build in the `Tests`, `Examples` and `Docs` jobs (all green on release PR #13, run 41183438599; now pre-commit hooks). Repeated without CI on `main` 4e5d954 (31 October 2026, Julia 1.12.1): a checkout with a new, empty package depot and LurCGT cache, `Pkg.instantiate()` exactly as in the README, both README Julia blocks run from the README text, then `Pkg.test()` (5741/5741, tests 6m23).
 - [x] No secrets, private cluster paths or generated output: the tree and the full history scanned for tokens, private keys, cluster host names and home or scratch paths on 31 October 2026 (none found); generated output is ignored (`.gitignore`) and examples write only to a given directory. One author in the history.
 - [x] `CHANGELOG.md` (numerical behaviour first) and `CONTRIBUTING.md` present.
-- [ ] One dry run by a colleague unfamiliar with the code (plan WP9): install from the README, run the XX and Heston examples, read their output, add a small custom problem. Needs a person; not done.
+- [x] One dry run by a colleague unfamiliar with the code (plan WP9): install from the README, run the XX and Heston examples, read their output, add a small custom problem. Done by hand by the maintainer on 1 November 2026, together with a local run of the test suite.
 
 Versioning: `0.1.0` is tagged on `main` once the migration pull requests are merged; later releases follow `CONTRIBUTING.md`.
 
