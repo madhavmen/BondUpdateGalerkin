@@ -7,6 +7,12 @@ minor version may change the public API.
 
 ### Changed
 
+- `src/BUG` is restructured for readability, with no intended numerical change: no file is over
+  600 lines (`krylov_enrichment.jl`, `Randomised/cbe.jl`, `dd_cbe.jl`, `frontier_sweeps.jl` and
+  `bug_step.jl` are split by responsibility), no single-letter variable names remain (type
+  parameters excepted), and every function carries a docstring or comment. Internal fields
+  renamed: `KLFrames.{W,Z,c}` -> `{left_frames,right_frames,root_link}`. Public names, keywords
+  and the fields of exported types are unchanged.
 - No CI: the GitHub Actions workflows are removed. Formatting and the test suite (quality checks
   included) run on every commit through pre-commit hooks (`.pre-commit-config.yaml`); the examples
   (`examples/run_all.jl`) and the docs build are manual hooks. See `CONTRIBUTING.md`.
