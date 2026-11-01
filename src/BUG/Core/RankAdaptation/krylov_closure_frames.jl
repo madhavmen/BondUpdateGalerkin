@@ -115,7 +115,8 @@ function _side_cache!(fr::KLFrames, Fm::SymMPS, mpo, side::Symbol)
         else
             for bond = (site_count-1):-1:root_link
                 chain[bond] = ch
-                bond > root_link && (ch = push_right_channels(ch, mpo, fr.right_frames[bond], bond + 1))
+                bond > root_link &&
+                    (ch = push_right_channels(ch, mpo, fr.right_frames[bond], bond + 1))
             end
         end
     end
@@ -163,9 +164,8 @@ tests.
 """
 function frames_from_state(psi::SymMPS, mpo, root_link::Int)
     site_count = length(psi)
-    1 <= root_link <= site_count - 1 || throw(
-        ArgumentError("root must be a bond in 1:$(site_count - 1), got $root_link"),
-    )
+    1 <= root_link <= site_count - 1 ||
+        throw(ArgumentError("root must be a bond in 1:$(site_count - 1), got $root_link"))
     # Left frames: the left-canonical sites, closed at the root by the SVD's left isometry.
     left_gauged = copy(psi)
     canonical!(left_gauged, root_link)
@@ -178,8 +178,7 @@ function frames_from_state(psi::SymMPS, mpo, root_link::Int)
     right_gauged = copy(psi)
     canonical!(right_gauged, root_link + 1)
     right_frames = Vector{Any}(undef, site_count - 1)
-    right_frames[root_link] =
-        to_concrete(svd(right_gauged[root_link+1], (1,); cutoff = 0.0).Vd)
+    right_frames[root_link] = to_concrete(svd(right_gauged[root_link+1], (1,); cutoff = 0.0).Vd)
     for bond = (root_link+1):(site_count-1)
         right_frames[bond] = right_gauged[bond+1]
     end
@@ -226,8 +225,7 @@ full contraction, any gauge.
 function _overlap_right(psi::SymMPS, right_frames, root_link::Int)
     AR = nothing
     for bond = (length(psi)-1):-1:root_link
-        carried =
-            AR === nothing ? psi[bond+1] : to_concrete!(contract(psi[bond+1], (3,), AR, (1,)))
+        carried = AR === nothing ? psi[bond+1] : to_concrete!(contract(psi[bond+1], (3,), AR, (1,)))
         # (link_bond, b_bond)
         AR = to_concrete!(contract(carried, (2, 3), right_frames[bond]', (2, 3)))
     end
@@ -281,8 +279,7 @@ function _projection_miss(psi::SymMPS, left_frames, right_frames, root_link::Int
     # Right side, inside the left frames: each carried site's part outside its right frame.
     AR = nothing
     for bond = (site_count-1):-1:root_link
-        carried =
-            AR === nothing ? psi[bond+1] : to_concrete!(contract(psi[bond+1], (3,), AR, (1,)))
+        carried = AR === nothing ? psi[bond+1] : to_concrete!(contract(psi[bond+1], (3,), AR, (1,)))
         outside = perp_component_right(right_frames[bond], carried)
         miss2 += norm(to_concrete!(contract(left_factor[bond], (2,), outside, (1,))))^2
         # (link_{bond+1}, b_bond)
@@ -293,12 +290,26 @@ end
 
 "`S = (W ⊗ Z)' psi`, the root coefficients of `P psi` (plan: `project_root`)."
 _project_root(psi::SymMPS, fr::KLFrames) = to_concrete!(
-    contract(_overlap_left(psi, fr.left_frames, fr.root_link), (2,), _overlap_right(psi, fr.right_frames, fr.root_link), (1,)),
+    contract(
+        _overlap_left(psi, fr.left_frames, fr.root_link),
+        (2,),
+        _overlap_right(psi, fr.right_frames, fr.root_link),
+        (1,),
+    ),
 )
 
 "`B = P H P` at the root, from the frames' cached environments (plan: `root_generator`)."
-_root_generator(mpo, fr::KLFrames) =
-    shift_h(zero_site_h(mpo, fr.root_link, fr.lenv, fr.renv, fr.left_frames[fr.root_link], fr.right_frames[fr.root_link]), fr.eshift)
+_root_generator(mpo, fr::KLFrames) = shift_h(
+    zero_site_h(
+        mpo,
+        fr.root_link,
+        fr.lenv,
+        fr.renv,
+        fr.left_frames[fr.root_link],
+        fr.right_frames[fr.root_link],
+    ),
+    fr.eshift,
+)
 
 # `factor * coefficients`: broadcast for the dense test vectors, a concrete tensor otherwise.
 _scaled(factor::Number, coefficients::Array{<:Number}) = factor .* coefficients

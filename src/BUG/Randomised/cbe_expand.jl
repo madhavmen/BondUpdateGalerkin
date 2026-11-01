@@ -197,13 +197,8 @@ function cbe_expand(
                         joint = tail_rank
                         resj =
                             tail_rank > 0 ?
-                            svd(
-                                UMU,
-                                (1,);
-                                Nkeep = tail_rank,
-                                cutoff = stol_fnl,
-                                get_lists = true,
-                            ) : nothing
+                            svd(UMU, (1,); Nkeep = tail_rank, cutoff = stol_fnl, get_lists = true) :
+                            nothing
                         err_fnl = resj === nothing ? 0.0 : _trunc_weight(resj)
                     end
                     # THE TAIL RANK MUST BIND BOTH SIDES, not just the joint rotation. The
@@ -224,9 +219,7 @@ function cbe_expand(
     UL =
         oneL ?
         _one_sided_tail(
-            to_concrete(
-                contract(QL', (1, 2), skl(full_local_basis(right_frame, :right)), (1, 2)),
-            ),
+            to_concrete(contract(QL', (1, 2), skl(full_local_basis(right_frame, :right)), (1, 2))),
             alloc,
             dex_l,
             stol_fnl,
@@ -235,9 +228,7 @@ function cbe_expand(
     UR =
         oneR ?
         _one_sided_tail(
-            to_concrete(
-                contract(QR', (2, 3), skr(full_local_basis(left_frame, :left)), (2, 3)),
-            ),
+            to_concrete(contract(QR', (2, 3), skr(full_local_basis(left_frame, :left)), (2, 3))),
             alloc,
             dex_r,
             stol_fnl,
@@ -283,18 +274,12 @@ function cbe_expand(
     U_ex, n_l = if TLC === nothing
         (left_frame, 0)
     else
-        (
-            to_concrete(oplus([left_frame, to_concrete(setitag(TLC, 3, ltag))], (3,))),
-            leg_dim(TLC, 3),
-        )
+        (to_concrete(oplus([left_frame, to_concrete(setitag(TLC, 3, ltag))], (3,))), leg_dim(TLC, 3))
     end
     V_ex, n_r = if TRC === nothing
         (right_frame, 0)
     else
-        (
-            to_concrete(oplus([right_frame, to_concrete(setitag(TRC, 1, rtag))], (1,))),
-            leg_dim(TRC, 1),
-        )
+        (to_concrete(oplus([right_frame, to_concrete(setitag(TRC, 1, rtag))], (1,))), leg_dim(TRC, 1))
     end
 
     # No rotation of the expanded frame: an expansion is lossless, and rank grows only where the

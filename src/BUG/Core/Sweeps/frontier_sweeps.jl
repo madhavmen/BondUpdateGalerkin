@@ -104,15 +104,15 @@ function _frontier_left(
     for bond = 1:root_link
         enrich || (lch = chain[bond])
         old_frame = _check_frame(
-            Pm === nothing ? fr.left_frames[bond] : to_concrete!(contract(Pm, (2,), fr.left_frames[bond], (1,))),
+            Pm === nothing ? fr.left_frames[bond] :
+            to_concrete!(contract(Pm, (2,), fr.left_frames[bond], (1,))),
             :left,
             "frontier U0 = Pm W[$bond] (gen $(fr.gen))",
         )
         if pre === nothing
             # the frontier's site tensor in the grown left gauge, then its two-site action
             site_core =
-                carry === nothing ? Fm[bond] :
-                to_concrete!(contract(carry, (2,), Fm[bond], (1,)))
+                carry === nothing ? Fm[bond] : to_concrete!(contract(carry, (2,), Fm[bond], (1,)))
             two_site_frame = _frame_onto_left(old_frame, site_core, Fm[bond+1])
             rch = right_channels(rstack, bond + 2)
             skl, skr, leak[bond], two_site_calls = _bond_action(
@@ -180,8 +180,7 @@ function _frontier_left(
             old_frame
         end
         Wn[bond] =
-            enrich ? _polar_frame(to_concrete(setitag(Wi, 3, _tagWg(bond, gen))), :left) :
-            old_frame
+            enrich ? _polar_frame(to_concrete(setitag(Wi, 3, _tagWg(bond, gen))), :left) : old_frame
         _check_frame(Wn[bond], :left, "frontier Wn[$bond] (gen $gen)")
         nadd = leg_dim(Wn[bond], 3) - leg_dim(old_frame, 3)
         nsec = _new_sectors(old_frame, Wn[bond], 3)
@@ -283,7 +282,8 @@ function _frontier_right(
     for bond = (site_count-1):-1:root_link
         enrich || (rch = chain[bond])
         old_frame = _check_frame(
-            Pm === nothing ? fr.right_frames[bond] : to_concrete!(contract(fr.right_frames[bond], (3,), Pm, (1,))),
+            Pm === nothing ? fr.right_frames[bond] :
+            to_concrete!(contract(fr.right_frames[bond], (3,), Pm, (1,))),
             :right,
             "frontier V0 = Z[$bond] Pm (gen $(fr.gen))",
         )

@@ -243,8 +243,7 @@ function _left_close(environment, site_tensor, operator, site::Int)
         error("_left_close: rank-$nE environment with a rank-$nAO operator at site $site")
     length(tmp.inds) == 3 ||
         error("_left_close: an operator channel is still open at the right boundary")
-    scalar =
-        to_concrete!(contract(tmp, (1, 2, 3), _bra_right_boundary(site_tensor), (2, 3, 1)))
+    scalar = to_concrete!(contract(tmp, (1, 2, 3), _bra_right_boundary(site_tensor), (2, 3, 1)))
     return ComplexF64(scalar[])
 end
 
@@ -285,8 +284,7 @@ function left_env_stack(psi::SymMPS, chain::XXZChain; upto::Int = length(psi) - 
     site_count = length(psi)
     length(chain) == site_count ||
         throw(DimensionMismatch("chain has $(length(chain)) sites, state has $site_count"))
-    0 <= upto <= site_count ||
-        throw(ArgumentError("upto must be in 0:$site_count, got $upto"))
+    0 <= upto <= site_count || throw(ArgumentError("upto must be in 0:$site_count, got $upto"))
 
     # The stack IS the carry, recorded link by link -- one implementation of the
     # recursion, so a sweep that carries and a sweep that prebuilds can never drift.
@@ -385,8 +383,7 @@ function _right_close(environment, site_tensor, operator, site::Int)
         error("_right_close: rank-$nE environment with a rank-$nAO operator at site $site")
     length(tmp.inds) == 3 ||
         error("_right_close: an operator channel is still open at the left boundary")
-    scalar =
-        to_concrete!(contract(tmp, (1, 2, 3), _bra_left_boundary(site_tensor), (1, 2, 3)))
+    scalar = to_concrete!(contract(tmp, (1, 2, 3), _bra_left_boundary(site_tensor), (1, 2, 3)))
     return ComplexF64(scalar[])
 end
 

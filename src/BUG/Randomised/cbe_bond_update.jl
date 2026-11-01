@@ -21,14 +21,7 @@ sketch_h_left(
     lenv::LeftEnvStack,
     renv::RightEnvStack,
     Om,
-) = sketch_h_left(
-    frame,
-    chain,
-    bond,
-    left_channels(lenv, bond),
-    right_channels(renv, bond + 2),
-    Om,
-)
+) = sketch_h_left(frame, chain, bond, left_channels(lenv, bond), right_channels(renv, bond + 2), Om)
 
 # `sketch_h_right` at bond `(bond, bond+1)`, reading its two channel sets out of full stacks.
 sketch_h_right(

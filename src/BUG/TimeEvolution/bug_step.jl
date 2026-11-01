@@ -439,10 +439,9 @@ function cbe_bug_step!(
     if klsst !== nothing
         # The four-block core in the grown root frames, or -- when the omitted new-new block is
         # above `tol_basis` -- the standard augmented root solve in them (plan T6.3).
-        solve_aug(generator, start_vector) = (
-            op = RootOp(shift_h(generator, eshift), root_link, kroot);
-            kls_stage(input -> (nroot[] += 1; apply_zero_site(op, input)), start_vector, rootrep)
-        )
+        solve_aug(generator, start_vector) =
+            (op = RootOp(shift_h(generator, eshift), root_link, kroot);
+            kls_stage(input -> (nroot[] += 1; apply_zero_site(op, input)), start_vector, rootrep))
         kr = _kls_finish(
             klsst,
             mpo,
@@ -458,7 +457,8 @@ function cbe_bug_step!(
             nrm = _nrm,
             tol_missing = budget.basis,
         )
-        left_frames[root_link], right_frames[root_link], root_result = kr.left_root, kr.right_root, kr.root_result
+        left_frames[root_link], right_frames[root_link], root_result =
+            kr.left_root, kr.right_root, kr.root_result
         merge_counters!(kroot, kr.kc)
         nkls = kr.account.n_K + kr.account.n_L
         ledger.kls = kr.account
@@ -467,8 +467,7 @@ function cbe_bug_step!(
             leg_dim(left_frames[root_link], 3),
             leg_dim(right_frames[root_link], 1),
         )
-        max(kr.account.err_K, kr.account.err_L) > budget.expv * (1 + 1e-8) &&
-            _unmet!(ledger, :expv)
+        max(kr.account.err_K, kr.account.err_L) > budget.expv * (1 + 1e-8) && _unmet!(ledger, :expv)
     end
     if rootrep[] !== nothing
         ledger.expv_err = rootrep[].err

@@ -25,14 +25,15 @@ function _trim_by_weight(directions, projected_action, side::Symbol, keep_count:
     keep_count <= 0 && return nothing
     left = side === :left
     leg_dim(directions, left ? 3 : 1) <= keep_count && return directions
-    left_vectors = svd(
-        projected_action,
-        left ? (1,) : (3,),
-        _TAG_W,
-        _TAG_WR;
-        cutoff = 0.0,
-        Nkeep = keep_count,
-    ).U                                                           # (g, k)
+    left_vectors =
+        svd(
+            projected_action,
+            left ? (1,) : (3,),
+            _TAG_W,
+            _TAG_WR;
+            cutoff = 0.0,
+            Nkeep = keep_count,
+        ).U                                                           # (g, k)
     return left ? to_concrete(contract(directions, (3,), left_vectors, (1,))) :  # (link, site, k)
            to_concrete(contract(left_vectors, (1,), directions, (1,)))         # (k, site, link)
 end
@@ -292,7 +293,5 @@ function _resolve_parallel(parallel)
     parallel isa Bool && return parallel
     parallel === :serial && return false
     parallel in (:half_sweeps, :full) && return true
-    throw(
-        ArgumentError("parallel must be :serial, :half_sweeps, :full or a Bool, got $parallel"),
-    )
+    throw(ArgumentError("parallel must be :serial, :half_sweeps, :full or a Bool, got $parallel"))
 end

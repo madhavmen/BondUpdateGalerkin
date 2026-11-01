@@ -31,10 +31,7 @@ Base.getindex(mpo::MPO, site::Int) = mpo.W[site]
 "Virtual (MPO bond) dimension on each link `0 … length(mpo)`."
 mpo_virtual_dims(mpo::MPO) = vcat(
     [sum(block_dim for (_, block_dim) in mpo[1].spaces[1]; init = 0)],
-    [
-        sum(block_dim for (_, block_dim) in mpo[site].spaces[4]; init = 0) for
-        site = 1:length(mpo)
-    ],
+    [sum(block_dim for (_, block_dim) in mpo[site].spaces[4]; init = 0) for site = 1:length(mpo)],
 )
 
 # Each automaton row is written out literally and `oplus` direct-sums them, inferring the zero
@@ -96,11 +93,9 @@ end
 dimension 2. `Iloc` is the local identity of the site space the operators act on.
 """
 function onsite_mpo(site_count::Int, ops::AbstractVector; Iloc)
-    site_count >= 2 ||
-        throw(ArgumentError("onsite_mpo needs at least two sites, got $site_count"))
-    length(ops) == site_count || throw(
-        DimensionMismatch("onsite_mpo got $(length(ops)) operators for $site_count sites"),
-    )
+    site_count >= 2 || throw(ArgumentError("onsite_mpo needs at least two sites, got $site_count"))
+    length(ops) == site_count ||
+        throw(DimensionMismatch("onsite_mpo got $(length(ops)) operators for $site_count sites"))
     all(length(operator.inds) == 2 for operator in ops) ||
         throw(ArgumentError("onsite_mpo: every operator must be rank 2 (charge-neutral)"))
     Ws = Any[]
@@ -139,9 +134,7 @@ function mpo_product(mpo::MPO, psi::SymMPS)
         product_tensor = to_concrete!(contract(mpo[site], (2,), psi[site], (2,)))
         product_tensor = if site == 1
             # the trimmed `w_l` of site 1 is the dim-1 vacuum; the state's own boundary stays
-            to_concrete(
-                permutedims(to_concrete(deleteSingleton(product_tensor, 1)), (3, 1, 4, 2)),
-            )
+            to_concrete(permutedims(to_concrete(deleteSingleton(product_tensor, 1)), (3, 1, 4, 2)))
         else
             # undo the previous site's fusion on (ℓ_l, w_l): F'F is the identity on the pair,
             # with F = fusion
@@ -242,11 +235,9 @@ complex, as `b` may be.
 """
 function mpo_sum(first_mpo::MPO, second_mpo::MPO; a::Number = 1.0, b::Number = 1.0)
     site_count = length(first_mpo)
-    length(second_mpo) == site_count || throw(
-        DimensionMismatch("mpo_sum: $site_count sites against $(length(second_mpo))"),
-    )
-    site_count >= 2 ||
-        throw(ArgumentError("mpo_sum needs at least two sites, got $site_count"))
+    length(second_mpo) == site_count ||
+        throw(DimensionMismatch("mpo_sum: $site_count sites against $(length(second_mpo))"))
+    site_count >= 2 || throw(ArgumentError("mpo_sum needs at least two sites, got $site_count"))
     Ws = Any[]
     for site = 1:site_count
         sa, sb = site == 1 ? (a, b) : (1, 1)

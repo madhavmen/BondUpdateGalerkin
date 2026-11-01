@@ -66,14 +66,12 @@ Newton-like solve whose residual is still exact.
 """
 function reduced_jacobian(fl::QTTFlow, fr, root_matrix, field_time, mu)
     # `linear_jacobian` acts on the direction, `conjugate_jacobian` (or `nothing`) on its conjugate
-    linear_jacobian, conjugate_jacobian =
-        flow_jac_ops(fl, frame_state(fr, root_matrix), field_time)
+    linear_jacobian, conjugate_jacobian = flow_jac_ops(fl, frame_state(fr, root_matrix), field_time)
     return function (direction_matrix)
         direction = frame_state(fr, direction_matrix)
         out = frame_project(fr, linear_jacobian, direction) .- mu .* direction_matrix
-        conjugate_jacobian === nothing || (
-            out = out .+ frame_project(fr, conjugate_jacobian, frame_conj(fr, direction))
-        )
+        conjugate_jacobian === nothing ||
+            (out = out .+ frame_project(fr, conjugate_jacobian, frame_conj(fr, direction)))
         return fl.pref .* out
     end
 end
@@ -151,11 +149,9 @@ function _gmres_real(
             # apply the earlier rotations to the new column, then rotate its subdiagonal away
             for row = 1:(column-1)
                 rotated =
-                    cosines[row] * hessenberg[row, column] +
-                    sines[row] * hessenberg[row+1, column]
+                    cosines[row] * hessenberg[row, column] + sines[row] * hessenberg[row+1, column]
                 hessenberg[row+1, column] =
-                    -sines[row] * hessenberg[row, column] +
-                    cosines[row] * hessenberg[row+1, column]
+                    -sines[row] * hessenberg[row, column] + cosines[row] * hessenberg[row+1, column]
                 hessenberg[row, column] = rotated
             end
             radius = hypot(hessenberg[column, column], hessenberg[column+1, column])
@@ -292,8 +288,8 @@ function rk_stage_solve(
         # the residual of each stage equation, Y_j - S - h sum_l A_jl G_l
         residuals = [
             stage_values[equation] .- root_start .-
-            step_size .* sum(butcher[equation, stage] .* fields[stage] for stage = 1:nstages) for
-            equation = 1:nstages
+            step_size .* sum(butcher[equation, stage] .* fields[stage] for stage = 1:nstages)
+            for equation = 1:nstages
         ]
         residual_norm =
             sqrt(sum(norm(stage_residual)^2 for stage_residual in residuals)) / start_norm
@@ -328,9 +324,9 @@ function rk_stage_solve(
                 zero(directions[stage]) for stage = 1:nstages
             ]
             return _pack([
-                directions[equation] .- step_size .* sum(
-                    butcher[equation, stage] .* actions[stage] for stage = 1:nstages
-                ) for equation = 1:nstages
+                directions[equation] .-
+                step_size .* sum(butcher[equation, stage] .* actions[stage] for stage = 1:nstages)
+                for equation = 1:nstages
             ])
         end
         # right preconditioning: solve (op o P^-1) y = -R, then dx = P^-1 y

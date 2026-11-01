@@ -159,8 +159,7 @@ function _recycle_transport(entry, side::Symbol, Pm, Fnew, overlaps, bond::Int)
         overlap_map = to_concrete!(contract(to_concrete(Fn)', (2, 3), old_with_tail, (2, 3)))
         tag = Fnew.inds[1].itags
         return map(entry.basis) do old_vector
-            moved =
-                Pm === nothing ? old_vector : to_concrete!(contract(Pm, (2,), old_vector, (1,)))
+            moved = Pm === nothing ? old_vector : to_concrete!(contract(Pm, (2,), old_vector, (1,)))
             to_concrete(setitag(to_concrete!(contract(moved, (3,), overlap_map, (2,))), 3, tag))
         end
     end
@@ -248,15 +247,8 @@ function _krylov_enrich_recycled(
         eta > alloc.krylov || return true
         room = workcap > 0 ? workcap - leg_dim(frame, fl) : typemax(Int)
         room <= 0 && return false
-        frame, nadd, fits = _extend_frame(
-            frame,
-            perp_part,
-            vector,
-            side,
-            weight,
-            alloc.krylov;
-            room = room,
-        )
+        frame, nadd, fits =
+            _extend_frame(frame, perp_part, vector, side, weight, alloc.krylov; room = room)
         added += nadd
         return fits
     end

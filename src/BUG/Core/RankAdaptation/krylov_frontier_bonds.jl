@@ -98,10 +98,8 @@ function _bond_action(
     if fold
         skl, skr = folded_sketch_closures(expansion, frame, mpo, bond, lch, rch)
         # Holdout width: a quarter of the grown side's frame width, at least 8.
-        grown_width = leg_dim(
-            side === :left ? left_isometry : right_isometry,
-            side === :left ? 3 : 1,
-        )
+        grown_width =
+            leg_dim(side === :left ? left_isometry : right_isometry, side === :left ? 3 : 1)
         sample_count = max(8, cld(grown_width, 4))
         leak = sampled_leak(expansion, frame, skl, skr, side, sample_count, rng)
         return (skl, skr, leak, 0)
@@ -197,9 +195,7 @@ function _bond_measurements(
             )
         end
         skl, skr, leak, nh2 = action_result
-        sl =
-            nsample > 0 ? sampled_leak(expansion, frame, skl, skr, side, nsample, rngs[bond]) :
-            0.0
+        sl = nsample > 0 ? sampled_leak(expansion, frame, skl, skr, side, nsample, rngs[bond]) : 0.0
         return (site_core = carry[bond], leak = leak, nh2 = nh2, sleak = sl)
     end
     tasks = Dict(bond => Threads.@spawn(one(bond)) for bond in bonds)

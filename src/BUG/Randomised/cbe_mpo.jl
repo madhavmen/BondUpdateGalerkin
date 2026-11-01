@@ -16,12 +16,15 @@ environments. ⚠ A standalone call rebuilds `H*Theta`; inside a sweep the share
 [`_sketch_closures`](@ref) is what runs."
 sketch_h_left(frame::BondFrame, mpo::MPO, bond::Int, lenv::MPOLink, renv::MPOLink, Om) = first(
     _sketch_closures(frame, () -> apply_h_two_site(frame_theta(frame), mpo, bond, lenv, renv)),
-)(Om)
+)(
+    Om,
+)
 
 "Mirror of [`sketch_h_left`](@ref) on MPO environments."
-sketch_h_right(frame::BondFrame, mpo::MPO, bond::Int, lenv::MPOLink, renv::MPOLink, Om) = last(
-    _sketch_closures(frame, () -> apply_h_two_site(frame_theta(frame), mpo, bond, lenv, renv)),
-)(Om)
+sketch_h_right(frame::BondFrame, mpo::MPO, bond::Int, lenv::MPOLink, renv::MPOLink, Om) =
+    last(_sketch_closures(frame, () -> apply_h_two_site(frame_theta(frame), mpo, bond, lenv, renv)))(
+        Om,
+    )
 
 # ── from src/RSVDCBEBondUpdate/operators/mpo_fold.jl ──
 
@@ -42,13 +45,7 @@ instead of applied to a finished `H*Theta`.
 return the DISCARDED-space component, i.e. with `P_perp` already applied -- identical to
 [`_sketch_closures`](@ref)'s output.
 """
-function _fold_sketch_closures(
-    frame::BondFrame,
-    mpo::MPO,
-    bond::Int,
-    lenv::MPOLink,
-    renv::MPOLink,
-)
+function _fold_sketch_closures(frame::BondFrame, mpo::MPO, bond::Int, lenv::MPOLink, renv::MPOLink)
     left_mpo, right_mpo = mpo[bond], mpo[bond+1]
     # ⚠ `Theta` IS SHARED, `H*Theta` IS NOT. `frame_theta` is `U0*S0*V0` -- an `O(chi^2 d^2)`
     # object the frame already implies, with no `H` in it. Rebuilding it per call would be pure
@@ -167,11 +164,7 @@ function cbe_expand(
                 "share; pass one or the other",
             ),
         )
-        return cbe_expand(
-            frame,
-            _fold_sketch_closures(frame, mpo, bond, lenv, renv)...;
-            kwargs...,
-        )
+        return cbe_expand(frame, _fold_sketch_closures(frame, mpo, bond, lenv, renv)...; kwargs...)
     end
     return cbe_expand(
         frame,
@@ -300,8 +293,7 @@ function lanczos_lowest(
         residual = apply(lanczos_vector)
         diagonal_entry = real(tensor_inner(lanczos_vector, residual))
         push!(alpha, diagonal_entry)
-        residual =
-            residual + (-diagonal_entry) * lanczos_vector + (-residual_norm) * basis[end-1]
+        residual = residual + (-diagonal_entry) * lanczos_vector + (-residual_norm) * basis[end-1]
         if reorth
             for _pass = 1:2, basis_vector in basis
                 residual = residual - tensor_inner(basis_vector, residual) * basis_vector

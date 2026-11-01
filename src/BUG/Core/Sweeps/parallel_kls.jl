@@ -38,16 +38,11 @@ function _kls_start(
         throw(ArgumentError("the K/L/S schedule must be one of $(KLS_SCHEDULES), got $schedule"))
     site_count = length(psi)
     # The frames' carries up to the root's neighbours, in any gauge (full contractions).
-    CL =
-        root_link == 1 ? nothing :
-        _overlap_left(psi, left_frames, root_link - 1)                     # (b_{c-1}, link_c)
-    DR =
-        root_link == site_count - 1 ? nothing :
-        _overlap_right(psi, right_frames, root_link + 1)                   # (link_{c+2}, b_{c+1})
+    CL = root_link == 1 ? nothing : _overlap_left(psi, left_frames, root_link - 1)                     # (b_{c-1}, link_c)
+    DR = root_link == site_count - 1 ? nothing : _overlap_right(psi, right_frames, root_link + 1)                   # (link_{c+2}, b_{c+1})
     Kc = CL === nothing ? psi[root_link] : to_concrete!(contract(CL, (2,), psi[root_link], (1,)))
     Lc =
-        DR === nothing ? psi[root_link+1] :
-        to_concrete!(contract(psi[root_link+1], (3,), DR, (1,)))
+        DR === nothing ? psi[root_link+1] : to_concrete!(contract(psi[root_link+1], (3,), DR, (1,)))
     AR = to_concrete!(contract(Lc, (2, 3), right_frames[root_link]', (2, 3)))  # (link_{c+1}, b_R)
     AL = to_concrete!(contract(left_frames[root_link]', (1, 2), Kc, (1, 2)))   # (b_L, link_{c+1})
     k_start = to_concrete!(contract(Kc, (3,), AR, (1,)))                   # (b_{c-1}, s_c, b_R)
@@ -93,19 +88,7 @@ function _kls_start(
     else
         (Threads.@spawn(solveK()), Threads.@spawn(solveL()))
     end
-    return (;
-        schedule,
-        k_start,
-        l_start,
-        HK,
-        HL,
-        k_stage,
-        l_stage = Lh,
-        rK,
-        rL,
-        kK,
-        kL,
-    )
+    return (; schedule, k_start, l_start, HK, HL, k_stage, l_stage = Lh, rK, rL, kK, kL)
 end
 
 """
@@ -250,7 +233,18 @@ function _parallel_kls(
     tol_missing::Real = Inf,
 )
     root_link = fr.root_link
-    st = _kls_start(psi, mpo, fr.left_frames, fr.right_frames, root_link, fr.lenv, fr.renv, stage, fr.eshift, schedule)
+    st = _kls_start(
+        psi,
+        mpo,
+        fr.left_frames,
+        fr.right_frames,
+        root_link,
+        fr.lenv,
+        fr.renv,
+        stage,
+        fr.eshift,
+        schedule,
+    )
     # one root solve of `core` under the zero-site operator `operator`, shifted like the frames
     root(operator, core) = stage(
         vector -> apply_zero_site(shift_h(operator, fr.eshift), vector),
@@ -258,7 +252,14 @@ function _parallel_kls(
         Ref{Any}(nothing),
     )
     Sh = root(
-        zero_site_h(mpo, root_link, fr.lenv, fr.renv, fr.left_frames[root_link], fr.right_frames[root_link]),
+        zero_site_h(
+            mpo,
+            root_link,
+            fr.lenv,
+            fr.renv,
+            fr.left_frames[root_link],
+            fr.right_frames[root_link],
+        ),
         root_start,
     )
     return _kls_finish(

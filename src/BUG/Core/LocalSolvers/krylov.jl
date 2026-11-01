@@ -86,8 +86,7 @@ re-exponentiating the matrix.
 """
 function _tridiag_eigen(alpha::Vector{Float64}, beta::Vector{Float64})
     tridiagonal =
-        isempty(beta) ? Matrix{Float64}(reshape(alpha, 1, 1)) :
-        Matrix(SymTridiagonal(alpha, beta))
+        isempty(beta) ? Matrix{Float64}(reshape(alpha, 1, 1)) : Matrix(SymTridiagonal(alpha, beta))
     return eigen(Symmetric(tridiagonal))
 end
 
@@ -315,8 +314,7 @@ function _cgs2!(hess_matrix::AbstractMatrix{ComplexF64}, column::Int, basis, vec
         for row = 1:length(basis)
             overlap_coeff = tensor_inner(basis[row], vector)
             hess_matrix[row, column] += overlap_coeff
-            corr =
-                corr === nothing ? overlap_coeff * basis[row] : corr + overlap_coeff * basis[row]
+            corr = corr === nothing ? overlap_coeff * basis[row] : corr + overlap_coeff * basis[row]
         end
         corr === nothing || (vector = to_concrete(vector - corr))
     end

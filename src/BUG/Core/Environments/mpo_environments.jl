@@ -118,8 +118,7 @@ function left_env_stack(psi::SymMPS, mpo::MPO; upto::Int = length(psi) - 1)
     site_count = length(psi)
     length(mpo) == site_count ||
         throw(DimensionMismatch("MPO has $(length(mpo)) sites, state has $site_count"))
-    0 <= upto <= site_count ||
-        throw(ArgumentError("upto must be in 0:$site_count, got $upto"))
+    0 <= upto <= site_count || throw(ArgumentError("upto must be in 0:$site_count, got $upto"))
     environments = Any[missing for _ = 1:(site_count+1)]
     environments[1] = nothing
     cur = nothing
@@ -196,9 +195,7 @@ MPO (`no_jump_mpo`) as a matrix on a small product basis.
 function mpo_matrix_element(bra::SymMPS, mpo::MPO, ket::SymMPS)
     site_count = length(ket)
     length(mpo) == site_count && length(bra) == site_count || throw(
-        DimensionMismatch(
-            "MPO has $(length(mpo)) sites, ket $site_count, bra $(length(bra))",
-        ),
+        DimensionMismatch("MPO has $(length(mpo)) sites, ket $site_count, bra $(length(bra))"),
     )
     environment = nothing
     for site = 1:(site_count-1)

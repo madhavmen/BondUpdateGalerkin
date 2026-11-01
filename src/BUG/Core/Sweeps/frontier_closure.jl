@@ -115,10 +115,7 @@ function _frontier_sweep!(
     leak = indicator(alloc, sqrt(lL^2 + lR^2))
     met =
         enrich ? lg.tolerance_met :
-        all(
-            indicator(alloc, bond_leak) <= alloc.per_bond for
-            bond_leak in vcat(rl.leak, rr.leak)
-        )
+        all(indicator(alloc, bond_leak) <= alloc.per_bond for bond_leak in vcat(rl.leak, rr.leak))
     added = rl.added + rr.added
     wbefore = _frame_width(fr, site_count)
     if enrich           # the sweep's recycle entries live in its frames: usable only if committed
@@ -280,9 +277,8 @@ function _measure_frontiers(
         ) : Any[]
     lg = AdaptiveLedger()
     leak, rho, met, met0 = zeros(frontier_count), zeros(frontier_count), true, true
-    cores = Any[
-        frontier == 0 ? root_start : frontiers[frontier] for frontier = 0:(frontier_count-1)
-    ]
+    cores =
+        Any[frontier == 0 ? root_start : frontiers[frontier] for frontier = 0:(frontier_count-1)]
     # one non-enriching sweep of frontier `frontier` on the RNG stream `frontier_rng`
     measure(frontier, frontier_rng) = _frontier_sweep!(
         fr,
@@ -304,8 +300,7 @@ function _measure_frontiers(
         _prime_caches!(fr, psi, mpo, root_start)
         rngs = [MersenneTwister(rand(rng, UInt64)) for _ = 1:frontier_count]
         fetch.([
-            Threads.@spawn(measure(frontier, rngs[frontier+1])) for
-            frontier = 0:(frontier_count-1)
+            Threads.@spawn(measure(frontier, rngs[frontier+1])) for frontier = 0:(frontier_count-1)
         ])
     else
         [measure(frontier, rng) for frontier = 0:(frontier_count-1)]

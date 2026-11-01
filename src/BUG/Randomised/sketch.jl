@@ -157,8 +157,7 @@ function _sample_residual(basis, project, sketch, draw, nh::Int, wleg::Int, side
     norm(residual) <= _CBE_EPS && return (0.0, per, cols)
     if basis !== nothing
         off =
-            side === :left ? perp_component(basis, residual) :
-            perp_component_right(basis, residual)
+            side === :left ? perp_component(basis, residual) : perp_component_right(basis, residual)
         # `project` is reapplied so the estimate cannot be polluted by a component along the
         # frame, which `basis` is not meant to cover.
         residual = to_concrete(project(to_concrete(off)))

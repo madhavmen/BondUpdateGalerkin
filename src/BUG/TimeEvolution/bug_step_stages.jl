@@ -243,10 +243,12 @@ function _report_root!(
     # Rayleigh quotients in the Galerkin space: `root_start` and `root_result` ARE the state
     # before the root and after it (before the compression), and `<S|H_0|S> = <psi|P H P|psi> =
     # <psi|H|psi>` for `psi` in the frames' span, so these are exact energies, not projections.
-    rayleigh_quotient(state) = (norm_squared = norm(state)^2;
-    norm_squared > 0 ?
-    real(tensor_inner(state, apply_zero_site(root_operator, state))) / norm_squared +
-    Float64(eshift) : NaN)
+    rayleigh_quotient(state) = (
+        norm_squared = norm(state)^2;
+        norm_squared > 0 ?
+        real(tensor_inner(state, apply_zero_site(root_operator, state))) / norm_squared +
+        Float64(eshift) : NaN
+    )
     energy_before = rayleigh_quotient(root_start)
     # The root frames as they stand now (the environments are rebound by a re-enrichment).
     current_frames() = KLFrames(
@@ -324,8 +326,7 @@ function _report_root!(
         end
         if added_directions > 0
             _refresh_expanded!(expanded, left_frames, right_frames, root_link)
-            ledger.r_aug =
-                max(maximum(expanded; init = 0), leg_dim(right_frames[root_link], 1))
+            ledger.r_aug = max(maximum(expanded; init = 0), leg_dim(right_frames[root_link], 1))
         end
     end
     energy_after = rayleigh_quotient(root_result)
@@ -350,10 +351,5 @@ function _report_root!(
         # the step's outside-Galerkin defect, `|tau| ||(I-P) H psi_1|| / ||psi_1||`
         resid = outside === nothing ? NaN : abs(tau) * outside.bound / result_norm,
     )
-    return (
-        root_start = root_start,
-        root_result = root_result,
-        lenv = lenv_root,
-        renv = renv_root,
-    )
+    return (root_start = root_start, root_result = root_result, lenv = lenv_root, renv = renv_root)
 end

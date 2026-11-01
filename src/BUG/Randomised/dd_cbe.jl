@@ -136,10 +136,8 @@ function dd_reference_sketch(
     Om,
     side::Symbol,
 )
-    skl, skr = _sketch_closures(
-        frame,
-        () -> apply_h_two_site(frame_theta(frame), mpo, bond, lenv, renv),
-    )
+    skl, skr =
+        _sketch_closures(frame, () -> apply_h_two_site(frame_theta(frame), mpo, bond, lenv, renv))
     return side === :left ? skl(perp_component_right(frame.V0, Om)) :
            skr(perp_component(frame.U0, Om))
 end
@@ -312,14 +310,12 @@ function _dd_select(frame, sketch, side::Symbol, kc::KernelCounters)
     if symmetry_mode() === :SU2
         (orthonormal_basis, _), dt, db = _measure(
             () ->
-                left ? _preselect_left(frame, sketch, 0.0) :
-                _preselect_right(frame, sketch, 0.0),
+                left ? _preselect_left(frame, sketch, 0.0) : _preselect_right(frame, sketch, 0.0),
         )
         kc.t_qr += dt
         kc.b_qr += db
         kc.n_qr += 1
-        orthonormal_basis === nothing ||
-            (kc.qr_rank += leg_dim(orthonormal_basis, left ? 3 : 1))
+        orthonormal_basis === nothing || (kc.qr_rank += leg_dim(orthonormal_basis, left ? 3 : 1))
         return (orthonormal_basis, :svd_orth)
     end
     fl = left ? 3 : 1

@@ -63,8 +63,7 @@ function _rational_coeffs(vals, vecs, tau::ComplexF64, root_method::Symbol)
     sigma = _rational_shift(vals, tau)
     # e_1 in the eigenbasis (first row of `vecs`), each component times R of its shifted value
     eigen_weights =
-        root_stability.(root_method, tau .* (ComplexF64.(vals) .- sigma)) .*
-        ComplexF64.(vecs[1, :])
+        root_stability.(root_method, tau .* (ComplexF64.(vals) .- sigma)) .* ComplexF64.(vecs[1, :])
     return ComplexF64.(vecs) * eigen_weights, zero(ComplexF64)
 end
 

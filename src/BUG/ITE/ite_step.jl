@@ -36,8 +36,7 @@ Neel (dbeta 0.0625, tol_basis 1e-7) needed ~dbeta/7, and two halvings (`retries 
 dbeta/4 -- the step was flagged although the method meets the tolerance at a smaller step.
 """
 function _ite_nsplit(attempt, tol_basis::Float64, order::Int)
-    (:outside in attempt.unmet && isfinite(attempt.resid) && attempt.resid > tol_basis) ||
-        return 2
+    (:outside in attempt.unmet && isfinite(attempt.resid) && attempt.resid > tol_basis) || return 2
     return clamp(ceil(Int, 1.2 * (attempt.resid / tol_basis)^(1 / (order + 1))), 2, _ITE_MAXSPLIT)
 end
 
@@ -194,8 +193,7 @@ function ite_step!(
     # nothing for it (d51: identical defect), so only an unclosed closure is retried this way.
     if !attempt.ok && order > 1 && :closure in attempt.unmet
         restore!()
-        attempt =
-            _ite_attempt!(psi, mpo, Float64(dbeta); akw..., closure_checks = true, kwargs...)
+        attempt = _ite_attempt!(psi, mpo, Float64(dbeta); akw..., closure_checks = true, kwargs...)
         push!(attempts, attempt)
     end
     attempt.ok &&

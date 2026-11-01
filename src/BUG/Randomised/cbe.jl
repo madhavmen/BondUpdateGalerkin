@@ -74,7 +74,9 @@ sketch_h_left(
         frames,
         () -> apply_h_two_site(frame_theta(frames), hamiltonian, site, lch, rch),
     ),
-)(Om)
+)(
+    Om,
+)
 
 """
     sketch_h_right(frames, hamiltonian, site, lch, rch, Om) -> TLArray
@@ -95,7 +97,9 @@ sketch_h_right(
         frames,
         () -> apply_h_two_site(frame_theta(frames), hamiltonian, site, lch, rch),
     ),
-)(Om)
+)(
+    Om,
+)
 
 # ── the sector-graded Gaussian sketch (`GaussRandMat`, `RSVDpreBE0SiQS.m:557`) ──
 # `CompRatio·Dpre` columns in the frame's complement (per sector, by complement dimension) and the

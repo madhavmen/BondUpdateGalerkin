@@ -77,8 +77,7 @@ function _dd_controller(
         return Om === nothing ? nothing : (Om, stream(Om, :n_holdout))
     end
     # The sampled residual of `dd_basis` measured on one holdout pair.
-    resid(check) =
-        _sample_residual(dd_basis, project, _ -> check[2], _ -> check[1], 1, wleg, side)
+    resid(check) = _sample_residual(dd_basis, project, _ -> check[2], _ -> check[1], 1, wleg, side)
     # Whether the basis reaches a charge sector the frame does not have yet.
     newsector() =
         dd_basis !== nothing &&
@@ -162,13 +161,7 @@ _dd_predict(mem::DDMemory, side::Symbol, bond::Int) =
     lock(() -> get(mem.accepted, (side, bond), nothing), mem.lock)
 
 "Store `accepted_count` as the predictor of `(side, bond)` and append `rec` to the trace."
-function _dd_remember!(
-    mem::DDMemory,
-    side::Symbol,
-    bond::Int,
-    accepted_count::Int,
-    rec::NamedTuple,
-)
+function _dd_remember!(mem::DDMemory, side::Symbol, bond::Int, accepted_count::Int, rec::NamedTuple)
     lock(mem.lock) do
         mem.accepted[(side, bond)] = accepted_count
         push!(mem.trace, rec)

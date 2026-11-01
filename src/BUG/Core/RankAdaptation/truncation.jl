@@ -23,8 +23,7 @@ function truncate_sweep!(psi::SymMPS; maxdim::Int = 200, cutoff::Float64 = 1e-12
         # Keep `U` on this site and push `S Vd` (bond x right link) into the next one.
         weight_block = to_concrete(res.S * res.Vd)
         psi[site] = to_concrete(setitag(res.U, 3, tag))
-        psi[site+1] =
-            to_concrete(setitag(contract(weight_block, (2,), psi[site+1], (1,)), 1, tag))
+        psi[site+1] = to_concrete(setitag(contract(weight_block, (2,), psi[site+1], (1,)), 1, tag))
         psi.center = site + 1
     end
     for site = site_count:-1:2
@@ -33,8 +32,7 @@ function truncate_sweep!(psi::SymMPS; maxdim::Int = 200, cutoff::Float64 = 1e-12
         # Mirror: keep `Vd` here and push `U S` (left link x bond) into the previous site.
         weight_block = to_concrete(res.U * res.S)
         psi[site] = to_concrete(setitag(res.Vd, 1, tag))
-        psi[site-1] =
-            to_concrete(setitag(contract(psi[site-1], (3,), weight_block, (1,)), 3, tag))
+        psi[site-1] = to_concrete(setitag(contract(psi[site-1], (3,), weight_block, (1,)), 3, tag))
         psi.center = site - 1
     end
     return psi
@@ -64,8 +62,7 @@ function _budget_svd(tensor, split, maxdim::Int, share_of)
     share = share_of(_sq_weight(res.kept_list) + _sq_weight(res.trunc_list))
     nk = length(res.kept_list)
     # `trunc_list` holds what `maxdim` (and exact zeros) already removed: it is spent.
-    keep_rank, tail =
-        _tail_rank(res.kept_list, 1.0, share, nk; base = _sq_weight(res.trunc_list))
+    keep_rank, tail = _tail_rank(res.kept_list, 1.0, share, nk; base = _sq_weight(res.trunc_list))
     capped = tail > share && !isempty(res.trunc_list)
     keep_rank = max(keep_rank, 1)  # a bond never closes; a zero state has nothing to keep anyway
     keep_rank < nk && (res = svd(tensor, split; cutoff = 0.0, Nkeep = keep_rank, get_lists = true))
@@ -387,7 +384,8 @@ _reortho_left(left_frame, block) = _reortho(
 _reortho_right(right_frame, block) = _reortho(
     block,
     rows -> perp_component_right(right_frame, rows),
-    outside -> permutedims(svd(outside, (2, 3), _TAG_OR, _TAG_ORR; cutoff = 1e-14).U, (3, 1, 2)),
+    outside ->
+        permutedims(svd(outside, (2, 3), _TAG_OR, _TAG_ORR; cutoff = 1e-14).U, (3, 1, 2)),
 )
 
 # `orth(perp(block))`, or `nothing` when the block lies (to roundoff) inside the frame.
