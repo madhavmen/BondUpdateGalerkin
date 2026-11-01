@@ -57,8 +57,8 @@ end
 "Dense frames of a step's `KLFrames` (`cbe_bug_step!(...; frames_report)`)."
 function QTTFrames(fr::KLFrames)
     # `W` holds sites 1..c; `Z` has length L - 1 and `Z[j]` (j >= c) absorbs site j + 1
-    W = [ComplexF64.(_none_block(fr.W[i])) for i = 1:fr.c]
-    Z = [ComplexF64.(_none_block(fr.Z[j])) for j = fr.c:length(fr.Z)]
+    W = [ComplexF64.(_none_block(fr.left_frames[i])) for i = 1:fr.root_link]
+    Z = [ComplexF64.(_none_block(fr.right_frames[j])) for j = fr.root_link:length(fr.right_frames)]
     return QTTFrames(W, Z)
 end
 

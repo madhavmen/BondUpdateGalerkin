@@ -18,11 +18,13 @@ const _KRYLOV_RECORD = Ref(false)
 # silently drop entries rather than fail.
 const _KRYLOV_LOCK = ReentrantLock()
 
+# Switch the log on (clearing it) or off, and return a copy of what it holds.
 enable_krylov_log() = (_KRYLOV_RECORD[] = true; empty!(KRYLOV_LOG); nothing)
 disable_krylov_log() = (_KRYLOV_RECORD[] = false; nothing)
 get_krylov_log() = copy(KRYLOV_LOG)
-_record_krylov(k::Int) =
-    (_KRYLOV_RECORD[] && lock(() -> push!(KRYLOV_LOG, k), _KRYLOV_LOCK); nothing)
+# Append one solve's Krylov dimension to the log when recording is on; returns `nothing`.
+_record_krylov(krylov_dim::Int) =
+    (_KRYLOV_RECORD[] && lock(() -> push!(KRYLOV_LOG, krylov_dim), _KRYLOV_LOCK); nothing)
 
 """
 Largest `|Re(tau*lambda)|` tolerated inside one substep's matrix exponential.
@@ -38,7 +40,7 @@ steps reproduce the unshifted arithmetic bit for bit and nothing already measure
 const _EXPV_SHIFT_TRIGGER = 30.0
 
 "Promote a tensor to ComplexF64 so real inputs can take a complex `tau`."
-_as_complex(x) = to_concrete(x * (1.0 + 0.0im))
+_as_complex(tensor) = to_concrete(tensor * (1.0 + 0.0im))
 
 """
     _shift(vals, tau) -> Float64
@@ -52,9 +54,9 @@ steps are untouched and stay bit-identical to the unshifted code.
 function _shift(vals::AbstractVector, tau::ComplexF64)
     isempty(vals) && return 0.0
     # an explicit vector, not a generator: `argmax` over a generator has no well-defined index
-    ex = [real(tau * ComplexF64(v)) for v in vals]
-    k = argmax(ex)
-    return ex[k] > _EXPV_SHIFT_TRIGGER ? real(vals[k]) : 0.0
+    ex = [real(tau * ComplexF64(value)) for value in vals]
+    top_index = argmax(ex)
+    return ex[top_index] > _EXPV_SHIFT_TRIGGER ? real(vals[top_index]) : 0.0
 end
 
 """
@@ -70,18 +72,23 @@ function hermitian_tridiagonal_exp_coeffs(
 )
     isempty(alpha) && return ComplexF64[]
     vals, vecs = _tridiag_eigen(alpha, beta)
-    c, ls = _coeffs_from_eigen(vals, vecs, tau)
+    coeff, ls = _coeffs_from_eigen(vals, vecs, tau)
     # this entry point's contract is the FULL coefficients, so the factored scale goes back in
     # here; an unrepresentable one is inherent to asking for them, and the substepping path
     # exists precisely so the integrators never do
-    return c .* exp(ls)
+    return coeff .* exp(ls)
 end
 
-"Eigendecomposition of the leading tridiagonal, done ONCE so the substep search can evaluate
-`exp(tau'*T)e_1` for any trial `tau'` in `O(k^2)` instead of re-exponentiating the matrix."
+"""
+Eigendecomposition of the leading tridiagonal, done ONCE so the substep search can evaluate
+`exp(tau'*tridiagonal)e_1` for any trial `tau'` at a cost quadratic in the basis size instead of
+re-exponentiating the matrix.
+"""
 function _tridiag_eigen(alpha::Vector{Float64}, beta::Vector{Float64})
-    T = isempty(beta) ? Matrix{Float64}(reshape(alpha, 1, 1)) : Matrix(SymTridiagonal(alpha, beta))
-    return eigen(Symmetric(T))
+    tridiagonal =
+        isempty(beta) ? Matrix{Float64}(reshape(alpha, 1, 1)) :
+        Matrix(SymTridiagonal(alpha, beta))
+    return eigen(Symmetric(tridiagonal))
 end
 
 """
@@ -98,17 +105,18 @@ by the very round trip meant to preserve it.
 """
 function _coeffs_from_eigen(vals, vecs, tau::ComplexF64)
     sigma = _shift(vals, tau)
-    w = exp.(tau .* (ComplexF64.(vals) .- sigma)) .* ComplexF64.(vecs[1, :])
-    return ComplexF64.(vecs) * w, tau * sigma
+    # e_1 in the eigenbasis (first row of `vecs`), each component times its shifted exponential
+    eigen_weights = exp.(tau .* (ComplexF64.(vals) .- sigma)) .* ComplexF64.(vecs[1, :])
+    return ComplexF64.(vecs) * eigen_weights, tau * sigma
 end
 
 # ── from src/BondUpdateBUG/expv_root_methods.jl ──
 
 """
-    lanczos_expv(apply, tau, x; tol=1e-13, maxiter=60, reorth=false,
+    lanczos_expv(apply, tau, vector; tol=1e-13, maxiter=60, reorth=false,
                  conv_tol=0.0, substeps=1)
 
-`exp(tau*A)*x` for a **Hermitian** action `apply(v) = A*v`. Three-term recurrence with a
+`exp(tau*A)*vector` for a **Hermitian** action `apply(v) = A*v`. Three-term recurrence with a
 breakdown-only exit, matching `krylov.py::tensor_lanczos_expv` and its defaults. `reorth=true`
 orthogonalises twice against the whole basis: more stable, but not what the reference kernel does.
 `conv_tol > 0` adds Saad's convergence estimate; `substeps != 1` splits `tau`.
@@ -116,7 +124,7 @@ orthogonalises twice against the whole basis: more stable, but not what the refe
 function lanczos_expv(
     apply,
     tau::ComplexF64,
-    x;
+    vector;
     tol::Float64 = 1e-13,
     maxiter::Int = 60,
     reorth::Bool = false,
@@ -130,7 +138,7 @@ function lanczos_expv(
     root_method === :radau2_gmres && return radau2_gmres_expv(
         apply,
         tau,
-        x;
+        vector;
         tol = tol,
         maxiter = maxiter,
         conv_tol = conv_tol,
@@ -140,10 +148,11 @@ function lanczos_expv(
     # An implicit root takes the WHOLE step in one stage -- that is what it is for -- so the
     # exponential's substep split does not apply to it.
     root_method === :exp || (substeps = 1)
-    coeffs(vals, vecs, t) =
-        root_method === :exp ? _coeffs_from_eigen(vals, vecs, t) :
-        _rational_coeffs(vals, vecs, t, root_method)
-    xc = _as_complex(x)
+    # Krylov coefficients of the root's step over `trial_tau` from the tridiagonal's eigenpairs.
+    coeffs(vals, vecs, trial_tau) =
+        root_method === :exp ? _coeffs_from_eigen(vals, vecs, trial_tau) :
+        _rational_coeffs(vals, vecs, trial_tau, root_method)
+    xc = _as_complex(vector)
     beta0 = norm(xc)
     if beta0 == 0
         _record_krylov(0)
@@ -160,58 +169,67 @@ function lanczos_expv(
 
     while true
         nsub += 1
-        b0 = norm(cur)
-        b0 == 0 && break
-        v = to_concrete((1.0 / b0) * cur)
-        basis = Any[v]
+        cur_norm = norm(cur)
+        cur_norm == 0 && break
+        basis_vector = to_concrete((1.0 / cur_norm) * cur)
+        basis = Any[basis_vector]
         alpha = Float64[]
         betas = Float64[]
 
-        w = apply(v)
+        # `residual` starts as the image `A v` and is orthogonalised in place into the Lanczos
+        # residual; `diag_entry` and `offdiag_entry` are the tridiagonal's alpha and beta
+        residual = apply(basis_vector)
         total += 1
-        a = real(tensor_inner(v, w))
-        push!(alpha, a)
-        w = to_concrete(w + (-a) * v)
+        diag_entry = real(tensor_inner(basis_vector, residual))
+        push!(alpha, diag_entry)
+        residual = to_concrete(residual + (-diag_entry) * basis_vector)
 
         # the step this basis will actually take; set once the loop ends (or converges early)
         for _ = 2:maxiter
-            b = norm(w)
-            b < tol && break                       # genuine breakdown: the space is exhausted
+            offdiag_entry = norm(residual)
+            offdiag_entry < tol && break           # genuine breakdown: the space is exhausted
             if conv_tol > 0                        # genuine convergence: the answer stopped moving
                 vals, vecs = _tridiag_eigen(alpha, betas)
-                c, _ = coeffs(vals, vecs, tau_rem)
-                _tail(c, b) < conv_tol && break
+                trial_coeff, _ = coeffs(vals, vecs, tau_rem)
+                _tail(trial_coeff, offdiag_entry) < conv_tol && break
             end
-            push!(betas, b)
-            v = to_concrete((1.0 / b) * w)
-            push!(basis, v)
-            w = apply(v)
+            push!(betas, offdiag_entry)
+            basis_vector = to_concrete((1.0 / offdiag_entry) * residual)
+            push!(basis, basis_vector)
+            residual = apply(basis_vector)
             total += 1
-            a = real(tensor_inner(v, w))
-            push!(alpha, a)
-            # Materialise `w` before the reorth loop: Telum's +/- are lazy, so a symbolic `w` grew
-            # by one term per step and made the loop O(k^3 N). Modified Gram-Schmidt is sequential,
-            # so this changes only when each subtraction is evaluated, not the arithmetic.
-            w = to_concrete(w + (-a) * v + (-b) * basis[end-1])
+            diag_entry = real(tensor_inner(basis_vector, residual))
+            push!(alpha, diag_entry)
+            # Materialise `residual` before the reorth loop: Telum's +/- are lazy, so a symbolic
+            # residual grew by one term per step and made the loop O(k^3 N). Modified Gram-Schmidt
+            # is sequential, so this changes only when each subtraction is evaluated, not the
+            # arithmetic.
+            residual = to_concrete(
+                residual + (-diag_entry) * basis_vector + (-offdiag_entry) * basis[end-1],
+            )
             if reorth
-                # One materialisation per pass, not per basis vector. `w` stays concrete for the
-                # whole pass and only the correction is lazy, so every inner product is against a
-                # fixed `w`. That makes the pass classical Gram-Schmidt, applied twice (as stable as
-                # MGS). The same fix is in `cbe_bug.jl`, which keeps BUG and tdvp2 on equal footing.
+                # One materialisation per pass, not per basis vector. `residual` stays concrete
+                # for the whole pass and only the correction is lazy, so every inner product is
+                # against a fixed `residual`. That makes the pass classical Gram-Schmidt, applied
+                # twice (as stable as MGS). The same fix is in `Randomised/cbe_bond_update.jl`,
+                # which keeps BUG and tdvp2 on equal footing.
                 for _pass = 1:2
                     corr = nothing
-                    for u in basis
-                        c = tensor_inner(u, w)
-                        corr = corr === nothing ? c * u : corr + c * u
+                    for previous in basis
+                        overlap_coeff = tensor_inner(previous, residual)
+                        corr =
+                            corr === nothing ? overlap_coeff * previous :
+                            corr + overlap_coeff * previous
                     end
-                    corr === nothing || (w = to_concrete(w - corr))
+                    corr === nothing || (residual = to_concrete(residual - corr))
                 end
             end
         end
 
         vals, vecs = _tridiag_eigen(alpha, betas)
-        evalcoeff(t) = coeffs(vals, vecs, ComplexF64(t))
-        betak = norm(w)
+        # coefficients for any trial step, from the eigenpairs above: no further applications
+        evalcoeff(trial_tau) = coeffs(vals, vecs, ComplexF64(trial_tau))
+        betak = norm(residual)
 
         tau_s = if substeps == 1
             tau_rem                                # single shot: exactly the old behaviour
@@ -222,8 +240,8 @@ function lanczos_expv(
         end
 
         coeff, ls = evalcoeff(tau_s)
-        err += _tail(coeff, betak) * b0 / beta0
-        cur = _combine(coeff, basis, b0)
+        err += _tail(coeff, betak) * cur_norm / beta0
+        cur = _combine(coeff, basis, cur_norm)
         logscale += ls                 # already a log: never round-trips through a huge scalar
         tau_rem -= tau_s
         (substeps == 1 || abs(tau_rem) <= 1e-14 * max(abs(tau), 1.0)) && break
@@ -245,8 +263,8 @@ unitary so the local errors cannot grow; in imaginary time the shift makes it a 
 relative figure. It is what `tol_expv` is checked against (plan §4, UT15).
 """
 _report!(::Nothing, ::Int, ::Int, ::Float64) = nothing
-_report!(r::Base.RefValue, total::Int, nsub::Int, err::Float64) =
-    (r[] = (iterations = total, substeps = nsub, err = err); nothing)
+_report!(report::Base.RefValue, total::Int, nsub::Int, err::Float64) =
+    (report[] = (iterations = total, substeps = nsub, err = err); nothing)
 
 """
 Largest norm a returned state may carry. The limit is `sqrt(floatmax)`, not `floatmax`: tensor-level
@@ -269,54 +287,55 @@ real-time norm, which IS physics, is never silently rescaled.
 function _apply_scale(cur, logscale::ComplexF64)
     sc = exp(logscale)
     (isfinite(abs(sc)) && sc != 0) || return cur
-    n = norm(cur)
-    (isfinite(n) && n > 0 && abs(sc) * n > _EXPV_MAX_NORM) && return cur
+    cur_norm = norm(cur)
+    (isfinite(cur_norm) && cur_norm > 0 && abs(sc) * cur_norm > _EXPV_MAX_NORM) && return cur
     return to_concrete(sc * cur)
 end
 
-"Recombine `out = beta0 * sum_i coeff[i] * basis[i]`."
+"Recombine `out = beta0 * sum_column coeff[column] * basis[column]`."
 function _combine(coeff, basis, beta0::Float64)
     out = (coeff[1] * beta0) * basis[1]
-    for i = 2:length(coeff)
-        out = out + (coeff[i] * beta0) * basis[i]
+    for column = 2:length(coeff)
+        out = out + (coeff[column] * beta0) * basis[column]
     end
     return to_concrete(out)
 end
 
 """
-    _cgs2!(H, j, basis, w) -> w
+    _cgs2!(hess_matrix, column, basis, vector) -> vector
 
-`w` orthogonalised against `basis` by classical Gram-Schmidt applied twice, the coefficients added
-to column `j` of `H`. One materialisation per pass, as in `lanczos_expv`: a symbolic `w` would make
-each inner product force a sum one term longer, so `w` stays concrete for the whole pass and only
-`corr` is lazy.
+`vector` orthogonalised against `basis` by classical Gram-Schmidt applied twice, the coefficients
+added to column `column` of `hess_matrix`. One materialisation per pass, as in `lanczos_expv`: a
+symbolic `vector` would make each inner product force a sum one term longer, so `vector` stays
+concrete for the whole pass and only `corr` is lazy.
 """
-function _cgs2!(H::AbstractMatrix{ComplexF64}, j::Int, basis, w)
+function _cgs2!(hess_matrix::AbstractMatrix{ComplexF64}, column::Int, basis, vector)
     for _pass = 1:2
         corr = nothing
-        for i = 1:length(basis)
-            h = tensor_inner(basis[i], w)
-            H[i, j] += h
-            corr = corr === nothing ? h * basis[i] : corr + h * basis[i]
+        for row = 1:length(basis)
+            overlap_coeff = tensor_inner(basis[row], vector)
+            hess_matrix[row, column] += overlap_coeff
+            corr =
+                corr === nothing ? overlap_coeff * basis[row] : corr + overlap_coeff * basis[row]
         end
-        corr === nothing || (w = to_concrete(w - corr))
+        corr === nothing || (vector = to_concrete(vector - corr))
     end
-    return w
+    return vector
 end
 
 """
-    arnoldi_expv(apply, tau, x; tol=1e-13, maxiter=60, conv_tol=0.0, substeps=1)
+    arnoldi_expv(apply, tau, vector; tol=1e-13, maxiter=60, conv_tol=0.0, substeps=1)
 
-`exp(tau*A)*x` for a **non-Hermitian** action, via the upper-Hessenberg Arnoldi factorisation. This
-is the path for the K and L generators, where `P_perp = I - U0 U0'` breaks Hermiticity and Lanczos
-is invalid. Each vector is orthogonalised twice against the full basis, since one MGS pass loses
-orthogonality once the Krylov vectors align. `conv_tol` and `substeps` are as for
-[`lanczos_expv`](@ref).
+`exp(tau*A)*vector` for a **non-Hermitian** action, via the upper-Hessenberg Arnoldi
+factorisation. This is the path for the K and L generators, where `P_perp = I - U0 U0'` breaks
+Hermiticity and Lanczos is invalid. Each vector is orthogonalised twice against the full basis,
+since one MGS pass loses orthogonality once the Krylov vectors align. `conv_tol` and `substeps`
+are as for [`lanczos_expv`](@ref).
 """
 function arnoldi_expv(
     apply,
     tau::ComplexF64,
-    x;
+    vector;
     tol::Float64 = 1e-13,
     maxiter::Int = 60,
     conv_tol::Float64 = 0.0,
@@ -327,7 +346,7 @@ function arnoldi_expv(
     root_method === :radau2_gmres && return radau2_gmres_expv(
         apply,
         tau,
-        x;
+        vector;
         tol = tol,
         maxiter = maxiter,
         conv_tol = conv_tol,
@@ -335,8 +354,11 @@ function arnoldi_expv(
     )
     root_method in ROOT_METHODS || _bad_root(root_method)
     root_method === :exp || (substeps = 1)     # an implicit root takes the whole step at once
-    hcoeffs(Hm, t) = root_method === :exp ? _hess_coeffs(Hm, t) : _hess_rational(Hm, t, root_method)
-    xc = _as_complex(x)
+    # Krylov coefficients of the root's step over `trial_tau` on the leading Hessenberg block.
+    hcoeffs(Hm, trial_tau) =
+        root_method === :exp ? _hess_coeffs(Hm, trial_tau) :
+        _hess_rational(Hm, trial_tau, root_method)
+    xc = _as_complex(vector)
     beta0 = norm(xc)
     if beta0 == 0
         _record_krylov(0)
@@ -353,32 +375,33 @@ function arnoldi_expv(
 
     while true
         nsub += 1
-        b0 = norm(cur)
-        b0 == 0 && break
-        v = to_concrete((1.0 / b0) * cur)
-        basis = Any[v]
-        H = zeros(ComplexF64, maxiter + 1, maxiter)
-        m = 0
+        cur_norm = norm(cur)
+        cur_norm == 0 && break
+        basis_vector = to_concrete((1.0 / cur_norm) * cur)
+        basis = Any[basis_vector]
+        hess_matrix = zeros(ComplexF64, maxiter + 1, maxiter)
+        basis_dim = 0                      # columns of `hess_matrix` filled so far
         betak = 0.0
 
-        for j = 1:maxiter
-            w = _cgs2!(H, j, basis, apply(basis[j]))
+        for krylov_step = 1:maxiter
+            residual = _cgs2!(hess_matrix, krylov_step, basis, apply(basis[krylov_step]))
             total += 1
-            m = j
-            b = norm(w)
-            betak = b
-            b < tol && break
+            basis_dim = krylov_step
+            residual_norm = norm(residual)
+            betak = residual_norm
+            residual_norm < tol && break
             if conv_tol > 0
-                c = hcoeffs(H[1:m, 1:m], tau_rem)[1]
-                _tail(c, b) < conv_tol && break
+                trial_coeff = hcoeffs(hess_matrix[1:basis_dim, 1:basis_dim], tau_rem)[1]
+                _tail(trial_coeff, residual_norm) < conv_tol && break
             end
-            H[j+1, j] = b
-            j == maxiter && break
-            push!(basis, to_concrete((1.0 / b) * w))
+            hess_matrix[krylov_step+1, krylov_step] = residual_norm
+            krylov_step == maxiter && break
+            push!(basis, to_concrete((1.0 / residual_norm) * residual))
         end
 
-        Hm = H[1:m, 1:m]
-        evalcoeff(t) = hcoeffs(Hm, ComplexF64(t))
+        Hm = hess_matrix[1:basis_dim, 1:basis_dim]
+        # coefficients for any trial step on the fixed Hessenberg block: no further applications
+        evalcoeff(trial_tau) = hcoeffs(Hm, ComplexF64(trial_tau))
 
         tau_s = if substeps == 1
             tau_rem
@@ -389,8 +412,8 @@ function arnoldi_expv(
         end
 
         coeff, ls = evalcoeff(tau_s)
-        err += _tail(coeff, betak) * b0 / beta0
-        cur = _combine(coeff, basis[1:m], b0)
+        err += _tail(coeff, betak) * cur_norm / beta0
+        cur = _combine(coeff, basis[1:basis_dim], cur_norm)
         logscale += ls                 # already a log: never round-trips through a huge scalar
         tau_rem -= tau_s
         (substeps == 1 || abs(tau_rem) <= 1e-14 * max(abs(tau), 1.0)) && break

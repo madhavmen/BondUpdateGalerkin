@@ -1,65 +1,109 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/expansion/cbe_core.jl, src/RSVDCBEBondUpdate/expansion/cbe_expand.jl, src/RSVDCBEBondUpdate/expansion/cbe_options.jl, src/RSVDCBEBondUpdate/expansion/cbe_bond_update.jl, src/RSVDCBEBondUpdate/operators/mpo_env.jl, src/RSVDCBEBondUpdate/operators/mpo_fold.jl, src/RSVDCBEBondUpdate/expansion/bond_expansion.jl.
+# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/expansion/cbe_options.jl (the prebuilt-stack
+# wrappers and the gate-path sketches) and src/RSVDCBEBondUpdate/expansion/cbe_bond_update.jl.
 
-# cbe_bond_update.jl: the gate-path sketches, `cbe_expand_bond`, and the gate-based CBE bond
-# update with its expanding-basis Krylov (included after `cbe_expand.jl`).
+# cbe_bond_update.jl: the prebuilt-stack wrappers, the gate-path sketches, `cbe_expand_bond`, and
+# the gate-based CBE bond update with its expanding-basis Krylov (included after `cbe_expand.jl`).
 
 # ── from src/RSVDCBEBondUpdate/expansion/cbe_options.jl ──
 
-# cbe_options.jl: prebuilt-stack wrappers, the shared run configuration, the S step and the sketched gate action (from `cbe_core.jl`, included right after it).
-
 # ── prebuilt-stack convenience wrappers ──────────────────────────────────────
 #
-# The kernels above take the channels on the two links they actually use, so a sweep can
+# The `ChannelSet` kernels (`sketch_h_*` in `cbe.jl`, the term-list `cbe_expand` in
+# `range_finder.jl`) take the channels on the two links they actually use, so a sweep can
 # CARRY them (O(1) per bond) instead of rebuilding a stack (O(L) per bond). These wrappers
 # keep the stack-indexed call sites -- the tests, and anything not sweeping -- unchanged.
 
-sketch_h_left(f::BondFrame, h::XXZChain, i::Int, lenv::LeftEnvStack, renv::RightEnvStack, Om) =
-    sketch_h_left(f, h, i, left_channels(lenv, i), right_channels(renv, i + 2), Om)
+# `sketch_h_left` at bond `(bond, bond+1)`, reading its two channel sets out of full stacks.
+sketch_h_left(
+    frame::BondFrame,
+    chain::XXZChain,
+    bond::Int,
+    lenv::LeftEnvStack,
+    renv::RightEnvStack,
+    Om,
+) = sketch_h_left(
+    frame,
+    chain,
+    bond,
+    left_channels(lenv, bond),
+    right_channels(renv, bond + 2),
+    Om,
+)
 
-sketch_h_right(f::BondFrame, h::XXZChain, i::Int, lenv::LeftEnvStack, renv::RightEnvStack, Om) =
-    sketch_h_right(f, h, i, left_channels(lenv, i), right_channels(renv, i + 2), Om)
+# `sketch_h_right` at bond `(bond, bond+1)`, reading its two channel sets out of full stacks.
+sketch_h_right(
+    frame::BondFrame,
+    chain::XXZChain,
+    bond::Int,
+    lenv::LeftEnvStack,
+    renv::RightEnvStack,
+    Om,
+) = sketch_h_right(
+    frame,
+    chain,
+    bond,
+    left_channels(lenv, bond),
+    right_channels(renv, bond + 2),
+    Om,
+)
 
-cbe_expand(f::BondFrame, h::XXZChain, i::Int, lenv::LeftEnvStack, renv::RightEnvStack; kwargs...) =
-    cbe_expand(f, h, i, left_channels(lenv, i), right_channels(renv, i + 2); kwargs...)
+# The term-list `cbe_expand` at bond `(bond, bond+1)`, reading its channel sets out of full stacks.
+cbe_expand(
+    frame::BondFrame,
+    chain::XXZChain,
+    bond::Int,
+    lenv::LeftEnvStack,
+    renv::RightEnvStack;
+    kwargs...,
+) = cbe_expand(
+    frame,
+    chain,
+    bond,
+    left_channels(lenv, bond),
+    right_channels(renv, bond + 2);
+    kwargs...,
+)
 
 """
-    sketch_bond_left(f, gate, Om) -> TLArray
+    sketch_bond_left(frame, gate, Om) -> TLArray
 
 `Y = (gate Theta) Om†`, legs `(link_l, site_l, g)` -- the left matricization of the gate
 action sketched from the right. `Om` carries `V0`'s layout `(g, site_r, link_r)`, i.e. it is
-a candidate right frame with `g` columns instead of `r`; `Om = f.V0` recovers the exact left
+a candidate right frame with `g` columns instead of `r`; `Om = frame.V0` recovers the exact left
 factor of `gate Theta`.
 
 Contraction order: absorb `Om` into the gate's right BRA leg, then close the gate's right
 KET leg and `link_r` against `V0`, then `K0 = U0 S0`. Nothing rank-4 is built.
 """
-function sketch_bond_left(f::BondFrame, gate, Om)
-    _check_gate(f, gate)
-    tl, tr = f.site_l.itags, f.site_r.itags
-    HT = apply_gate(gate, frame_theta(f), tl, tr)       # (link_l, site_l, site_r, link_r)
-    c = contract(f.U0', (1, 2), HT, (1, 2))            # (bond, site_r, link_r)
-    A = to_concrete(HT - to_concrete!(contract(f.U0, (3,), c, (1,))))
-    return to_concrete!(contract(A, (3, 4), Om', (2, 3)))          # (link_l, site_l, g)
+function sketch_bond_left(frame::BondFrame, gate, Om)
+    _check_gate(frame, gate)
+    tl, tr = frame.site_l.itags, frame.site_r.itags
+    HT = apply_gate(gate, frame_theta(frame), tl, tr)       # (link_l, site_l, site_r, link_r)
+    # Remove the kept space: `perp_action = (I - U0 U0') HT`.
+    kept_coeffs = contract(frame.U0', (1, 2), HT, (1, 2))   # (bond, site_r, link_r)
+    perp_action = to_concrete(HT - to_concrete!(contract(frame.U0, (3,), kept_coeffs, (1,))))
+    return to_concrete!(contract(perp_action, (3, 4), Om', (2, 3)))    # (link_l, site_l, g)
 end
 
 """
-    sketch_bond_right(f, gate, Om) -> TLArray
+    sketch_bond_right(frame, gate, Om) -> TLArray
 
 Mirror of [`sketch_bond_left`](@ref): `Om` carries `U0`'s layout `(link_l, site_l, g)` and
 the result is `(g, site_r, link_r)`.
 """
-function sketch_bond_right(f::BondFrame, gate, Om)
-    _check_gate(f, gate)
-    tl, tr = f.site_l.itags, f.site_r.itags
-    HT = apply_gate(gate, frame_theta(f), tl, tr)
-    c = contract(HT, (3, 4), f.V0', (2, 3))            # (link_l, site_l, bond)
-    A = to_concrete(HT - to_concrete!(contract(c, (3,), f.V0, (1,))))
-    Y = contract(A, (1, 2), Om', (1, 2))               # (site_r, link_r, g)
-    return to_concrete(permutedims(Y, (3, 1, 2)))       # (g, site_r, link_r)
+function sketch_bond_right(frame::BondFrame, gate, Om)
+    _check_gate(frame, gate)
+    tl, tr = frame.site_l.itags, frame.site_r.itags
+    HT = apply_gate(gate, frame_theta(frame), tl, tr)
+    # Remove the kept space: `perp_action = HT (I - V0' V0)`.
+    kept_coeffs = contract(HT, (3, 4), frame.V0', (2, 3))   # (link_l, site_l, bond)
+    perp_action = to_concrete(HT - to_concrete!(contract(kept_coeffs, (3,), frame.V0, (1,))))
+    sketch = contract(perp_action, (1, 2), Om', (1, 2))     # (site_r, link_r, g)
+    return to_concrete(permutedims(sketch, (3, 1, 2)))      # (g, site_r, link_r)
 end
 
 """
-    cbe_expand_bond(f, gate; kwargs...) -> CBEExpansion
+    cbe_expand_bond(frame, gate; kwargs...) -> CBEExpansion
 
 Controlled bond expansion of the frames at one bond, with the bare two-site gate standing in
 for the environment-dressed effective Hamiltonian. Keywords are [`cbe_expand`](@ref)'s,
@@ -68,30 +112,28 @@ unchanged -- this is the same selection with different sketch closures.
 The sketch probes the PROJECTOR (`P_perp (H Theta)`), which is the only path; there is no
 `project_first` switch any more.
 """
-cbe_expand_bond(f::BondFrame, gate; kwargs...) = cbe_expand(
-    f,
-    Om -> sketch_bond_left(f, gate, Om),
-    Om -> sketch_bond_right(f, gate, Om);
+cbe_expand_bond(frame::BondFrame, gate; kwargs...) = cbe_expand(
+    frame,
+    Om -> sketch_bond_left(frame, gate, Om),
+    Om -> sketch_bond_right(frame, gate, Om);
     kwargs...,
 )
 
 # ── from src/RSVDCBEBondUpdate/expansion/cbe_bond_update.jl ──
 
-# cbe_bond_update.jl: the gate-based CBE bond update and its sweep (from `cbe_core.jl`, included right after it).
-
 # ── the bond update ──────────────────────────────────────────────────────────
 
 """
-    cbe_bond_update(f::BondFrame, gate, tau; kwargs...) -> NamedTuple
+    cbe_bond_update(frame::BondFrame, gate, tau; kwargs...) -> NamedTuple
 
-One CBE-basis Galerkin update on the bond `f` snapshots, a drop-in for
+One CBE-basis Galerkin update on the bond `frame` snapshots, a drop-in for
 `BondUpdateBUG.kls_bond_update` (same fields, plus `err_pre` / `err_fnl`). `maxdim`,
 `trunc_thresh`, `s_tau`, `maxiter`, `tol` as there; `expand = false` freezes the frames; other
-keywords forward to `cbe_expand`. `s_iters = 1` is one expansion then Lanczos, `n > 1` repeats
-the expansion, `-g <= 0` uses [`_expanding_krylov`](@ref) with `g` growth passes.
+keywords forward to `cbe_expand`. `s_iters = 1` is one expansion then Lanczos, `s_iters > 1`
+repeats the expansion, `-g <= 0` uses [`_expanding_krylov`](@ref) with `g` growth passes.
 """
 function cbe_bond_update(
-    f::BondFrame,
+    frame::BondFrame,
     gate,
     tau::ComplexF64;
     maxdim::Int = 200,
@@ -108,11 +150,11 @@ function cbe_bond_update(
     expand_kwargs...,
 )
     tau_s = s_tau === nothing ? tau : s_tau
-    tl, tr = f.site_l.itags, f.site_r.itags
-    theta0 = frame_theta(f)
+    tl, tr = frame.site_l.itags, frame.site_r.itags
+    theta0 = frame_theta(frame)
 
-    # Operator applications are counted here (`expv` returns only the vector), so cost can be split from
-    # the number of steps.
+    # Operator applications are counted here (`expv` returns only the vector), so cost can be split
+    # from the number of steps.
     nmv = Ref(0)
 
     # The two closures that are all a mode gets to change. The gate path supplies the bare
@@ -126,9 +168,10 @@ function cbe_bond_update(
     function galerkin(U_aug, V_aug)
         S_start =
             to_concrete!(contract(contract(U_aug', (1, 2), theta0, (1, 2)), (2, 3), V_aug', (2, 3)))
-        function apply_s(x)
+        # The projected gate `U_aug' gate (U_aug core_vector V_aug) V_aug'` on a root core.
+        function apply_s(core_vector)
             nmv[] += 1
-            theta = to_concrete((U_aug * x) * V_aug)
+            theta = to_concrete((U_aug * core_vector) * V_aug)
             evolved = apply_gate(gate, theta, tl, tr)
             proj = contract(U_aug', (1, 2), evolved, (1, 2))
             return to_concrete!(contract(proj, (2, 3), V_aug', (2, 3)))
@@ -144,7 +187,7 @@ function cbe_bond_update(
         )
     end
 
-    U_aug, V_aug = f.U0, f.V0
+    U_aug, V_aug = frame.U0, frame.V0
     err_pre, err_fnl, n_iter, iter_weight = 0.0, 0.0, 0, 0.0
     local S_new
 
@@ -154,7 +197,7 @@ function cbe_bond_update(
         # ── GROWTH INSIDE THE LANCZOS ────────────────────────────────────────────────
         # `s_iters <= 0` selects the expanding-basis solver; see `_expanding_krylov`.
         U_aug, V_aug, S_new, info = _expanding_krylov(
-            f,
+            frame,
             applyH,
             expand_at,
             Propagate(tau_s),
@@ -168,41 +211,42 @@ function cbe_bond_update(
         err_pre, err_fnl = info.err_pre, info.err_fnl
         n_iter, iter_weight = info.n_grow, info.beta_final
     else
-        # ── one expansion, then a plain Lanczos (the default); `n > 1` repeats it ──
+        # ── one expansion, then a plain Lanczos (the default); `s_iters > 1` repeats it ──
         # Each pass recomputes the budget from the current rank, compounding the growth schedule;
         # `galerkin` always starts from the original `theta0`, so the exponential is applied once.
-        probe = f
-        for k = 1:s_iters
+        probe = frame
+        for expansion_pass = 1:s_iters
             ex = expand_at(probe)
             U_prev, V_prev = U_aug, V_aug
             U_aug, V_aug = ex.U_ex, ex.V_ex
-            err_pre, err_fnl, n_iter = ex.err_pre, ex.err_fnl, k
+            err_pre, err_fnl, n_iter = ex.err_pre, ex.err_fnl, expansion_pass
 
             S_new = galerkin(U_aug, V_aug)
 
-            k == s_iters && break
+            expansion_pass == s_iters && break
             (ex.n_new_l + ex.n_new_r) == 0 && break
             iter_weight = _new_direction_weight(U_prev, V_prev, U_aug, V_aug, S_new)
             iter_weight < iter_tol && break
 
-            probe = _reframe(f, U_aug, S_new, V_aug)
+            probe = _reframe(frame, U_aug, S_new, V_aug)
         end
     end
 
+    # Truncate the evolved core and absorb its factors into the augmented frames.
     res = svd(S_new, (1,); cutoff = max(trunc_thresh, 1e-14), Nkeep = maxdim, get_lists = true)
-    tag = f.link_mid.itags
+    tag = frame.link_mid.itags
     left_core = to_concrete(setitag(to_concrete(U_aug * res.U), 3, tag))
     right_core = to_concrete(setitag(to_concrete((res.S * res.Vd) * V_aug), 1, tag))
 
-    svals = [s for (s, _, _, _) in res.kept_list]
+    svals = [singular_value for (singular_value, _, _, _) in res.kept_list]
     return (;
         left_core,
         right_core,
         U_aug,
         V_aug,
         S_new,
-        n_new_k = leg_dim(U_aug, 3) - f.old_rank,
-        n_new_l = leg_dim(V_aug, 1) - f.old_rank,
+        n_new_k = leg_dim(U_aug, 3) - frame.old_rank,
+        n_new_l = leg_dim(V_aug, 1) - frame.old_rank,
         keep = leg_dim(left_core, 3),
         aug_k = leg_dim(U_aug, 3),
         aug_l = leg_dim(V_aug, 1),
@@ -217,7 +261,8 @@ function cbe_bond_update(
 end
 
 """
-    _expanding_krylov(f, applyH, expand, solver, theta0, nmv; ...) -> (U, V, S, info)
+    _expanding_krylov(frame, applyH, expand, solver, theta0, nmv; ...)
+        -> (left_frame, right_frame, root_result, info)
 
 Lanczos for `exp(tau*H_eff)` whose basis grows with the Krylov space: before `H` is applied to
 `v_k`, the frames are expanded with `v_k` as the probe, so `H v_k` fits. Stops when `beta_k < tol`
@@ -225,7 +270,7 @@ or `grow_iters` passes have run. Full reorthogonalisation is required because th
 operator changes at every growth pass.
 """
 function _expanding_krylov(
-    f::BondFrame,
+    frame::BondFrame,
     applyH,
     expand,
     solver::SStepSolver,
@@ -236,125 +281,137 @@ function _expanding_krylov(
     grow_iters::Int,
     probe::Symbol = :residual,
 )
-    project(U, V, th) = to_concrete!(contract(contract(U', (1, 2), th, (1, 2)), (2, 3), V', (2, 3)))
+    # Project a two-site tensor onto the root space of the given frames: `left' th right'`.
+    project(left_basis, right_basis, th) = to_concrete!(
+        contract(contract(left_basis', (1, 2), th, (1, 2)), (2, 3), right_basis', (2, 3)),
+    )
 
-    # Embed a core from the (Uo,Vo) basis into (Un,Vn) by computed overlaps (robust to a rotation by the
-    # orthonormality guard); the overlaps are built once per growth pass, not per stored vector.
+    # Embed a core from the (Uo,Vo) basis into (Un,Vn) by computed overlaps (robust to a rotation by
+    # the orthonormality guard); the overlaps are built once per growth pass, not per stored vector.
     embed_ops(Uo, Vo, Un, Vn) = (
         to_concrete!(contract(Un', (1, 2), Uo, (1, 2))),         # PL (new_l, old_l)
         to_concrete!(contract(Vo, (2, 3), Vn', (2, 3))),
     )         # PR (old_r, new_r)
 
-    embed_with(PL, PR, S) = to_concrete!(contract(contract(PL, (2,), S, (1,)), (2,), PR, (1,)))
+    # Apply the overlaps: `PL core PR`.
+    embed_with(PL, PR, core) =
+        to_concrete!(contract(contract(PL, (2,), core, (1,)), (2,), PR, (1,)))
 
-    U, V = f.U0, f.V0
-    S0 = project(U, V, theta0)
-    beta0 = norm(S0)
+    left_frame, right_frame = frame.U0, frame.V0
+    root_start = project(left_frame, right_frame, theta0)
+    beta0 = norm(root_start)
     err_pre, err_fnl, n_grow = 0.0, 0.0, 0
     # `value = NaN` is NOT decoration: every other exit carries it (the Ritz value for
     # `LowestEigen`), and a caller that reads `info.value` -- the ground-state solve does --
     # would hit an UndefVarError on this branch if the field were simply absent here.
     beta0 == 0 && return (
-        U,
-        V,
-        S0,
+        left_frame,
+        right_frame,
+        root_start,
         (; err_pre, err_fnl, n_grow, beta_final = 0.0, ranks = Int[], value = NaN),
     )
 
-    basis = Any[to_concrete((1.0 / beta0) * S0)]
-    alpha, betas, ranks = Float64[], Float64[], Int[leg_dim(U, 3)]
+    basis = Any[to_concrete((1.0 / beta0) * root_start)]
+    alpha, betas, ranks = Float64[], Float64[], Int[leg_dim(left_frame, 3)]
     b_last = 0.0
 
     image = nothing        # the PREVIOUS iteration's output, H*v_{k-1}, before orthogonalisation
 
     for it = 1:maxiter
         # ── step 0: grow the basis around the probe ──
-        # `:residual` (default) probes with the orthonormal Lanczos vector; `:image` uses `H v_{k-1}` and
-        # measured no different. The Lanczos recurrence itself is unchanged.
+        # `:residual` (default) probes with the orthonormal Lanczos vector; `:image` uses
+        # `H v_{k-1}` and measured no different. The Lanczos recurrence itself is unchanged.
         if it <= grow_iters
             pv = (probe === :image && image !== nothing) ? image : basis[it]
-            ex = expand(_reframe(f, U, pv, V))
+            ex = expand(_reframe(frame, left_frame, pv, right_frame))
             if (ex.n_new_l + ex.n_new_r) > 0
-                Uo, Vo = U, V
-                U, V = ex.U_ex, ex.V_ex
-                PL, PR = embed_ops(Uo, Vo, U, V)
-                for k in eachindex(basis)
-                    basis[k] = embed_with(PL, PR, basis[k])
+                Uo, Vo = left_frame, right_frame
+                left_frame, right_frame = ex.U_ex, ex.V_ex
+                PL, PR = embed_ops(Uo, Vo, left_frame, right_frame)
+                for column in eachindex(basis)
+                    basis[column] = embed_with(PL, PR, basis[column])
                 end
                 image === nothing || (image = embed_with(PL, PR, image))
                 err_pre, err_fnl, n_grow = ex.err_pre, ex.err_fnl, n_grow + 1
             end
         end
-        push!(ranks, leg_dim(U, 3))
+        push!(ranks, leg_dim(left_frame, 3))
 
         nmv[] += 1
-        theta = to_concrete((U * basis[it]) * V)
-        w = project(U, V, applyH(theta))
-        image = w          # this iteration's output, carried to the next expansion
+        theta = to_concrete((left_frame * basis[it]) * right_frame)
+        residual = project(left_frame, right_frame, applyH(theta))
+        image = residual          # this iteration's output, carried to the next expansion
 
-        a = real(tensor_inner(basis[it], w))
-        push!(alpha, a)
-        w = to_concrete(w + (-a) * basis[it])
-        it > 1 && (w = to_concrete(w + (-betas[it-1]) * basis[it-1]))
-        for _pass = 1:2, u in basis
-            w = to_concrete(w - tensor_inner(u, w) * u)
+        # Three-term recurrence, then two full reorthogonalisation passes against the basis.
+        diagonal_entry = real(tensor_inner(basis[it], residual))
+        push!(alpha, diagonal_entry)
+        residual = to_concrete(residual + (-diagonal_entry) * basis[it])
+        it > 1 && (residual = to_concrete(residual + (-betas[it-1]) * basis[it-1]))
+        for _pass = 1:2, basis_vector in basis
+            residual = to_concrete(residual - tensor_inner(basis_vector, residual) * basis_vector)
         end
 
         # `b_last` is the TERMINATING residual, not the last accepted one. Reporting
         # `betas[end]` instead would show the last beta that was large enough to continue --
         # the opposite of the stopping signal it is meant to document.
-        b = norm(w)
-        b_last = b
-        b < tol && break
+        residual_norm = norm(residual)
+        b_last = residual_norm
+        residual_norm < tol && break
         it == maxiter && break
-        push!(betas, b)
-        push!(basis, to_concrete((1.0 / b) * w))
+        push!(betas, residual_norm)
+        push!(basis, to_concrete((1.0 / residual_norm) * residual))
     end
 
     # THE ONLY MODE-DEPENDENT LINE IN THE WHOLE FUNCTION. `coeff` already carries `beta0` for
     # the propagator and deliberately does not for the eigensolve, so the accumulation below
     # is identical either way.
     coeff, value = _reduce_krylov(solver, alpha, betas, beta0)
-    S = to_concrete(coeff[1] * basis[1])
-    for k = 2:length(coeff)
-        S = to_concrete(S + coeff[k] * basis[k])
+    root_result = to_concrete(coeff[1] * basis[1])
+    for column = 2:length(coeff)
+        root_result = to_concrete(root_result + coeff[column] * basis[column])
     end
-    return (U, V, S, (; err_pre, err_fnl, n_grow, beta_final = b_last, ranks, value))
+    return (
+        left_frame,
+        right_frame,
+        root_result,
+        (; err_pre, err_fnl, n_grow, beta_final = b_last, ranks, value),
+    )
 end
 
 """
-    _new_direction_weight(U_prev, V_prev, U_aug, V_aug, S) -> Float64
+    _new_direction_weight(U_prev, V_prev, U_aug, V_aug, core) -> Float64
 
 Fraction of the evolved core's norm on the directions the last pass added,
-`sqrt(‖S‖² - ‖P S Q‖²)/‖S‖`; small means the Krylov space has stopped delivering.
+`sqrt(‖core‖² - ‖P core Q‖²)/‖core‖`; small means the Krylov space has stopped delivering.
 """
-function _new_direction_weight(U_prev, V_prev, U_aug, V_aug, S)
-    n = norm(S)
-    n == 0 && return 0.0
+function _new_direction_weight(U_prev, V_prev, U_aug, V_aug, core)
+    core_norm = norm(core)
+    core_norm == 0 && return 0.0
     PL = to_concrete!(contract(U_prev', (1, 2), U_aug, (1, 2)))     # (prev_l, new_l)
     PR = to_concrete!(contract(V_aug, (2, 3), V_prev', (2, 3)))     # (new_r, prev_r)
-    S_old = to_concrete!(contract(contract(PL, (2,), S, (1,)), (2,), PR, (1,)))
-    return sqrt(max(n^2 - norm(S_old)^2, 0.0)) / n
+    S_old = to_concrete!(contract(contract(PL, (2,), core, (1,)), (2,), PR, (1,)))
+    return sqrt(max(core_norm^2 - norm(S_old)^2, 0.0)) / core_norm
 end
 
 """
-    _reframe(f, U, S, V) -> BondFrame
+    _reframe(frame, left_frame, core, right_frame) -> BondFrame
 
-`f` with frames and core replaced, so the next sketch probes the evolved state. `old_rank` is the
-larger frame rank, so `room` stays a lower bound on each side.
+`frame` with frames and core replaced, so the next sketch probes the evolved state. `old_rank` is
+the larger frame rank, so `room` stays a lower bound on each side.
 """
-_reframe(f::BondFrame, U, S, V) = BondFrame(
-    U,
-    S,
-    V,
-    f.link_l,
-    f.site_l,
-    f.link_mid,
-    f.site_r,
-    f.link_r,
-    max(leg_dim(U, 3), leg_dim(V, 1)),
-    f.link_mid_space,
+_reframe(frame::BondFrame, left_frame, core, right_frame) = BondFrame(
+    left_frame,
+    core,
+    right_frame,
+    frame.link_l,
+    frame.site_l,
+    frame.link_mid,
+    frame.site_r,
+    frame.link_r,
+    max(leg_dim(left_frame, 3), leg_dim(right_frame, 1)),
+    frame.link_mid_space,
 )
 
-cbe_bond_update(f::BondFrame, gate, tau::Number; kwargs...) =
-    cbe_bond_update(f, gate, ComplexF64(tau); kwargs...)
+# Any numeric `tau` is promoted to the `ComplexF64` method above.
+cbe_bond_update(frame::BondFrame, gate, tau::Number; kwargs...) =
+    cbe_bond_update(frame, gate, ComplexF64(tau); kwargs...)

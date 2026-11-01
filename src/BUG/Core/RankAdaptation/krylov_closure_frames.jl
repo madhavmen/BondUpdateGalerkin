@@ -1,5 +1,7 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/bug/krylov_enrich.jl, src/RSVDCBEBondUpdate/bug/krylov_closure.jl, src/RSVDCBEBondUpdate/bug/krylov_closure_loop.jl.
-# krylov_closure_frames.jl: the K/L frames of the order-p closure, their shared environment caches, and the projections of the state and its frontiers onto them.
+# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/bug/krylov_enrich.jl,
+# src/RSVDCBEBondUpdate/bug/krylov_closure.jl, src/RSVDCBEBondUpdate/bug/krylov_closure_loop.jl.
+# krylov_closure_frames.jl: the K/L frames of the order-p closure, their shared environment
+# caches, and the projections of the state and its frontiers onto them.
 
 # ── from src/RSVDCBEBondUpdate/bug/krylov_closure.jl ──
 
@@ -14,26 +16,28 @@ const _FRONTIER_FLOOR = 1e-14
 _closure_maxpass(order::Int) = 2 * order + 2
 
 # Each enriching frontier sweep re-tags its frames with a new generation, so a frame and the
-# frame it grew from never share a tag inside one overlap tensor.
-_tagWg(i::Int, g::Int) = g == 0 ? _tagW(i) : "cbeW$g,$i"
-_tagZg(j::Int, g::Int) = g == 0 ? _tagZ(j) : "cbeZ$g,$j"
+# frame it grew from never share a tag inside one overlap tensor. Returns the link tag of left
+# frame `site` / right frame `bond` in `generation` (generation 0 is the half-sweeps' own tag).
+_tagWg(site::Int, generation::Int) = generation == 0 ? _tagW(site) : "cbeW$generation,$site"
+_tagZg(bond::Int, generation::Int) = generation == 0 ? _tagZ(bond) : "cbeZ$generation,$bond"
 
 """
-    KLFrames(W, Z, c, lenv, renv, gen)
+    KLFrames(left_frames, right_frames, root_link, lenv, renv, gen)
 
-The K/L frames of one step and the root environments they imply: `W[1..c]` left frames,
-`Z[c..L-1]` right frames (`Z[j]` absorbs site `j+1`), `lenv` the environment at link `c` through
-`W[1..c-1]`, `renv` the one at link `c+2` through `Z[c+1..L-1]`. `gen` counts the enrichments,
-so a [`KrylovFrontier`](@ref) built in older frames is refused rather than silently misread.
+The K/L frames of one step and the root environments they imply, writing `c` for `root_link`:
+`left_frames[1..c]` the left frames, `right_frames[c..L-1]` the right frames (`right_frames[j]`
+absorbs site `j+1`); `lenv` is the environment at link `c` through `left_frames[1..c-1]`, `renv`
+the one at link `c+2` through `right_frames[c+1..L-1]`. `gen` counts the enrichments, so a [`KrylovFrontier`](@ref) built in older
+frames is refused rather than silently misread.
 
 `lcache` / `rcache` hold the environments every frontier sweep of ONE generation shares
 ([`_side_cache!`](@ref)); each half-sweep writes only its own, so the parallel halves never
 write the same field.
 """
 mutable struct KLFrames
-    W::Vector{Any}
-    Z::Vector{Any}
-    c::Int
+    left_frames::Vector{Any}
+    right_frames::Vector{Any}
+    root_link::Int
     lenv::Any
     renv::Any
     gen::Int
@@ -44,7 +48,9 @@ mutable struct KLFrames
     eshift::Float64
 end
 
-KLFrames(W, Z, c, lenv, renv, gen) = KLFrames(W, Z, c, lenv, renv, gen, nothing, nothing, 0.0)
+# Frames with no cached environments yet and no energy shift.
+KLFrames(left_frames, right_frames, root_link, lenv, renv, gen) =
+    KLFrames(left_frames, right_frames, root_link, lenv, renv, gen, nothing, nothing, 0.0)
 
 """
 Threads below which the closure keeps its frontier sweeps in sequence. Each sweep already runs
@@ -53,6 +59,7 @@ to gain anything; below that the 2-thread production path stays exactly what it 
 """
 const _FRONTIER_THREADS = 4
 
+# Whether frontier sweeps may run concurrently: requested AND enough threads to gain from it.
 _frontier_parallel(parallel::Bool) = parallel && Threads.nthreads() >= _FRONTIER_THREADS
 
 """
@@ -72,9 +79,9 @@ parts do not depend on it. The two sides are separate fields and are built concu
 """
 function _prime_caches!(fr::KLFrames, psi::SymMPS, mpo, core)
     Fm = _frontier_mps(psi, fr, core)
-    t = Threads.@spawn _side_cache!(fr, Fm, mpo, :right)
+    right_task = Threads.@spawn _side_cache!(fr, Fm, mpo, :right)
     _side_cache!(fr, Fm, mpo, :left)
-    fetch(t)
+    fetch(right_task)
     return fr
 end
 
@@ -86,50 +93,52 @@ generation. ⛔ EVERY FRONTIER OF A GENERATION IS `(W ⊗ Z) core` WITH ONLY THE
 re-gauging `Fm` to site 1 (left half) changes sites `1..c` only: the right stack on links
 `c+1..L+1` and the frame chain `<W[1..i-1]| H |W[1..i-1]>` (the non-enriching sweep's `lch`)
 are the same for every frontier. Rebuilding them per sweep was ~1/3 of a measuring sweep
-(bug4 10x4 D=256 profile, job 17283685). `chain[i]` is the left channels at bond `i` (`i = 1..c`),
-`stack` the right-stack entries on links `>= c+1`; the right half mirrors both (`chain[j]` the
-right channels at bond `j = c..L-1`, `stack` the left-stack entries on links `<= c`).
+(bug4 10x4 D=256 profile, job 17283685). `chain[bond]` is the left channels at `bond = 1..c`,
+`stack` the right-stack entries on links `>= c+1`; the right half mirrors both (`chain[bond]`
+the right channels at `bond = c..L-1`, `stack` the left-stack entries on links `<= c`).
 """
 function _side_cache!(fr::KLFrames, Fm::SymMPS, mpo, side::Symbol)
-    L, c = length(Fm), fr.c
+    site_count, root_link = length(Fm), fr.root_link
     cur = side === :left ? fr.lcache : fr.rcache
     valid = cur !== nothing && cur.gen == fr.gen
     chain = valid ? cur.chain : nothing          # an enriching sweep seeds the chain only
-    E = valid ? cur.stack : nothing
-    (chain !== nothing && E !== nothing) && return (chain, E)
+    env_stack = valid ? cur.stack : nothing
+    (chain !== nothing && env_stack !== nothing) && return (chain, env_stack)
     if chain === nothing
-        chain = Vector{Any}(undef, L - 1)
+        chain = Vector{Any}(undef, site_count - 1)
         ch = boundary_channels(mpo)
         if side === :left
-            for i = 1:c
-                chain[i] = ch
-                i < c && (ch = push_left_channels(ch, mpo, fr.W[i], i))
+            for bond = 1:root_link
+                chain[bond] = ch
+                bond < root_link && (ch = push_left_channels(ch, mpo, fr.left_frames[bond], bond))
             end
         else
-            for j = (L-1):-1:c
-                chain[j] = ch
-                j > c && (ch = push_right_channels(ch, mpo, fr.Z[j], j + 1))
+            for bond = (site_count-1):-1:root_link
+                chain[bond] = ch
+                bond > root_link && (ch = push_right_channels(ch, mpo, fr.right_frames[bond], bond + 1))
             end
         end
     end
-    E = Any[missing for _ = 1:(L+1)]
+    # The opposite side's MPO environments of `Fm` itself: entry `link` is the environment on
+    # that link, `missing` where the half-sweep never reads it.
+    env_stack = Any[missing for _ = 1:(site_count+1)]
     env = nothing
     if side === :left
-        E[L+1] = nothing
-        for k = L:-1:(c+1)
-            env = _mpo_right_step(env, Fm[k], mpo[k])
-            E[k] = env
+        env_stack[site_count+1] = nothing
+        for site = site_count:-1:(root_link+1)
+            env = _mpo_right_step(env, Fm[site], mpo[site])
+            env_stack[site] = env
         end
-        fr.lcache = (gen = fr.gen, chain = chain, stack = E)
+        fr.lcache = (gen = fr.gen, chain = chain, stack = env_stack)
     else
-        E[1] = nothing
-        for i = 1:(c-1)
-            env = _mpo_left_step(env, Fm[i], mpo[i])
-            E[i+1] = env
+        env_stack[1] = nothing
+        for site = 1:(root_link-1)
+            env = _mpo_left_step(env, Fm[site], mpo[site])
+            env_stack[site+1] = env
         end
-        fr.rcache = (gen = fr.gen, chain = chain, stack = E)
+        fr.rcache = (gen = fr.gen, chain = chain, stack = env_stack)
     end
-    return (chain, E)
+    return (chain, env_stack)
 end
 
 """
@@ -146,133 +155,168 @@ struct KrylovFrontier
 end
 
 """
-    frames_from_state(psi, mpo, c) -> KLFrames
+    frames_from_state(psi, mpo, root_link) -> KLFrames
 
-The state's OWN Schmidt frames at root bond `c` -- the subspace every step starts from, before
-any expansion. Used to start a closure from scratch (`include_zero = true`) and by the tests.
+The state's OWN Schmidt frames at root bond `root_link` -- the subspace every step starts from,
+before any expansion. Used to start a closure from scratch (`include_zero = true`) and by the
+tests.
 """
-function frames_from_state(psi::SymMPS, mpo, c::Int)
-    L = length(psi)
-    1 <= c <= L - 1 || throw(ArgumentError("root must be a bond in 1:$(L - 1), got $c"))
-    p = copy(psi)
-    canonical!(p, c)
-    W = Vector{Any}(undef, c)
-    for i = 1:(c-1)
-        W[i] = p[i]
+function frames_from_state(psi::SymMPS, mpo, root_link::Int)
+    site_count = length(psi)
+    1 <= root_link <= site_count - 1 || throw(
+        ArgumentError("root must be a bond in 1:$(site_count - 1), got $root_link"),
+    )
+    # Left frames: the left-canonical sites, closed at the root by the SVD's left isometry.
+    left_gauged = copy(psi)
+    canonical!(left_gauged, root_link)
+    left_frames = Vector{Any}(undef, root_link)
+    for site = 1:(root_link-1)
+        left_frames[site] = left_gauged[site]
     end
-    W[c] = to_concrete(svd(p[c], (1, 2); cutoff = 0.0).U)
-    q = copy(psi)
-    canonical!(q, c + 1)
-    Z = Vector{Any}(undef, L - 1)
-    Z[c] = to_concrete(svd(q[c+1], (1,); cutoff = 0.0).Vd)
-    for j = (c+1):(L-1)
-        Z[j] = q[j+1]
+    left_frames[root_link] = to_concrete(svd(left_gauged[root_link], (1, 2); cutoff = 0.0).U)
+    # Right frames: the right-canonical sites, opened at the root by the SVD's right isometry.
+    right_gauged = copy(psi)
+    canonical!(right_gauged, root_link + 1)
+    right_frames = Vector{Any}(undef, site_count - 1)
+    right_frames[root_link] =
+        to_concrete(svd(right_gauged[root_link+1], (1,); cutoff = 0.0).Vd)
+    for bond = (root_link+1):(site_count-1)
+        right_frames[bond] = right_gauged[bond+1]
     end
     # Frame tags on both ends of every frame link, as the half-sweeps write them.
-    for i = 1:c
-        W[i] = to_concrete(setitag(W[i], 3, _tagW(i)))
-        i < c && (W[i+1] = to_concrete(setitag(W[i+1], 1, _tagW(i))))
+    for site = 1:root_link
+        left_frames[site] = to_concrete(setitag(left_frames[site], 3, _tagW(site)))
+        site < root_link &&
+            (left_frames[site+1] = to_concrete(setitag(left_frames[site+1], 1, _tagW(site))))
     end
-    for j = c:(L-1)
-        Z[j] = to_concrete(setitag(Z[j], 1, _tagZ(j)))
-        j > c && (Z[j-1] = to_concrete(setitag(Z[j-1], 3, _tagZ(j))))
+    for bond = root_link:(site_count-1)
+        right_frames[bond] = to_concrete(setitag(right_frames[bond], 1, _tagZ(bond)))
+        bond > root_link &&
+            (right_frames[bond-1] = to_concrete(setitag(right_frames[bond-1], 3, _tagZ(bond))))
     end
     lenv = boundary_channels(mpo)
-    for i = 1:(c-1)
-        lenv = push_left_channels(lenv, mpo, W[i], i)
+    for site = 1:(root_link-1)
+        lenv = push_left_channels(lenv, mpo, left_frames[site], site)
     end
     renv = boundary_channels(mpo)
-    for j = (L-1):-1:(c+1)
-        renv = push_right_channels(renv, mpo, Z[j], j + 1)
+    for bond = (site_count-1):-1:(root_link+1)
+        renv = push_right_channels(renv, mpo, right_frames[bond], bond + 1)
     end
-    return KLFrames(W, Z, c, lenv, renv, 0)
+    return KLFrames(left_frames, right_frames, root_link, lenv, renv, 0)
 end
 
-"`<W[1..c] | psi>` on the left of the root: `(b_L, link_{c+1})`. A full contraction, any gauge."
-function _overlap_left(psi::SymMPS, W, c::Int)
+"""
+`<left_frames[1..root_link] | psi>` on the left of the root: `(b_L, link_{root_link+1})`. A full
+contraction, any gauge.
+"""
+function _overlap_left(psi::SymMPS, left_frames, root_link::Int)
     AL = nothing
-    for i = 1:c
-        T = AL === nothing ? psi[i] : to_concrete!(contract(AL, (2,), psi[i], (1,)))
-        AL = to_concrete!(contract(W[i]', (1, 2), T, (1, 2)))         # (b_L, link_{i+1})
+    for site = 1:root_link
+        carried = AL === nothing ? psi[site] : to_concrete!(contract(AL, (2,), psi[site], (1,)))
+        # (b_L, link_{site+1})
+        AL = to_concrete!(contract(left_frames[site]', (1, 2), carried, (1, 2)))
     end
     return AL
 end
 
-"`<Z[c..L-1] | psi>` on the right of the root: `(link_{c+1}, b_R)`. A full contraction, any gauge."
-function _overlap_right(psi::SymMPS, Z, c::Int)
+"""
+`<right_frames[root_link..L-1] | psi>` on the right of the root: `(link_{root_link+1}, b_R)`. A
+full contraction, any gauge.
+"""
+function _overlap_right(psi::SymMPS, right_frames, root_link::Int)
     AR = nothing
-    for j = (length(psi)-1):-1:c
-        B = AR === nothing ? psi[j+1] : to_concrete!(contract(psi[j+1], (3,), AR, (1,)))
-        AR = to_concrete!(contract(B, (2, 3), Z[j]', (2, 3)))         # (link_j, b_j)
+    for bond = (length(psi)-1):-1:root_link
+        carried =
+            AR === nothing ? psi[bond+1] : to_concrete!(contract(psi[bond+1], (3,), AR, (1,)))
+        # (link_bond, b_bond)
+        AR = to_concrete!(contract(carried, (2, 3), right_frames[bond]', (2, 3)))
     end
     return AR
 end
 
 """
-    _projection_miss(psi, W, Z, c) -> Float64
+    _projection_miss(psi, left_frames, right_frames, root_link) -> Float64
 
-`||(I - P) psi||` for `P` the projector onto the root space of `W[1..c]`, `Z[c..L-1]`, measured
-DIRECTLY. `I - P = (I - P_L) ⊗ 1 + P_L ⊗ (I - P_R)`, and each side telescopes into orthogonal
-one-site pieces `(1 - W_i W_i') T_i` / `B_j (1 - Z_j' Z_j)` that are formed explicitly, so the
-roundoff floor is ~eps. The difference of squares `||psi||^2 - ||P psi||^2` cancels to
-~sqrt(eps), the size of a tight `tol_basis`. The rest of `psi` beyond each piece enters through
-a square-root factor of its Gram matrix (an SVD's `U S` / `S V'`), so any gauge works.
+`||(I - P) psi||` for `P` the projector onto the root space of `left_frames[1..root_link]`,
+`right_frames[root_link..L-1]`, measured DIRECTLY. `I - P = (I - P_L) ⊗ 1 + P_L ⊗ (I - P_R)`, and
+each side telescopes into orthogonal one-site pieces `(1 - W_i W_i') T_i` / `B_j (1 - Z_j' Z_j)`
+that are formed explicitly, so the roundoff floor is ~eps. The difference of squares
+`||psi||^2 - ||P psi||^2` cancels to ~sqrt(eps), the size of a tight `tol_basis`. The rest of `psi`
+beyond each piece enters through a square-root factor of its Gram matrix (an SVD's `U S` /
+`S V'`), so any gauge works.
 """
-function _projection_miss(psi::SymMPS, W, Z, c::Int)
-    L = length(psi)
-    R = Vector{Any}(undef, L)                    # R[k] R[k]' = Gram of psi[k..L] on link_k
-    for k = L:-1:2
-        T = k == L ? psi[L] : to_concrete!(contract(psi[k], (3,), R[k+1], (1,)))
-        res = svd(T, (1,); cutoff = 0.0)
-        R[k] = to_concrete(res.U * res.S)
+function _projection_miss(psi::SymMPS, left_frames, right_frames, root_link::Int)
+    site_count = length(psi)
+    # right_factor[site] right_factor[site]' = Gram of psi[site..L] on link_site
+    right_factor = Vector{Any}(undef, site_count)
+    for site = site_count:-1:2
+        carried =
+            site == site_count ? psi[site_count] :
+            to_concrete!(contract(psi[site], (3,), right_factor[site+1], (1,)))
+        res = svd(carried, (1,); cutoff = 0.0)
+        right_factor[site] = to_concrete(res.U * res.S)
     end
     miss2 = 0.0
+    # Left side: the part of each carried site outside its left frame, weighted by the rest.
     AL = nothing
-    for i = 1:c
-        T = AL === nothing ? psi[i] : to_concrete!(contract(AL, (2,), psi[i], (1,)))
-        miss2 += norm(to_concrete!(contract(perp_component(W[i], T), (3,), R[i+1], (1,))))^2
-        AL = to_concrete!(contract(W[i]', (1, 2), T, (1, 2)))         # (b_i, link_{i+1})
+    for site = 1:root_link
+        carried = AL === nothing ? psi[site] : to_concrete!(contract(AL, (2,), psi[site], (1,)))
+        outside = perp_component(left_frames[site], carried)
+        miss2 += norm(to_concrete!(contract(outside, (3,), right_factor[site+1], (1,))))^2
+        # (b_site, link_{site+1})
+        AL = to_concrete!(contract(left_frames[site]', (1, 2), carried, (1, 2)))
     end
-    G = Vector{Any}(undef, L - 1)                # G[j]' G[j] = Gram of P_L psi on link_{j+1}
+    # left_factor[bond]' left_factor[bond] = Gram of P_L psi on link_{bond+1}
+    left_factor = Vector{Any}(undef, site_count - 1)
     res = svd(AL, (1,); cutoff = 0.0)
-    G[c] = to_concrete(res.S * res.Vd)
-    for j = (c+1):(L-1)
-        res = svd(to_concrete!(contract(G[j-1], (2,), psi[j], (1,))), (1, 2); cutoff = 0.0)
-        G[j] = to_concrete(res.S * res.Vd)
+    left_factor[root_link] = to_concrete(res.S * res.Vd)
+    for bond = (root_link+1):(site_count-1)
+        res = svd(
+            to_concrete!(contract(left_factor[bond-1], (2,), psi[bond], (1,))),
+            (1, 2);
+            cutoff = 0.0,
+        )
+        left_factor[bond] = to_concrete(res.S * res.Vd)
     end
+    # Right side, inside the left frames: each carried site's part outside its right frame.
     AR = nothing
-    for j = (L-1):-1:c
-        B = AR === nothing ? psi[j+1] : to_concrete!(contract(psi[j+1], (3,), AR, (1,)))
-        miss2 += norm(to_concrete!(contract(G[j], (2,), perp_component_right(Z[j], B), (1,))))^2
-        AR = to_concrete!(contract(B, (2, 3), Z[j]', (2, 3)))         # (link_{j+1}, b_j)
+    for bond = (site_count-1):-1:root_link
+        carried =
+            AR === nothing ? psi[bond+1] : to_concrete!(contract(psi[bond+1], (3,), AR, (1,)))
+        outside = perp_component_right(right_frames[bond], carried)
+        miss2 += norm(to_concrete!(contract(left_factor[bond], (2,), outside, (1,))))^2
+        # (link_{bond+1}, b_bond)
+        AR = to_concrete!(contract(carried, (2, 3), right_frames[bond]', (2, 3)))
     end
     return sqrt(miss2)
 end
 
 "`S = (W ⊗ Z)' psi`, the root coefficients of `P psi` (plan: `project_root`)."
 _project_root(psi::SymMPS, fr::KLFrames) = to_concrete!(
-    contract(_overlap_left(psi, fr.W, fr.c), (2,), _overlap_right(psi, fr.Z, fr.c), (1,)),
+    contract(_overlap_left(psi, fr.left_frames, fr.root_link), (2,), _overlap_right(psi, fr.right_frames, fr.root_link), (1,)),
 )
 
 "`B = P H P` at the root, from the frames' cached environments (plan: `root_generator`)."
 _root_generator(mpo, fr::KLFrames) =
-    shift_h(zero_site_h(mpo, fr.c, fr.lenv, fr.renv, fr.W[fr.c], fr.Z[fr.c]), fr.eshift)
+    shift_h(zero_site_h(mpo, fr.root_link, fr.lenv, fr.renv, fr.left_frames[fr.root_link], fr.right_frames[fr.root_link]), fr.eshift)
 
-_scaled(a::Number, x::Array{<:Number}) = a .* x
-_scaled(a::Number, x) = to_concrete(a * x)
+# `factor * coefficients`: broadcast for the dense test vectors, a concrete tensor otherwise.
+_scaled(factor::Number, coefficients::Array{<:Number}) = factor .* coefficients
+_scaled(factor::Number, coefficients) = to_concrete(factor * coefficients)
 
 """
-    _projected_frontiers(applyB, S0, tau, m) -> [F_1, ..., F_m]
+    _projected_frontiers(apply_generator, root_start, tau, frontier_count) -> Vector
 
-`F_j = (tau^j / j!) B^j S0` by the recursion `F_j = (tau/j) B F_{j-1}`. Generic in the vector
-type (root cores here, plain vectors in the dense unit tests).
+`F_j = (tau^j / j!) B^j root_start` for `j = 1..frontier_count`, by the recursion
+`F_j = (tau/j) B F_{j-1}` with `B` applied by `apply_generator`. Generic in the vector type (root
+cores here, plain vectors in the dense unit tests).
 """
-function _projected_frontiers(applyB, S0, tau::Number, m::Int)
+function _projected_frontiers(apply_generator, root_start, tau::Number, frontier_count::Int)
     Fs = Any[]
-    F = S0
-    for j = 1:m
-        F = _scaled(tau / j, applyB(F))
-        push!(Fs, F)
+    frontier = root_start
+    for degree = 1:frontier_count
+        frontier = _scaled(tau / degree, apply_generator(frontier))
+        push!(Fs, frontier)
     end
     return Fs
 end
@@ -284,14 +328,21 @@ The Galerkin vector `(W ⊗ Z) core` as an MPS on `psi`'s link tags, centre at t
 same assembly `cbe_bug_step!` uses for the evolved core.
 """
 function _frontier_mps(psi::SymMPS, fr::KLFrames, core)
-    L, c = length(psi), fr.c
-    T = Vector{Any}(undef, L)
-    for i = 1:(c-1)
-        T[i] = _relink(fr.W[i], psi[i].inds[1].itags, psi[i].inds[3].itags)
+    site_count, root_link = length(psi), fr.root_link
+    site_tensors = Vector{Any}(undef, site_count)
+    for site = 1:(root_link-1)
+        site_tensors[site] =
+            _relink(fr.left_frames[site], psi[site].inds[1].itags, psi[site].inds[3].itags)
     end
-    T[c] = _relink(to_concrete(fr.W[c] * core), psi[c].inds[1].itags, psi[c].inds[3].itags)
-    for j = c:(L-1)
-        T[j+1] = _relink(fr.Z[j], psi[j+1].inds[1].itags, psi[j+1].inds[3].itags)
+    # The root core sits on the last left frame.
+    site_tensors[root_link] = _relink(
+        to_concrete(fr.left_frames[root_link] * core),
+        psi[root_link].inds[1].itags,
+        psi[root_link].inds[3].itags,
+    )
+    for bond = root_link:(site_count-1)
+        site_tensors[bond+1] =
+            _relink(fr.right_frames[bond], psi[bond+1].inds[1].itags, psi[bond+1].inds[3].itags)
     end
-    return SymMPS(T, c)
+    return SymMPS(site_tensors, root_link)
 end

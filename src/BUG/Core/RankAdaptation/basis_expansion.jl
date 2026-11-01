@@ -16,23 +16,23 @@ A basis-selection (enrichment) strategy for the bond frames of a BUG sweep. A su
 abstract type BasisExpansion end
 
 """
-    expand_frame(strategy, f, mpo, i, lch, rch, side; kwargs...) -> CBEExpansion
+    expand_frame(strategy, frame, mpo, bond, lch, rch, side; kwargs...) -> CBEExpansion
 
-`side`'s frame of the bond frame `f` at bond `i` (environments `lch`, `rch`) grown by the
+`side`'s frame of the bond frame `frame` at bond `bond` (environments `lch`, `rch`) grown by the
 strategy. The keywords are the step's expansion settings (allocation, ledger, RNG, work ceiling,
 counters); the result carries the grown frames and the number of directions admitted.
 """
 function expand_frame end
 
 """
-    sketch_closures(strategy, f, build_action) -> (sketch_left, sketch_right)
+    sketch_closures(strategy, frame, build_action) -> (sketch_left, sketch_right)
 
-The two sketch closures of bond frame `f` on the two-site action that `build_action()` forms.
+The two sketch closures of bond frame `frame` on the two-site action that `build_action()` forms.
 """
 function sketch_closures end
 
 """
-    folded_sketch_closures(strategy, f, mpo, i, lch, rch) -> (sketch_left, sketch_right)
+    folded_sketch_closures(strategy, frame, mpo, bond, lch, rch) -> (sketch_left, sketch_right)
 
 As [`sketch_closures`](@ref), with the probe folded into the environment contractions so the
 two-site action is never formed.
@@ -40,8 +40,9 @@ two-site action is never formed.
 function folded_sketch_closures end
 
 """
-    sampled_leak(strategy, f, sketch_left, sketch_right, side, n, rng) -> Float64
+    sampled_leak(strategy, frame, sketch_left, sketch_right, side, probe_count, rng) -> Float64
 
-An estimate, from `n` probe columns, of how much of the two-site action `side`'s frame misses.
+An estimate, from `probe_count` probe columns, of how much of the two-site action `side`'s frame
+misses.
 """
 function sampled_leak end

@@ -27,12 +27,13 @@ function cbe_bug_midpoint_step!(psi::SymMPS, mpo::MPO, tau::ComplexF64; kwargs..
     rfin = info2.ledger.r_final            # the PREDICTOR's rank is uncompressed, not final
     # Both stages sweep every bond; say which visit each per-bond entry is.
     for (lg, st) in ((info1.ledger, 1), (info2.ledger, 2))
-        lg.bond_log = Any[merge(e, (stage = st,)) for e in lg.bond_log]
+        lg.bond_log = Any[merge(entry, (stage = st,)) for entry in lg.bond_log]
     end
     merge_ledger!(info2.ledger, info1.ledger)
     info2.ledger.r_final = rfin
     return info2
 end
 
+# Any numeric step: promote `tau` to complex and take the method above.
 cbe_bug_midpoint_step!(psi::SymMPS, mpo::MPO, tau::Number; kwargs...) =
     cbe_bug_midpoint_step!(psi, mpo, ComplexF64(tau); kwargs...)

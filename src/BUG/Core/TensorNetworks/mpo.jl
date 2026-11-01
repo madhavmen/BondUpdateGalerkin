@@ -1,17 +1,19 @@
-# MPO storage: the operator as one rank-4 tensor per site with fused virtual legs, on-site sums, and
-# the exact MPO-MPS product.
+# MPO storage: the operator as one rank-4 tensor per site with fused virtual legs; on-site sums,
+# term-list MPOs and MPO sums; the exact MPO-MPS product, its compressed form and the global Krylov
+# states; and two-site bond gates.
 #
 # Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/operators/mpo.jl (`MPO`, the automaton blocks,
-# `onsite_mpo`) and operators/mpo_apply.jl (`mpo_product`). `onsite_mpo` takes the local identity
-# `Iloc` as a required keyword: the spin-1/2 default lived in a model's local space, which BUG may not
-# reference. `mpo_from_terms` and `mpo_sum` move with their first callers (the XXZ model and the
-# open-system generators), `apply_mpo` with the truncation it compresses by.
-# The leg and prime conventions are load-bearing: a wrong prime does not throw, it traces the wrong pair.
+# `onsite_mpo`, `mpo_from_terms`, `mpo_sum`), operators/mpo_apply.jl (`mpo_product`,
+# `apply_factor`, `apply_mpo`) and src/BondUpdateBUG/gates.jl (`apply_gate`). `onsite_mpo` takes the
+# local identity `Iloc` as a required keyword: the spin-1/2 default lived in a model's local space,
+# which BUG may not reference.
+# The leg and prime conventions are load-bearing: a wrong prime does not throw, it traces the wrong
+# pair.
 
 """
     MPO(W)
 
-An operator as a matrix product operator, one rank-4 tensor per site with legs
+An operator as a matrix product operator, one rank-4 tensor per site (field `W`) with legs
 `(w_l, s_ket, s_bra, w_r)`. The boundary virtual legs of `W[1]` and `W[end]` are dim 1, from
 trimming, so no separate boundary vector is carried.
 
@@ -22,87 +24,96 @@ struct MPO
     W::Vector{Any}
 end
 
+# Vector-like access to the site tensors.
 Base.length(mpo::MPO) = length(mpo.W)
-Base.getindex(mpo::MPO, i::Int) = mpo.W[i]
+Base.getindex(mpo::MPO, site::Int) = mpo.W[site]
 
-"Virtual (MPO bond) dimension on each link `0 … L`."
+"Virtual (MPO bond) dimension on each link `0 … length(mpo)`."
 mpo_virtual_dims(mpo::MPO) = vcat(
-    [sum(d for (_, d) in mpo[1].spaces[1]; init = 0)],
-    [sum(d for (_, d) in mpo[i].spaces[4]; init = 0) for i = 1:length(mpo)],
+    [sum(block_dim for (_, block_dim) in mpo[1].spaces[1]; init = 0)],
+    [
+        sum(block_dim for (_, block_dim) in mpo[site].spaces[4]; init = 0) for
+        site = 1:length(mpo)
+    ],
 )
 
-# Each automaton row is written out literally and `oplus` direct-sums them, inferring the zero blocks
-# from the row and column spaces. The op-leg carries the charge (under `:U1` the `Sp` leg is its
-# channel's sector; under `:SU2` the S=1 irrep), so nothing here is symmetry-specific.
+# Each automaton row is written out literally and `oplus` direct-sums them, inferring the zero
+# blocks from the row and column spaces. The op-leg carries the charge (under `:U1` the `Sp` leg is
+# its channel's sector; under `:SU2` the S=1 irrep), so nothing here is symmetry-specific.
 
-"Retag an operator's two site legs onto site `i`, leaving any op-leg alone."
-_mpo_retag(O, i::Int) = to_concrete(setitag(setitag(O, 1, "S,$i"), 2, "S,$i"))
+"Retag an operator's two site legs onto site `site`, leaving any op-leg alone."
+_mpo_retag(operator, site::Int) =
+    to_concrete(setitag(setitag(operator, 1, "S,$site"), 2, "S,$site"))
 
-"The ket-facing and bra-facing site legs of `O`, found by ARROW: a plain operator has the
-ket leg at 1, an adjoint (`Sp'`) at 2. Hard-coding leg 1 breaks on the adjoint half of
+"The ket-facing and bra-facing site legs of `operator`, found by ARROW: a plain operator has
+the ket leg at 1, an adjoint (`Sp'`) at 2. Hard-coding leg 1 breaks on the adjoint half of
 every XY term."
-function _op_site_legs(O)
-    ket = O.inds[1].dir == '+' ? 1 : 2
+function _op_site_legs(operator)
+    ket = operator.inds[1].dir == '+' ? 1 : 2
     return ket, 3 - ket
 end
 
 """
-    _mpo_block(O, i, tl, tr, side) -> TLArray
+    _mpo_block(operator, site, tl, tr, side) -> TLArray
 
-One entry of the automaton matrix, as a rank-4 `(w_l, s_ket, s_bra, w_r)` tensor.
+One entry of the automaton matrix, as a rank-4 `(w_l, s_ket, s_bra, w_r)` tensor: `operator`
+on site `site`, its virtual legs tagged `tl` and `tr`.
 
 `side` says which virtual leg the operator's op-leg becomes: `:left` for the left half of
 a term (op-leg '-' → `w_r`), `:right` for the right half (op-leg '+' → `w_l`), `:none`
 for an operator without one (both virtual legs trivial). A rank-2 operator is `:none`
 whatever `side` says, which is how `Sz Sz` and the whole `:none` symmetry mode work.
 """
-function _mpo_block(O, i::Int, tl::AbstractString, tr::AbstractString, side::Symbol)
-    B = _mpo_retag(O, i)
-    ket, bra = _op_site_legs(B)
-    if length(B.inds) == 2 || side === :none
-        length(B.inds) == 2 || throw(
+function _mpo_block(operator, site::Int, tl::AbstractString, tr::AbstractString, side::Symbol)
+    block = _mpo_retag(operator, site)
+    ket, bra = _op_site_legs(block)
+    if length(block.inds) == 2 || side === :none
+        length(block.inds) == 2 || throw(
             ArgumentError(
-                "_mpo_block: side=:none needs a rank-2 operator, got rank $(length(B.inds))",
+                "_mpo_block: side=:none needs a rank-2 operator, got rank $(length(block.inds))",
             ),
         )
-        B = to_concrete(permutedims(B, (ket, bra)))
-        return to_concrete(addSingleton(B, (1, 4); itag = (tl, tr), dir = ('+', '-')))
+        # No op-leg: both virtual legs are dim-1 singletons.
+        block = to_concrete(permutedims(block, (ket, bra)))
+        return to_concrete(addSingleton(block, (1, 4); itag = (tl, tr), dir = ('+', '-')))
     elseif side === :left
-        B = to_concrete(permutedims(B, (ket, bra, 3)))            # (s_ket, s_bra, op)
-        B = to_concrete(addSingleton(B, (1,); itag = tl, dir = '+'))
-        return to_concrete(setitag(B, 4, tr))                     # op-leg becomes w_r
+        block = to_concrete(permutedims(block, (ket, bra, 3)))       # (s_ket, s_bra, op)
+        block = to_concrete(addSingleton(block, (1,); itag = tl, dir = '+'))
+        return to_concrete(setitag(block, 4, tr))                    # op-leg becomes w_r
     elseif side === :right
-        B = to_concrete(permutedims(B, (3, ket, bra)))             # (op, s_ket, s_bra)
-        B = to_concrete(addSingleton(B, (4,); itag = tr, dir = '-'))
-        return to_concrete(setitag(B, 1, tl))                      # op-leg becomes w_l
+        block = to_concrete(permutedims(block, (3, ket, bra)))       # (op, s_ket, s_bra)
+        block = to_concrete(addSingleton(block, (4,); itag = tr, dir = '-'))
+        return to_concrete(setitag(block, 1, tl))                    # op-leg becomes w_l
     else
         throw(ArgumentError("_mpo_block: side must be :left, :right or :none, got $side"))
     end
 end
 
 """
-    onsite_mpo(L, ops; Iloc) -> MPO
+    onsite_mpo(site_count, ops; Iloc) -> MPO
 
-`Σ_i ops[i]` for rank-2 (charge-neutral) on-site operators, virtual dimension 2. `Iloc` is the
-local identity of the site space the operators act on.
+`Σ_i ops[i]` for rank-2 (charge-neutral) on-site operators on `site_count` sites, virtual
+dimension 2. `Iloc` is the local identity of the site space the operators act on.
 """
-function onsite_mpo(L::Int, ops::AbstractVector; Iloc)
-    L >= 2 || throw(ArgumentError("onsite_mpo needs at least two sites, got $L"))
-    length(ops) == L ||
-        throw(DimensionMismatch("onsite_mpo got $(length(ops)) operators for $L sites"))
-    all(length(O.inds) == 2 for O in ops) ||
+function onsite_mpo(site_count::Int, ops::AbstractVector; Iloc)
+    site_count >= 2 ||
+        throw(ArgumentError("onsite_mpo needs at least two sites, got $site_count"))
+    length(ops) == site_count || throw(
+        DimensionMismatch("onsite_mpo got $(length(ops)) operators for $site_count sites"),
+    )
+    all(length(operator.inds) == 2 for operator in ops) ||
         throw(ArgumentError("onsite_mpo: every operator must be rank 2 (charge-neutral)"))
     Ws = Any[]
-    for i = 1:L
-        tl, tr = "W,$(i - 1)", "W,$i"
-        Iid = _mpo_block(Iloc, i, tl, tr, :none)
-        O = _mpo_block(ops[i], i, tl, tr, :none)
+    for site = 1:site_count
+        tl, tr = "W,$(site - 1)", "W,$site"
+        Iid = _mpo_block(Iloc, site, tl, tr, :none)
+        operator_block = _mpo_block(ops[site], site, tl, tr, :none)
         # rows/columns: 1 = id, 2 = done; the operator is the `id -> done` entry at EVERY site.
-        # Filled by index: an `Any[Iid O]` literal concatenates the TLArrays instead.
+        # Filled by index: an `Any[Iid operator_block]` literal concatenates the TLArrays instead.
         mat = Matrix{Any}(nothing, 2, 2)
-        mat[1, 1], mat[1, 2], mat[2, 2] = Iid, O, Iid
-        i == 1 && (mat = reshape(mat[1, :], 1, 2))
-        i == L && (mat = reshape(mat[:, 2], 2, 1))
+        mat[1, 1], mat[1, 2], mat[2, 2] = Iid, operator_block, Iid
+        site == 1 && (mat = reshape(mat[1, :], 1, 2))
+        site == site_count && (mat = reshape(mat[:, 2], 2, 1))
         push!(Ws, to_concrete(oplus(mat, (1, 4))))
     end
     return MPO(Ws)
@@ -118,76 +129,104 @@ A charged MPO (a jump changes the U(1) sector) has a charged right boundary leg,
 fuses into the state's own, so the result carries the shifted total charge.
 """
 function mpo_product(mpo::MPO, psi::SymMPS)
-    L = length(psi)
-    length(mpo) == L || throw(DimensionMismatch("MPO has $(length(mpo)) sites, state has $L"))
-    out = Vector{Any}(undef, L)
-    F = nothing
-    for i = 1:L
-        T = to_concrete!(contract(mpo[i], (2,), psi[i], (2,)))       # (w_l, s, w_r, ℓ_l, ℓ_r)
-        T = if i == 1
+    site_count = length(psi)
+    length(mpo) == site_count ||
+        throw(DimensionMismatch("MPO has $(length(mpo)) sites, state has $site_count"))
+    out = Vector{Any}(undef, site_count)
+    fusion = nothing
+    for site = 1:site_count
+        # (w_l, s, w_r, ℓ_l, ℓ_r)
+        product_tensor = to_concrete!(contract(mpo[site], (2,), psi[site], (2,)))
+        product_tensor = if site == 1
             # the trimmed `w_l` of site 1 is the dim-1 vacuum; the state's own boundary stays
-            to_concrete(permutedims(to_concrete(deleteSingleton(T, 1)), (3, 1, 4, 2)))
+            to_concrete(
+                permutedims(to_concrete(deleteSingleton(product_tensor, 1)), (3, 1, 4, 2)),
+            )
         else
-            # undo the previous site's fusion on (ℓ_l, w_l): F'F is the identity on the pair
-            to_concrete(permutedims(to_concrete!(contract(F', (1, 2), T, (4, 1))), (1, 2, 4, 3)))
+            # undo the previous site's fusion on (ℓ_l, w_l): F'F is the identity on the pair,
+            # with F = fusion
+            to_concrete(
+                permutedims(
+                    to_concrete!(contract(fusion', (1, 2), product_tensor, (4, 1))),
+                    (1, 2, 4, 3),
+                ),
+            )
         end                                                           # (ℓ_l, s, ℓ_r, w_r)
         # Placeholder tag: the fused link must not share `L,i+1` with the leg it replaces.
-        F = to_concrete(getIdentity((T, 3), (T, 4); itag = "Jf,$(i + 1)"))
-        out[i] = to_concrete!(contract(T, (3, 4), F, (1, 2)))        # (ℓ_l, s, fused)
+        fusion = to_concrete(
+            getIdentity((product_tensor, 3), (product_tensor, 4); itag = "Jf,$(site + 1)"),
+        )
+        # (ℓ_l, s, fused)
+        out[site] = to_concrete!(contract(product_tensor, (3, 4), fusion, (1, 2)))
     end
-    for i = 1:L
-        A = to_concrete(setitag(out[i], 3, "L,$(i + 1)"))
-        out[i] = i == 1 ? A : to_concrete(setitag(A, 1, "L,$i"))
+    # Give the fused links their final "L,i" tags (site 1 keeps its left boundary tag).
+    for site = 1:site_count
+        site_tensor = to_concrete(setitag(out[site], 3, "L,$(site + 1)"))
+        out[site] = site == 1 ? site_tensor : to_concrete(setitag(site_tensor, 1, "L,$site"))
     end
-    return SymMPS(out, L)
+    return SymMPS(out, site_count)
 end
 
 # ── from BUG-Julia@b155550:src/RSVDCBEBondUpdate/operators/mpo.jl ──
 
 "`side` for one half of a term: rank-3 operators put their op-leg on the virtual leg."
-_side(O, s::Symbol) = length(O.inds) == 3 ? s : :none
+_side(operator, half::Symbol) = length(operator.inds) == 3 ? half : :none
 
 """
-    mpo_from_terms(h::XXZChain; Iloc) -> MPO
+    mpo_from_terms(hamiltonian::XXZChain; Iloc) -> MPO
 
-The MPO of the same Hamiltonian `h` represents as a term list, so the two paths cannot
+The MPO of the same Hamiltonian `hamiltonian` represents as a term list, so the two paths cannot
 disagree about `J`, `delta`, a coefficient or Telum's operator normalisation: the blocks
-ARE `h.terms`. `Iloc` is the local identity of the site space, as for [`onsite_mpo`](@ref)
-(the model that built `h` supplies it).
+ARE `hamiltonian.terms`. `Iloc` is the local identity of the site space, as for
+[`onsite_mpo`](@ref) (the model that built `hamiltonian` supplies it).
 
 The coefficient is applied once, on the closing (right) half of each term -- exactly where
 `push_left_channels` applies it.
 """
-function mpo_from_terms(h::XXZChain; Iloc)
-    L, terms = length(h), h.terms
-    n = length(terms)
+function mpo_from_terms(hamiltonian::XXZChain; Iloc)
+    site_count, terms = length(hamiltonian), hamiltonian.terms
+    term_count = length(terms)
 
+    # Automaton states: 1 = id, 1 + term_index = inside that term, term_count + 2 = done.
     Ws = Any[]
-    for i = 1:L
-        tl, tr = "W,$(i - 1)", "W,$i"
-        Iid = _mpo_block(Iloc, i, tl, tr, :none)
+    for site = 1:site_count
+        tl, tr = "W,$(site - 1)", "W,$site"
+        Iid = _mpo_block(Iloc, site, tl, tr, :none)
         # A zero block with the SAME spaces as `Iid`; `empty_tlarray` will not do, it
         # returns EMPTY space lists and the matrix oplus then cannot infer the column.
         Znil = to_concrete(0.0 * Iid)
-        mat = Matrix{Any}(nothing, n + 2, n + 2)
-        i < L && (mat[1, 1] = Iid)                       # transport the identity
-        i > 1 && (mat[n+2, n+2] = Iid)               # ... on the far side of a term
-        for t = 1:n
-            i < L &&
-                (mat[1, 1+t] = _mpo_block(terms[t].left, i, tl, tr, _side(terms[t].left, :left)))
-            i > 1 && (
-                mat[1+t, n+2] = to_concrete(
-                    terms[t].coeff *
-                    _mpo_block(terms[t].right, i, tl, tr, _side(terms[t].right, :right)),
+        mat = Matrix{Any}(nothing, term_count + 2, term_count + 2)
+        site < site_count && (mat[1, 1] = Iid)              # transport the identity
+        site > 1 && (mat[term_count+2, term_count+2] = Iid) # ... on the far side of a term
+        for term_index = 1:term_count
+            # Open the term with its left half, close it with its (weighted) right half.
+            site < site_count && (
+                mat[1, 1+term_index] = _mpo_block(
+                    terms[term_index].left,
+                    site,
+                    tl,
+                    tr,
+                    _side(terms[term_index].left, :left),
+                )
+            )
+            site > 1 && (
+                mat[1+term_index, term_count+2] = to_concrete(
+                    terms[term_index].coeff * _mpo_block(
+                        terms[term_index].right,
+                        site,
+                        tl,
+                        tr,
+                        _side(terms[term_index].right, :right),
+                    ),
                 )
             )
         end
-        if i == 1
-            mat = reshape(mat[1, :], 1, n + 2)           # the `id` row only
-            mat[1, n+2] = Znil                         # ... and it cannot be `done` yet
-        elseif i == L
-            mat = reshape(mat[:, n+2], n + 2, 1)       # the `done` column only
-            mat[1, 1] = Znil                             # ... and nothing may stay `id`
+        if site == 1
+            mat = reshape(mat[1, :], 1, term_count + 2)             # the `id` row only
+            mat[1, term_count+2] = Znil                             # ... and it cannot be `done`
+        elseif site == site_count
+            mat = reshape(mat[:, term_count+2], term_count + 2, 1)  # the `done` column only
+            mat[1, 1] = Znil                                        # ... and nothing may stay `id`
         end
         push!(Ws, to_concrete(oplus(mat, (1, 4))))
     end
@@ -195,65 +234,72 @@ function mpo_from_terms(h::XXZChain; Iloc)
 end
 
 """
-    mpo_sum(A, B; a = 1, b = 1) -> MPO
+    mpo_sum(first_mpo, second_mpo; a = 1, b = 1) -> MPO
 
-`a A + b B` as one MPO: block-diagonal virtual legs, the end sites concatenated. Both must act on
-the same site legs; the scalars sit on site 1. Every tensor is complex, as `b` may be.
+`a * first_mpo + b * second_mpo` as one MPO: block-diagonal virtual legs, the end sites
+concatenated. Both must act on the same site legs; the scalars sit on site 1. Every tensor is
+complex, as `b` may be.
 """
-function mpo_sum(A::MPO, B::MPO; a::Number = 1.0, b::Number = 1.0)
-    L = length(A)
-    length(B) == L || throw(DimensionMismatch("mpo_sum: $L sites against $(length(B))"))
-    L >= 2 || throw(ArgumentError("mpo_sum needs at least two sites, got $L"))
+function mpo_sum(first_mpo::MPO, second_mpo::MPO; a::Number = 1.0, b::Number = 1.0)
+    site_count = length(first_mpo)
+    length(second_mpo) == site_count || throw(
+        DimensionMismatch("mpo_sum: $site_count sites against $(length(second_mpo))"),
+    )
+    site_count >= 2 ||
+        throw(ArgumentError("mpo_sum needs at least two sites, got $site_count"))
     Ws = Any[]
-    for i = 1:L
-        sa, sb = i == 1 ? (a, b) : (1, 1)
-        Ai = to_concrete(ComplexF64(sa) * A[i])
-        Bi = to_concrete(ComplexF64(sb) * B[i])
-        W = if i == 1 || i == L
-            oplus(Any[Ai, Bi], (i == 1 ? 4 : 1,))
+    for site = 1:site_count
+        sa, sb = site == 1 ? (a, b) : (1, 1)
+        Ai = to_concrete(ComplexF64(sa) * first_mpo[site])
+        Bi = to_concrete(ComplexF64(sb) * second_mpo[site])
+        # End sites: concatenate along the one non-trivial virtual leg; interior sites: block
+        # diagonal on both virtual legs.
+        summed = if site == 1 || site == site_count
+            oplus(Any[Ai, Bi], (site == 1 ? 4 : 1,))
         else
             mat = Matrix{Any}(nothing, 2, 2)
             mat[1, 1], mat[2, 2] = Ai, Bi
             oplus(mat, (1, 4))
         end
-        push!(Ws, to_concrete(W))
+        push!(Ws, to_concrete(summed))
     end
     return MPO(Ws)
 end
 
 """
-    no_jump_mpo(H, Q) -> MPO
+    no_jump_mpo(hamiltonian, loss_operator) -> MPO
 
-`H_eff = H - (i/2) Q`, so `tau = -im*dt` integrates the no-jump equation `dψ/dt = Gψ`,
-`G = -iH - Q/2`, with `Q = Σ_μ L_μ' L_μ` (the caller's MPO, positive semidefinite). Not Hermitian:
-pass `hermitian = false` to `cbe_bug_step!` / `tdvp2_step!`, since Lanczos on it returns a wrong
-vector without an error.
+`H_eff = H - (i/2) Q` with `H = hamiltonian` and `Q = loss_operator`, so `tau = -im*dt`
+integrates the no-jump equation `dψ/dt = Gψ`, `G = -iH - Q/2`, with `Q = Σ_μ L_μ' L_μ` (the
+caller's MPO, positive semidefinite). Not Hermitian: pass `hermitian = false` to `cbe_bug_step!` /
+`tdvp2_step!`, since Lanczos on it returns a wrong vector without an error.
 """
-no_jump_mpo(H::MPO, Q::MPO) = mpo_sum(H, Q; b = -0.5im)
+no_jump_mpo(hamiltonian::MPO, loss_operator::MPO) = mpo_sum(hamiltonian, loss_operator; b = -0.5im)
 
 # ── from BUG-Julia@b155550:src/RSVDCBEBondUpdate/operators/mpo_apply.jl ──
 
-"`F psi`, exact and not canonical: an `MPO` ([`mpo_product`](@ref)). The `SiteOp` method moves
-with the jump channels (QMB, PR 6)."
-factor_product(F::MPO, psi::SymMPS) = mpo_product(F, psi)
+"`factor psi`, exact and not canonical: an `MPO` ([`mpo_product`](@ref)). The `SiteOp` method
+moves with the jump channels (QMB, PR 6)."
+factor_product(factor::MPO, psi::SymMPS) = mpo_product(factor, psi)
 
 """
-    apply_factor(F, psi; tol_trunc = 0.0, maxdim = 10_000, root = L ÷ 2 + 1) -> (SymMPS, discarded)
+    apply_factor(factor, psi; tol_trunc = 0.0, maxdim = 10_000, root = length(psi) ÷ 2 + 1)
+        -> (SymMPS, discarded)
 
-[`factor_product`](@ref), gauged (a right-to-left sweep from site `L` makes every site an isometry,
-whatever the product's gauge) and compressed once by `truncate_recursive!` at relative discarded
-norm `tol_trunc` and rank `maxdim` (the step's own compression rule), centre `root`. Returns the
-state and its relative discarded norm. A product that is exactly zero (a jump that annihilates every
-component) is refused: its probability is zero, so it can never be drawn.
+[`factor_product`](@ref), gauged (a right-to-left sweep from the last site makes every site an
+isometry, whatever the product's gauge) and compressed once by `truncate_recursive!` at relative
+discarded norm `tol_trunc` and rank `maxdim` (the step's own compression rule), centre `root`.
+Returns the state and its relative discarded norm. A product that is exactly zero (a jump that
+annihilates every component) is refused: its probability is zero, so it can never be drawn.
 """
 function apply_factor(
-    F,
+    factor,
     psi::SymMPS;
     tol_trunc::Float64 = 0.0,
     maxdim::Int = 10_000,
     root::Int = length(psi) ÷ 2 + 1,
 )
-    phi = factor_product(F, psi)
+    phi = factor_product(factor, psi)
     real(overlap(phi, phi)) > 0 || throw(
         ArgumentError(
             "apply_factor: the product is exactly zero (the operator annihilates the state)",
@@ -269,24 +315,25 @@ end
 apply_mpo(mpo::MPO, psi::SymMPS; kw...) = apply_factor(mpo, psi; kw...)
 
 """
-    global_krylov_states(mpo, psi, m; tol_trunc = 1e-13, maxdim = 10_000) -> Vector{SymMPS}
+    global_krylov_states(mpo, psi, krylov_count; tol_trunc = 1e-13, maxdim = 10_000)
+        -> Vector{SymMPS}
 
-`mpo^j psi` for `j = 1..m`, each by [`apply_mpo`](@ref) from the previous one and normalised: the
-global Krylov vectors, to pass as `cbe_bug_step!(...; keep_states)`. From a U(1) product state an
-order-`p` step's closure cannot see the long-range terms of a nonlocal generator (dissipative
-plan U10: both legs of `S⁺_a S⁻_b` leave their frames' sectors, and every two-site window projects
-that away), so `mpo^p psi` is missing from the root space unless it is kept (dt5m: one-step slope
-2.7 -> 3.7, global error /2.7-18; keeping them on later steps changes nothing).
+`mpo^j psi` for `j = 1..krylov_count`, each by [`apply_mpo`](@ref) from the previous one and
+normalised: the global Krylov vectors, to pass as `cbe_bug_step!(...; keep_states)`. From a U(1)
+product state an order-`p` step's closure cannot see the long-range terms of a nonlocal generator
+(dissipative plan U10: both legs of `S⁺_a S⁻_b` leave their frames' sectors, and every two-site
+window projects that away), so `mpo^p psi` is missing from the root space unless it is kept (dt5m:
+one-step slope 2.7 -> 3.7, global error /2.7-18; keeping them on later steps changes nothing).
 """
 function global_krylov_states(
     mpo::MPO,
     psi::SymMPS,
-    m::Int;
+    krylov_count::Int;
     tol_trunc::Float64 = 1e-13,
     maxdim::Int = 10_000,
 )
     ks, cur = SymMPS[], psi
-    for _ = 1:m
+    for _ = 1:krylov_count
         nxt, _ = apply_mpo(mpo, cur; tol_trunc = tol_trunc, maxdim = maxdim)
         canonical!(nxt, 1)
         nxt[1] = to_concrete(nxt[1] / norm(nxt[1]))
@@ -309,9 +356,9 @@ end
 # and a raw `Itag == String` comparison would reject the very tag that built it.
 # `Itag` applies the normalisation `setitag` uses (the legacy code tagged a local identity, which
 # lives in QMB).
-_site_tag(x::TLIndex) = x.itags
-_site_tag(x::AbstractString) = Itag(x)
-_site_tag(x) = x
+_site_tag(site_leg::TLIndex) = site_leg.itags
+_site_tag(site_leg::AbstractString) = Itag(site_leg)
+_site_tag(site_leg) = site_leg
 
 """
     apply_gate(gate, theta, site_l, site_r) -> TLArray

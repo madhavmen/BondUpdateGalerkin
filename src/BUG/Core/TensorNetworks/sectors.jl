@@ -9,7 +9,8 @@
 # ── charge arithmetic ───────────────────────────────────────────────────────
 
 "Per-symmetry dual (charge negation) of a full sector label."
-dual_charge(syms, q) = ntuple(n -> get_dualq(syms[n], q[n]), length(syms))
+dual_charge(syms, charge) =
+    ntuple(symmetry_index -> get_dualq(syms[symmetry_index], charge[symmetry_index]), length(syms))
 
 """
     add_charge(syms, qa, qb)
@@ -20,11 +21,12 @@ so use [`reachable_sectors`](@ref), which delegates to Telum's own
 `getIdentity` and handles both cases.
 """
 function add_charge(syms, qa, qb)
-    return ntuple(length(syms)) do n
-        s = syms[n]
-        isabelian(s) ||
-            throw(ArgumentError("add_charge is abelian-only; use reachable_sectors for $(s)"))
-        (add_qn(s, qa[n][1], qb[n][1]),)
+    return ntuple(length(syms)) do symmetry_index
+        group = syms[symmetry_index]
+        isabelian(group) ||
+            throw(ArgumentError("add_charge is abelian-only; use reachable_sectors for $(group)"))
+        # An abelian label is a one-element tuple per symmetry: fuse the two and rewrap.
+        (add_qn(group, qa[symmetry_index][1], qb[symmetry_index][1]),)
     end
 end
 
@@ -41,11 +43,11 @@ function fuse_spaces(syms, space_a, dir_a::Char, space_b, dir_b::Char)
     for (qa, da) in space_a, (qb, db) in space_b
         ca = dir_a == '+' ? dual_charge(syms, qa) : qa
         cb = dir_b == '+' ? dual_charge(syms, qb) : qb
-        q = dual_charge(syms, add_charge(syms, ca, cb))
-        haskey(acc, q) || push!(order, q)
-        acc[q] = get(acc, q, 0) + da * db
+        fused_charge = dual_charge(syms, add_charge(syms, ca, cb))
+        haskey(acc, fused_charge) || push!(order, fused_charge)
+        acc[fused_charge] = get(acc, fused_charge, 0) + da * db
     end
-    return [(q, acc[q]) for q in order]
+    return [(fused_charge, acc[fused_charge]) for fused_charge in order]
 end
 
 """
@@ -64,16 +66,19 @@ Element budget of the memo. The key holds the legs' exact spaces, which an adapt
 nearly every step, so an unbounded memo grows with the run (dm7a 17541077, B1 L = 20 BUG, 107
 steps: memo 8 GB, live heap 8.7 GB, RSS 12.3 GB unbounded; RSS 5.0 GB bounded, results bitwise
 equal). An insert that would pass the budget empties the memo first; within a step the same legs
-recur, so the reuse the memo exists for survives. `nothing` = unbounded (before 2026-10-27). 2^28 elements (2-4 GB) holds one
-step's legs at D ~ 1024, d = 4 (~200 keys of up to ~6e5 elements), so a step does not thrash it.
+recur, so the reuse the memo exists for survives. `nothing` = unbounded (before 2026-10-27).
+2^28 elements (2-4 GB) holds one step's legs at D ~ 1024, d = 4 (~200 keys of up to ~6e5
+elements), so a step does not thrash it.
 """
 const _FUSION_BUDGET = Ref{Union{Nothing,Int}}(2^28)
 
 "Set the memo's element budget (`nothing` = unbounded); returns the previous one."
-function set_fusion_budget!(n::Union{Nothing,Integer})
-    n === nothing || n > 0 || throw(ArgumentError("fusion budget must be positive, got $n"))
+function set_fusion_budget!(budget::Union{Nothing,Integer})
+    budget === nothing ||
+        budget > 0 ||
+        throw(ArgumentError("fusion budget must be positive, got $budget"))
     old = _FUSION_BUDGET[]
-    _FUSION_BUDGET[] = n === nothing ? nothing : Int(n)
+    _FUSION_BUDGET[] = budget === nothing ? nothing : Int(budget)
     return old
 end
 
@@ -100,18 +105,26 @@ function clear_fusion_cache!()
     return nothing
 end
 
-_leg_key(t, l::Int) =
-    (t.spaces[l], t.inds[l].dir, string(t.inds[l].itags), t.inds[l].plev, t.inds[l].lock)
+# The memo key of one leg of `tensor`: everything `fusion_basis` reads off it (spaces, arrow, tags,
+# prime level, lock), as a hashable tuple.
+_leg_key(tensor, leg::Int) = (
+    tensor.spaces[leg],
+    tensor.inds[leg].dir,
+    string(tensor.inds[leg].itags),
+    tensor.inds[leg].plev,
+    tensor.inds[leg].lock,
+)
 
 """
-    fusion_basis(t, leg_a=1, leg_b=2; tag="fused") -> TLArray
+    fusion_basis(tensor, leg_a=1, leg_b=2; tag="fused") -> TLArray
 
-Orthonormal basis of the fused `leg_a (x) leg_b` space in `t`'s own leg convention: legs
-`(leg_a, leg_b, bond)` with `t`'s arrows and the bond labelled as `svd(t, (leg_a, leg_b)).U`
-labels it. `getIdentity` alone has flipped arrows and dual labels. Memoised (`_FUSION_CACHE`).
+Orthonormal basis of the fused `leg_a (x) leg_b` space in `tensor`'s own leg convention: legs
+`(leg_a, leg_b, bond)` with `tensor`'s arrows and the bond labelled as
+`svd(tensor, (leg_a, leg_b)).U` labels it. `getIdentity` alone has flipped arrows and dual labels.
+Memoised (`_FUSION_CACHE`).
 """
-function fusion_basis(t, leg_a::Int = 1, leg_b::Int = 2; tag::AbstractString = "fused")
-    key = (_leg_key(t, leg_a), _leg_key(t, leg_b), String(tag), symmetry_mode())
+function fusion_basis(tensor, leg_a::Int = 1, leg_b::Int = 2; tag::AbstractString = "fused")
+    key = (_leg_key(tensor, leg_a), _leg_key(tensor, leg_b), String(tag), symmetry_mode())
     hit = lock(_FUSION_LOCK) do
         _FUSION_CALLS[] += 1
         get(_FUSION_CACHE, key, nothing)
@@ -120,52 +133,56 @@ function fusion_basis(t, leg_a::Int = 1, leg_b::Int = 2; tag::AbstractString = "
     lock(_FUSION_LOCK) do
         _FUSION_MISSES[] += 1
     end
-    F = to_concrete(getIdentity((t, leg_a), (t, leg_b); itag = tag)')
+    identity_map = to_concrete(getIdentity((tensor, leg_a), (tensor, leg_b); itag = tag)')
     # getIdentity's output is always (input_a, input_b, fused), whatever
     # leg numbers the inputs had, so the split is on (1,2) -- NOT (leg_a, leg_b).
-    U = to_concrete(svd(F, (1, 2); cutoff = 0.0).U)
+    left_vectors = to_concrete(svd(identity_map, (1, 2); cutoff = 0.0).U)
     # The SVD relabels the bond to Telum's default, so `tag` is reapplied; the CBE probes need their
     # distinct tags to avoid colliding with a frame's `svdL` bond leg.
-    out = to_concrete(setitag(U, 3, tag))
+    out = to_concrete(setitag(left_vectors, 3, tag))
     # Store, then hand out a copy -- see the memo's note on caller ownership.
-    n = sum(length(r) for r in out.RMTs; init = 0)
+    element_count = sum(length(reduced_block) for reduced_block in out.RMTs; init = 0)
     lock(_FUSION_LOCK) do
         cap = _FUSION_BUDGET[]
-        if cap !== nothing && _FUSION_ELEMS[] + n > cap
+        if cap !== nothing && _FUSION_ELEMS[] + element_count > cap
             empty!(_FUSION_CACHE)
             _FUSION_ELEMS[] = 0
         end
-        haskey(_FUSION_CACHE, key) || (_FUSION_ELEMS[] += n)   # a concurrent miss stored it already
+        # A concurrent miss may have stored this key already; count its elements once.
+        haskey(_FUSION_CACHE, key) || (_FUSION_ELEMS[] += element_count)
         _FUSION_CACHE[key] = out
     end
     return to_concrete(out)
 end
 
 """
-    reachable_sectors(t, leg_a=1, leg_b=2) -> Vector{Tuple{QLabel,Int}}
+    reachable_sectors(tensor, leg_a=1, leg_b=2) -> Vector{Tuple{QLabel,Int}}
 
-Every charge reachable on the fused `leg_a (x) leg_b` of `t`, with its
-dimension, labelled in `t`'s own bond convention (see [`fusion_basis`](@ref)).
+Every charge reachable on the fused `leg_a (x) leg_b` of `tensor`, with its
+dimension, labelled in `tensor`'s own bond convention (see [`fusion_basis`](@ref)).
 
-The total dimension always equals `leg_dim(t, leg_a) * leg_dim(t, leg_b)` --
+The total dimension always equals `leg_dim(tensor, leg_a) * leg_dim(tensor, leg_b)` --
 fusing regroups the product space by charge, it never loses or adds directions.
 """
-function reachable_sectors(t, leg_a::Int = 1, leg_b::Int = 2)
-    return [(q, d) for (q, d) in fusion_basis(t, leg_a, leg_b).spaces[end]]
+function reachable_sectors(tensor, leg_a::Int = 1, leg_b::Int = 2)
+    return [
+        (charge, block_dim) for
+        (charge, block_dim) in fusion_basis(tensor, leg_a, leg_b).spaces[end]
+    ]
 end
 
-"Dimension of sector `q` on leg `l` of `t`, or 0 if the sector is absent."
-function sector_dim(t, l::Int, q)
-    for (s, d) in t.spaces[l]
-        s == q && return d
+"Dimension of sector `charge` on leg `leg` of `tensor`, or 0 if the sector is absent."
+function sector_dim(tensor, leg::Int, charge)
+    for (sector, block_dim) in tensor.spaces[leg]
+        sector == charge && return block_dim
     end
     return 0
 end
 
 """
-    align_charge(syms, q, from_dir, to_dir)
+    align_charge(syms, charge, from_dir, to_dir)
 
-Re-express sector label `q`, read off a leg with arrow `from_dir`, in the
+Re-express sector label `charge`, read off a leg with arrow `from_dir`, in the
 convention of a leg with arrow `to_dir`.
 
 A leg's charge LABEL depends on its arrow: the same physical sector is `q` on
@@ -174,21 +191,23 @@ an outgoing leg and `dual(q)` on an incoming one. `U0`'s bond leg comes from
 (measured, job 93412), so comparing their `spaces` without this conversion
 silently mismatches every non-self-dual sector.
 """
-align_charge(syms, q, from_dir::Char, to_dir::Char) = from_dir == to_dir ? q : dual_charge(syms, q)
+align_charge(syms, charge, from_dir::Char, to_dir::Char) =
+    from_dir == to_dir ? charge : dual_charge(syms, charge)
 
 """
-    perp_component(U0, K1) -> TLArray
+    perp_component(frame_basis, new_directions) -> TLArray
 
-`P_perp K1 = K1 - U0 (U0' K1)`, contracting over the `(link, site)` legs, so the two bond legs
-(different tags and arrows) never need to match.
+`P_perp K = K - U (U' K)` for `U = frame_basis` (a left isometry, e.g. a frame `U0`) and
+`K = new_directions` (e.g. a Krylov block `K1`), contracting over the `(link, site)` legs, so the
+two bond legs (different tags and arrows) never need to match.
 """
-function perp_component(U0, K1)
-    ov = contract(U0', (1, 2), K1, (1, 2))     # (U0 bond, K1 bond)
-    proj = contract(U0, (3,), ov, (1,))        # (link, site, K1 bond)
-    # The copying form, not `to_concrete!`: a Telum sum reuses `K1`'s block for any sector
-    # `proj` lacks, and the in-place cleanup would rescale it. The result is then a fresh tensor
-    # the caller owns -- wrapping it in another `to_concrete` only copies it again.
-    return to_concrete(K1 - proj)
+function perp_component(frame_basis, new_directions)
+    ov = contract(frame_basis', (1, 2), new_directions, (1, 2))  # (basis bond, directions bond)
+    proj = contract(frame_basis, (3,), ov, (1,))                 # (link, site, directions bond)
+    # The copying form, not `to_concrete!`: a Telum sum reuses `new_directions`'s block for any
+    # sector `proj` lacks, and the in-place cleanup would rescale it. The result is then a fresh
+    # tensor the caller owns -- wrapping it in another `to_concrete` only copies it again.
+    return to_concrete(new_directions - proj)
 end
 
 # ── right-frame mirrors ─────────────────────────────────────────────────────
@@ -198,15 +217,16 @@ end
 # bookkeeping does not survive a naive transpose.
 
 """
-    perp_component_right(V0, L1) -> TLArray
+    perp_component_right(frame_basis, new_directions) -> TLArray
 
-`P_perp L1 = L1 - (L1 V0') V0`, contracting over the `(site, link)` legs.
+`P_perp L = L - (L V') V` for `V = frame_basis` (a right isometry, e.g. a frame `V0`) and
+`L = new_directions` (e.g. a Krylov block `L1`), contracting over the `(site, link)` legs.
 Row mirror of [`perp_component`](@ref).
 """
-function perp_component_right(V0, L1)
-    ov = contract(L1, (2, 3), V0', (2, 3))     # (L1 bond, V0 bond)
-    proj = contract(ov, (2,), V0, (1,))        # (L1 bond, site, link)
-    return to_concrete(L1 - proj)
+function perp_component_right(frame_basis, new_directions)
+    ov = contract(new_directions, (2, 3), frame_basis', (2, 3))  # (directions bond, basis bond)
+    proj = contract(ov, (2,), frame_basis, (1,))                 # (directions bond, site, link)
+    return to_concrete(new_directions - proj)
 end
 
 # ── from BUG-Julia@b155550:src/RSVDCBEBondUpdate/budget/multiplets.jl ──
@@ -216,26 +236,27 @@ end
 # Weights are physical (`sum sigma^2 * degeneracy == norm^2`); convert via `state_dim` to compare.
 
 """
-    state_dim(t, leg) -> Int
+    state_dim(tensor, leg) -> Int
 
-Physical dimension of leg `leg` of `t`: each sector's multiplet count weighted by its irrep
-dimension. Equals `leg_dim(t, leg)` for an abelian symmetry (every irrep is one-dimensional) and
-exceeds it under SU(2).
+Physical dimension of leg `leg` of `tensor`: each sector's multiplet count weighted by its irrep
+dimension. Equals `leg_dim(tensor, leg)` for an abelian symmetry (every irrep is one-dimensional)
+and exceeds it under SU(2).
 
 `leg_dim` is the number the code's budgets, `Nkeep` and reported bond dimensions are in;
 `state_dim` is the number a U(1) or unsymmetric run would report for the same physical state.
 Quote whichever the comparison needs -- but quote which one.
 """
-function state_dim(t, leg::Int)
-    S = symm(t)
-    n = length(S)
+function state_dim(tensor, leg::Int)
+    symmetries = symm(tensor)
+    symmetry_count = length(symmetries)
     tot = 0
-    for (q, d) in t.spaces[leg]
-        w = 1
-        for k = 1:n
-            w *= dimension(S[k], q[k])
+    for (charge, block_dim) in tensor.spaces[leg]
+        # Irrep dimension of the sector: the product over the symmetry factors.
+        irrep_weight = 1
+        for symmetry_index = 1:symmetry_count
+            irrep_weight *= dimension(symmetries[symmetry_index], charge[symmetry_index])
         end
-        tot += d * w
+        tot += block_dim * irrep_weight
     end
     return tot
 end
@@ -249,7 +270,7 @@ The interior bond dimensions in STATES rather than multiplets -- the SU(2) analo
 Under `:none` and `:U1` this is `bond_dims(psi)` exactly, so it is safe to call unconditionally
 and is the right thing to log when a script may run in more than one mode.
 """
-state_bond_dims(psi::SymMPS) = [state_dim(psi[i], 3) for i = 1:(length(psi)-1)]
+state_bond_dims(psi::SymMPS) = [state_dim(psi[bond], 3) for bond = 1:(length(psi)-1)]
 
 """
     local_dim(psi) -> Int
@@ -258,7 +279,7 @@ The largest physical dimension over the sites, in states (`state_dim` of the sit
 spin-1/2, 4 for the d = 4 Hubbard site, under any symmetry. A frame of `r` multiplets fused with a
 site of `d` states holds at most `d*r` multiplets, so this is the factor of `work_ceiling`.
 """
-local_dim(psi::SymMPS) = maximum(i -> state_dim(psi[i], 2), 1:length(psi); init = 1)
+local_dim(psi::SymMPS) = maximum(site -> state_dim(psi[site], 2), 1:length(psi); init = 1)
 
 """
     multiplet_ratio(psi) -> Float64
@@ -270,9 +291,9 @@ The honest way to state the SU(2) saving, and the factor by which a `maxdim` in 
 more generous than the same number in states.
 """
 function multiplet_ratio(psi::SymMPS)
-    m = bond_dims(psi)
-    s = state_bond_dims(psi)
-    isempty(m) && return 1.0
-    tot = sum(m)
-    return tot == 0 ? 1.0 : sum(s) / tot
+    multiplets = bond_dims(psi)
+    states = state_bond_dims(psi)
+    isempty(multiplets) && return 1.0
+    tot = sum(multiplets)
+    return tot == 0 ? 1.0 : sum(states) / tot
 end

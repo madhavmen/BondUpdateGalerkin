@@ -20,44 +20,50 @@ struct MPOOneSiteH
 end
 
 """
-    one_site_h(mpo, j, lenv, renv) -> MPOOneSiteH
+    one_site_h(mpo, site, lenv, renv) -> MPOOneSiteH
 
-`H_eff` at site `j`. `lenv` must sit on link `j` and `renv` on link `j+1` -- the same
+`H_eff` at `site`. `lenv` must sit on link `site` and `renv` on link `site+1` -- the same
 convention the channel-path method of this function uses.
 """
-one_site_h(mpo::MPO, j::Int, lenv::MPOLink, renv::MPOLink) = MPOOneSiteH(lenv.E, mpo[j], renv.E)
+one_site_h(mpo::MPO, site::Int, lenv::MPOLink, renv::MPOLink) =
+    MPOOneSiteH(lenv.E, mpo[site], renv.E)
 
-one_site_h(mpo::MPO, j::Int, lenv::MPOLeftEnvStack, renv::MPORightEnvStack) =
-    one_site_h(mpo, j, left_channels(lenv, j), right_channels(renv, j + 1))
+# The same operator with the site's two links read out of prebuilt stacks.
+one_site_h(mpo::MPO, site::Int, lenv::MPOLeftEnvStack, renv::MPORightEnvStack) =
+    one_site_h(mpo, site, left_channels(lenv, site), right_channels(renv, site + 1))
 
 """
-    apply_one_site(H1::MPOOneSiteH, A) -> TLArray
+    apply_one_site(effective_h::MPOOneSiteH, site_tensor) -> TLArray
 
-`H_eff A` for a site tensor `A` with legs `(link_l, site, link_r)`, in and out.
+`H_eff site_tensor` for a site tensor with legs `(link_l, site, link_r)`, in and out.
 """
-function apply_one_site(H1::MPOOneSiteH, A)
+function apply_one_site(effective_h::MPOOneSiteH, site_tensor)
     # `to_concrete!` on the contraction results: this is the hot path, and `to_concrete` on an already
     # concrete tensor would deep-copy every block.
-    # Safe only because every argument is a fresh `contract` result; the inputs belong to callers and keep `to_concrete`.
-    T = if H1.l === nothing
-        X = to_concrete!(contract(A, (2,), H1.w, (2,)))     # (ℓ_l, ℓ_r, w_l, s_bra, w_r)
-        to_concrete(deleteSingleton(X, 3))                  # (ℓ_l, ℓ_r, s_bra, w_r)
+    # Safe only because every argument is a fresh `contract` result; the inputs belong to callers
+    # and keep `to_concrete`.
+    contracted = if effective_h.l === nothing
+        # (ℓ_l, ℓ_r, w_l, s_bra, w_r)
+        partial = to_concrete!(contract(site_tensor, (2,), effective_h.w, (2,)))
+        to_concrete(deleteSingleton(partial, 3))            # (ℓ_l, ℓ_r, s_bra, w_r)
     else
-        X = to_concrete!(contract(H1.l, (3,), A, (1,)))      # (bra_l, w, s, ℓ_r)
-        X = to_concrete!(contract(X, (2, 3), H1.w, (1, 2)))  # (bra_l, ℓ_r, s_bra, w_r)
-        X
+        # (bra_l, w, s, ℓ_r), then (bra_l, ℓ_r, s_bra, w_r)
+        partial = to_concrete!(contract(effective_h.l, (3,), site_tensor, (1,)))
+        partial = to_concrete!(contract(partial, (2, 3), effective_h.w, (1, 2)))
+        partial
     end                                                    # (link_l, ℓ_r, s_bra, w_r)
 
-    T = if H1.r === nothing
-        X = to_concrete(deleteSingleton(T, 4))             # (link_l, ℓ_r, s_bra)
-        to_concrete(permutedims(X, (1, 3, 2)))
+    contracted = if effective_h.r === nothing
+        partial = to_concrete(deleteSingleton(contracted, 4))  # (link_l, ℓ_r, s_bra)
+        to_concrete(permutedims(partial, (1, 3, 2)))
     else
-        to_concrete!(contract(T, (4, 2), H1.r, (2, 3)))    # (link_l, s_bra, bra_r)
+        to_concrete!(contract(contracted, (4, 2), effective_h.r, (2, 3)))  # (link_l, s_bra, bra_r)
     end
 
-    H1.l === nothing || (T = _unprime(T, 1))
-    H1.r === nothing || (T = _unprime(T, 3))
-    return T
+    # Each environment's bra leg replaced a link leg: give it that link's prime level back.
+    effective_h.l === nothing || (contracted = _unprime(contracted, 1))
+    effective_h.r === nothing || (contracted = _unprime(contracted, 3))
+    return contracted
 end
 
 """
@@ -78,34 +84,36 @@ struct MPOZeroSiteH
 end
 
 """
-    zero_site_h(mpo, i, lenv, renv, U_ex, V_ex) -> MPOZeroSiteH
+    zero_site_h(mpo, bond, lenv, renv, U_ex, V_ex) -> MPOZeroSiteH
 
-Push the environments at links `i` and `i+2` onto the centre bond through the EXPANDED
+Push the environments at links `bond` and `bond+2` onto the centre bond through the EXPANDED
 frames. `U_ex` carries `(link_l, site_l, bond)` and `V_ex` carries `(bond, site_r,
 link_r)` -- an MPS tensor's layout in each case -- so this is one more step of Eq. (1.8)
 with the frame in place of a state tensor, and needs no separate code.
 """
-zero_site_h(mpo::MPO, i::Int, lenv::MPOLink, renv::MPOLink, U_ex, V_ex) =
-    MPOZeroSiteH(_mpo_left_step(lenv.E, U_ex, mpo[i]), _mpo_right_step(renv.E, V_ex, mpo[i+1]))
+zero_site_h(mpo::MPO, bond::Int, lenv::MPOLink, renv::MPOLink, U_ex, V_ex) = MPOZeroSiteH(
+    _mpo_left_step(lenv.E, U_ex, mpo[bond]),
+    _mpo_right_step(renv.E, V_ex, mpo[bond+1]),
+)
 
 """
-    apply_zero_site(H0::MPOZeroSiteH, S) -> TLArray
+    apply_zero_site(effective_h::MPOZeroSiteH, core) -> TLArray
 
-`H_eff S` for the centre core `S`, legs `(bond_l, bond_r)` in and out. Each environment
-contributes its bra leg in place of the ket leg it consumes, so the result carries `S`'s
+`H_eff core` for the centre core, legs `(bond_l, bond_r)` in and out. Each environment
+contributes its bra leg in place of the ket leg it consumes, so the result carries the core's
 own legs after unpriming.
 """
-function apply_zero_site(H0::MPOZeroSiteH, S)
-    T = to_concrete!(contract(H0.l, (3,), S, (1,)))        # (bra_l, mpo, bond_r)
-    T = to_concrete!(contract(T, (2, 3), H0.r, (2, 3)))    # (bra_l, bra_r)
-    return _unprime(_unprime(T, 1), 2)
+function apply_zero_site(effective_h::MPOZeroSiteH, core)
+    contracted = to_concrete!(contract(effective_h.l, (3,), core, (1,)))  # (bra_l, mpo, bond_r)
+    contracted = to_concrete!(contract(contracted, (2, 3), effective_h.r, (2, 3)))  # (bra_l, bra_r)
+    return _unprime(_unprime(contracted, 1), 2)
 end
 
 """
-    shift_h(H, s) -> H or ShiftedH
+    shift_h(operator, shift) -> operator or ShiftedH
 
-The effective Hamiltonian `H - s` for the generators of an imaginary-time step. `s = 0` returns `H`
-itself, so an unshifted step is bit-identical.
+The effective Hamiltonian `H - shift` for the generators of an imaginary-time step. `shift = 0`
+returns `operator` itself, so an unshifted step is bit-identical.
 
 A shift by the identity leaves every Krylov space unchanged and only changes the weights read off
 them. The CBE sketches are exact as they stand, since `P_perp (H - s) Theta = P_perp H Theta`.
@@ -115,10 +123,13 @@ struct ShiftedH{T}
     s::Float64
 end
 
-shift_h(h, s::Real) = iszero(s) ? h : ShiftedH(h, Float64(s))
+shift_h(operator, shift::Real) = iszero(shift) ? operator : ShiftedH(operator, Float64(shift))
 
-apply_one_site(H::ShiftedH, A) = to_concrete(apply_one_site(H.h, A) - H.s * A)
-apply_zero_site(H::ShiftedH, S) = to_concrete(apply_zero_site(H.h, S) - H.s * S)
+# The shifted actions `(H - s) site_tensor` and `(H - s) core`.
+apply_one_site(shifted::ShiftedH, site_tensor) =
+    to_concrete(apply_one_site(shifted.h, site_tensor) - shifted.s * site_tensor)
+apply_zero_site(shifted::ShiftedH, core) =
+    to_concrete(apply_zero_site(shifted.h, core) - shifted.s * core)
 
 # ── from src/RSVDCBEBondUpdate/operators/zero_site_core.jl ──
 
@@ -134,37 +145,37 @@ apply_zero_site(H::ShiftedH, S) = to_concrete(apply_zero_site(H.h, S) - H.s * S)
 # ── writing an expansion back into the state ─────────────────────────────────
 
 """
-    _absorb_left!(psi, i, U_ex) -> psi
+    _absorb_left!(psi, bond, U_ex) -> psi
 
-Replace `psi[i]` by the expanded left frame and push the (zero-padded) remainder into
-`psi[i+1]`, leaving the state unchanged and the centre at `i+1`.
+Replace `psi[bond]` by the expanded left frame and push the (zero-padded) remainder into
+`psi[bond+1]`, leaving the state unchanged and the centre at `bond+1`.
 
 `U_ex†(A_i A_{i+1})` is evaluated as `(U_ex†A_i)A_{i+1}`: the two-site block is never
 formed, and the intermediate is `bond_ex x bond_old`.
 """
-function _absorb_left!(psi::SymMPS, i::Int, U_ex)
-    tag = psi[i].inds[3].itags
-    M = contract(U_ex', (1, 2), psi[i], (1, 2))        # (bond_ex, bond_old)
-    B = contract(M, (2,), psi[i+1], (1,))            # (bond_ex, site_r, link_r)
-    psi[i] = to_concrete(setitag(U_ex, 3, tag))
-    psi[i+1] = to_concrete(setitag(B, 1, tag))
-    psi.center = i + 1
+function _absorb_left!(psi::SymMPS, bond::Int, U_ex)
+    tag = psi[bond].inds[3].itags
+    overlap_matrix = contract(U_ex', (1, 2), psi[bond], (1, 2))  # (bond_ex, bond_old)
+    next_tensor = contract(overlap_matrix, (2,), psi[bond+1], (1,))  # (bond_ex, site_r, link_r)
+    psi[bond] = to_concrete(setitag(U_ex, 3, tag))
+    psi[bond+1] = to_concrete(setitag(next_tensor, 1, tag))
+    psi.center = bond + 1
     return psi
 end
 
 """
-    _absorb_right!(psi, i, V_ex) -> psi
+    _absorb_right!(psi, bond, V_ex) -> psi
 
-Mirror: `psi[i+1]` becomes the expanded right frame and the remainder goes into `psi[i]`,
-leaving the centre at `i`.
+Mirror: `psi[bond+1]` becomes the expanded right frame and the remainder goes into `psi[bond]`,
+leaving the centre at `bond`.
 """
-function _absorb_right!(psi::SymMPS, i::Int, V_ex)
-    tag = psi[i].inds[3].itags
-    M = contract(psi[i+1], (2, 3), V_ex', (2, 3))    # (bond_old, bond_ex)
-    A = contract(psi[i], (3,), M, (1,))                # (link_l, site_l, bond_ex)
-    psi[i] = to_concrete(setitag(A, 3, tag))
-    psi[i+1] = to_concrete(setitag(V_ex, 1, tag))
-    psi.center = i
+function _absorb_right!(psi::SymMPS, bond::Int, V_ex)
+    tag = psi[bond].inds[3].itags
+    overlap_matrix = contract(psi[bond+1], (2, 3), V_ex', (2, 3))  # (bond_old, bond_ex)
+    site_tensor = contract(psi[bond], (3,), overlap_matrix, (1,))  # (link_l, site_l, bond_ex)
+    psi[bond] = to_concrete(setitag(site_tensor, 3, tag))
+    psi[bond+1] = to_concrete(setitag(V_ex, 1, tag))
+    psi.center = bond
     return psi
 end
 
@@ -178,7 +189,8 @@ Lives here beside [`_frame_from`](@ref) because both are shared frame plumbing f
 It previously sat in `jan_bug.jl`, and deleting that file took `cbe_bug_step!` down with it --
 the helper is not specific to any one integrator.
 """
-_relink(T, t1, t3) = to_concrete(setitag(setitag(T, 1, t1), 3, t3))
+_relink(tensor, left_tag, right_tag) =
+    to_concrete(setitag(setitag(tensor, 1, left_tag), 3, right_tag))
 
 """
     _frame_from(left, right) -> BondFrame
@@ -193,19 +205,20 @@ in `right`.
 function _frame_from(left, right)
     res_l = svd(left, (1, 2), "bU,L", "bU,R"; cutoff = 0.0)
     res_r = svd(right, (1,), "bV,L", "bV,R"; cutoff = 0.0)
-    U0 = to_concrete(res_l.U)
-    V0 = to_concrete(res_r.Vd)
-    S0 = to_concrete(to_concrete(res_l.S * res_l.Vd) * to_concrete(res_r.U * res_r.S))
+    left_isometry = to_concrete(res_l.U)
+    right_isometry = to_concrete(res_r.Vd)
+    # The bond core joins both SVDs' remainders: (S Vd)_left * (U S)_right.
+    bond_core = to_concrete(to_concrete(res_l.S * res_l.Vd) * to_concrete(res_r.U * res_r.S))
     return BondFrame(
-        U0,
-        S0,
-        V0,
+        left_isometry,
+        bond_core,
+        right_isometry,
         left.inds[1],
         left.inds[2],
         left.inds[3],
         right.inds[2],
         right.inds[3],
-        leg_dim(U0, 3),
+        leg_dim(left_isometry, 3),
         copy(left.spaces[3]),
     )
 end
@@ -233,74 +246,80 @@ struct ZeroSiteH
 end
 
 """
-    zero_site_h(h, i, lenv, renv, U_ex, V_ex) -> ZeroSiteH
+    zero_site_h(chain, bond, lenv, renv, U_ex, V_ex) -> ZeroSiteH
 
-Push the channel environments at links `i` and `i+2` through the expanded frames onto the
+Push the channel environments at links `bond` and `bond+2` through the expanded frames onto the
 centre bond. `U_ex` carries `(link_l, site_l, bond)` and `V_ex` carries
 `(bond, site_r, link_r)` -- an MPS tensor's layout in each case -- so the same one-site
 recursions the environment stacks are built from apply unchanged.
 """
-function zero_site_h(h::XXZChain, i::Int, lch::ChannelSet, rch::ChannelSet, U_ex, V_ex)
-    terms = h.terms
+function zero_site_h(chain::XXZChain, bond::Int, lch::ChannelSet, rch::ChannelSet, U_ex, V_ex)
+    terms = chain.terms
     nt = length(terms)
 
     # Left: everything completed to the left of the centre bond, plus each half-term that
-    # is still open there. A channel open at link i is closed by `term.right` at site i.
-    dl = lch.done === ZERO ? ZERO : _left_step(lch.done, U_ex, nothing, i)
-    for t = 1:nt
-        lch.open[t] === ZERO && continue
-        c = _left_step(lch.open[t], U_ex, terms[t].right, i)
-        dl = _accum(dl, to_concrete(terms[t].coeff * c))
+    # is still open there. A channel open at link `bond` is closed by `term.right` at that site.
+    dl = lch.done === ZERO ? ZERO : _left_step(lch.done, U_ex, nothing, bond)
+    for term_index = 1:nt
+        lch.open[term_index] === ZERO && continue
+        contribution = _left_step(lch.open[term_index], U_ex, terms[term_index].right, bond)
+        dl = _accum(dl, to_concrete(terms[term_index].coeff * contribution))
     end
-    ol = Any[_left_step(lch.id, U_ex, terms[t].left, i) for t = 1:nt]
+    ol = Any[_left_step(lch.id, U_ex, terms[term_index].left, bond) for term_index = 1:nt]
 
-    dr = rch.done === ZERO ? ZERO : _right_step(rch.done, V_ex, nothing, i + 1)
-    for t = 1:nt
-        rch.open[t] === ZERO && continue
-        c = _right_step(rch.open[t], V_ex, terms[t].left, i + 1)
-        dr = _accum(dr, to_concrete(terms[t].coeff * c))
+    # Right: the mirror, through the right frame at site `bond+1`.
+    dr = rch.done === ZERO ? ZERO : _right_step(rch.done, V_ex, nothing, bond + 1)
+    for term_index = 1:nt
+        rch.open[term_index] === ZERO && continue
+        contribution = _right_step(rch.open[term_index], V_ex, terms[term_index].left, bond + 1)
+        dr = _accum(dr, to_concrete(terms[term_index].coeff * contribution))
     end
-    or = Any[_right_step(rch.id, V_ex, terms[t].right, i + 1) for t = 1:nt]
+    or = Any[_right_step(rch.id, V_ex, terms[term_index].right, bond + 1) for term_index = 1:nt]
 
-    return ZeroSiteH(dl, dr, ol, or, [t.coeff for t in terms])
+    return ZeroSiteH(dl, dr, ol, or, [term.coeff for term in terms])
 end
 
-zero_site_h(h::XXZChain, i::Int, lenv::LeftEnvStack, renv::RightEnvStack, U_ex, V_ex) =
-    zero_site_h(h, i, left_channels(lenv, i), right_channels(renv, i + 2), U_ex, V_ex)
+# The same operator with the bond's two links read out of prebuilt stacks.
+zero_site_h(chain::XXZChain, bond::Int, lenv::LeftEnvStack, renv::RightEnvStack, U_ex, V_ex) =
+    zero_site_h(chain, bond, left_channels(lenv, bond), right_channels(renv, bond + 2), U_ex, V_ex)
 
 """
-    apply_zero_site(H0, S) -> TLArray
+    apply_zero_site(effective_h::ZeroSiteH, core) -> TLArray
 
-`H_eff S` for the centre core `S`, legs `(bond_l, bond_r)` in and out.
+`H_eff core` for the centre core, legs `(bond_l, bond_r)` in and out.
 
 Each environment contributes its bra leg in place of the ket leg it consumes, so the
-result carries `S`'s own legs after unpriming -- the same convention `_env_on_link` uses.
+result carries the core's own legs after unpriming -- the same convention `_env_on_link` uses.
 """
-function apply_zero_site(H0::ZeroSiteH, S)
+function apply_zero_site(effective_h::ZeroSiteH, core)
     acc = nothing
-    add!(x) = (acc = acc === nothing ? to_concrete(x) : to_concrete(acc + x))
+    add!(summand) = (acc = acc === nothing ? to_concrete(summand) : to_concrete(acc + summand))
 
-    if H0.done_l !== ZERO
+    if effective_h.done_l !== ZERO
         # (bra_l, bond_r) <- done_l's bra replaces bond_l
-        add!(_unprime(to_concrete!(contract(H0.done_l, (2,), S, (1,))), 1))
+        add!(_unprime(to_concrete!(contract(effective_h.done_l, (2,), core, (1,))), 1))
     end
-    if H0.done_r !== ZERO
-        out = contract(S, (2,), H0.done_r, (2,))       # (bond_l, bra_r)
+    if effective_h.done_r !== ZERO
+        out = contract(core, (2,), effective_h.done_r, (2,))       # (bond_l, bra_r)
         add!(_unprime(to_concrete(out), 2))
     end
-    for t in eachindex(H0.open_l)
-        ol, or = H0.open_l[t], H0.open_r[t]
+    for term_index in eachindex(effective_h.open_l)
+        ol, or = effective_h.open_l[term_index], effective_h.open_r[term_index]
         (ol === ZERO || or === ZERO) && continue
         # A term's two halves either BOTH carry an op-leg (the U(1) XY hop, where the leg
         # carries the +/-2 charge that makes the pair allowed) or NEITHER does (SzSz, and
         # every term without symmetry). One rank test covers both channels.
-        left = contract(ol, (2,), S, (1,))             # (bra_l, [op,] bond_r)
+        left = contract(ol, (2,), core, (1,))          # (bra_l, [op,] bond_r)
         out = if length(ol.inds) == 3
             contract(left, (2, 3), or, (3, 2))         # close the op-leg too
         else
             contract(left, (2,), or, (2,))
         end                                             # (bra_l, bra_r)
-        add!(to_concrete(H0.coeffs[t] * _unprime(_unprime(to_concrete(out), 1), 2)))
+        add!(
+            to_concrete(
+                effective_h.coeffs[term_index] * _unprime(_unprime(to_concrete(out), 1), 2),
+            ),
+        )
     end
     acc === nothing && throw(
         ArgumentError(
@@ -310,22 +329,22 @@ function apply_zero_site(H0::ZeroSiteH, S)
     return acc
 end
 
-"The BUG's root link `c` (the step's split and compression root is `c + 1`) when none is given."
-_bug_root_link(L::Int) = max(1, min(L - 1, L ÷ 2))
+"The BUG's root link (the step's split and compression root is one past it) when none is given."
+_bug_root_link(site_count::Int) = max(1, min(site_count - 1, site_count ÷ 2))
 
 # ── the step ─────────────────────────────────────────────────────────────────
 
 "Total stored elements of every tensor in the state -- block-sparse, so the honest size.
 (`tensor_elements` lives in baselines/tdvp2.jl; both callers resolve it at run time.)"
-_state_stored(psi::SymMPS) = sum(tensor_elements(psi[i]) for i = 1:length(psi); init = 0)
+_state_stored(psi::SymMPS) = sum(tensor_elements(psi[site]) for site = 1:length(psi); init = 0)
 
 # ── from src/RSVDCBEBondUpdate/baselines/tdvp2.jl ──
 
 """
     OneSiteH
 
-Single-site effective Hamiltonian at site `j`, as channel environments on links `j` and
-`j+1`. Used only for 2-site TDVP's backward half-step.
+Single-site effective Hamiltonian at site `site`, as channel environments on links `site` and
+`site+1`. Used only for 2-site TDVP's backward half-step.
 
 A single site cannot hold both halves of a nearest-neighbour term, so there is no
 analogue of the two-site action's bond contribution -- four kinds of term, not five.
@@ -340,40 +359,50 @@ struct OneSiteH
 end
 
 """
-    one_site_h(h, j, lenv, renv) -> OneSiteH
+    one_site_h(chain, site, lenv, renv) -> OneSiteH
 
-The single-site effective Hamiltonian at site `j`; `lenv` must be filled at link `j` and
-`renv` at link `j+1`.
+The single-site effective Hamiltonian at `site`; `lenv` must be filled at link `site` and
+`renv` at link `site+1`.
 """
-one_site_h(h::XXZChain, j::Int, lch::ChannelSet, rch::ChannelSet) =
-    OneSiteH(j, lch.done, rch.done, lch.open, rch.open, h.terms)
+one_site_h(chain::XXZChain, site::Int, lch::ChannelSet, rch::ChannelSet) =
+    OneSiteH(site, lch.done, rch.done, lch.open, rch.open, chain.terms)
 
-one_site_h(h::XXZChain, j::Int, lenv::LeftEnvStack, renv::RightEnvStack) =
-    one_site_h(h, j, left_channels(lenv, j), right_channels(renv, j + 1))
+# The same operator with the site's two links read out of prebuilt stacks.
+one_site_h(chain::XXZChain, site::Int, lenv::LeftEnvStack, renv::RightEnvStack) =
+    one_site_h(chain, site, left_channels(lenv, site), right_channels(renv, site + 1))
 
 """
-    apply_one_site(H1, M) -> TLArray
+    apply_one_site(effective_h::OneSiteH, site_tensor) -> TLArray
 
-`H_eff M` for a site tensor `M` with legs `(link_l, site, link_r)`.
+`H_eff site_tensor` for a site tensor with legs `(link_l, site, link_r)`.
 
-`M` shares its layout with both `K0` and `V0`, so `_env_on_link` applies on leg 1 and
-leg 3 unchanged, and it already handles closing an op-leg (or not) by rank.
+The site tensor shares its layout with both `K0` and `V0`, so `_env_on_link` applies on leg 1
+and leg 3 unchanged, and it already handles closing an op-leg (or not) by rank.
 """
-function apply_one_site(H1::OneSiteH, M)
-    j = H1.site
+function apply_one_site(effective_h::OneSiteH, site_tensor)
+    site = effective_h.site
     acc = nothing
-    add!(x) = (acc = acc === nothing ? to_concrete(x) : to_concrete(acc + x))
+    add!(summand) = (acc = acc === nothing ? to_concrete(summand) : to_concrete(acc + summand))
 
-    H1.done_l === ZERO || add!(_env_on_link(M, H1.done_l, 1))
-    H1.done_r === ZERO || add!(_env_on_link(M, H1.done_r, 3))
-    for (t, term) in enumerate(H1.terms)
-        o = H1.open_l[t]
-        o === ZERO ||
-            add!(to_concrete(term.coeff * _env_on_link(_apply_site_op(M, term.right, j), o, 1)))
-        o = H1.open_r[t]
-        o === ZERO ||
-            add!(to_concrete(term.coeff * _env_on_link(_apply_site_op(M, term.left, j), o, 3)))
+    # Completed terms on either side, then each open half-term closed on this site.
+    effective_h.done_l === ZERO || add!(_env_on_link(site_tensor, effective_h.done_l, 1))
+    effective_h.done_r === ZERO || add!(_env_on_link(site_tensor, effective_h.done_r, 3))
+    for (term_index, term) in enumerate(effective_h.terms)
+        open_env = effective_h.open_l[term_index]
+        open_env === ZERO || add!(
+            to_concrete(
+                term.coeff *
+                _env_on_link(_apply_site_op(site_tensor, term.right, site), open_env, 1),
+            ),
+        )
+        open_env = effective_h.open_r[term_index]
+        open_env === ZERO || add!(
+            to_concrete(
+                term.coeff *
+                _env_on_link(_apply_site_op(site_tensor, term.left, site), open_env, 3),
+            ),
+        )
     end
-    acc === nothing && throw(ArgumentError("apply_one_site: no contributions at site $j"))
+    acc === nothing && throw(ArgumentError("apply_one_site: no contributions at site $site"))
     return acc
 end

@@ -1,4 +1,4 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/expansion/dd_cbe.jl, src/RSVDCBEBondUpdate/expansion/dd_cbe_controller.jl.
+# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/expansion/dd_cbe.jl (its kernels).
 
 # DD-QR CBE kernels: the sketch operators, discarded-space probes and the sectorwise thin QR
 # (controller in `dd_cbe_controller.jl`, the bond expansion in `dd_cbe_expand.jl`).
@@ -6,17 +6,18 @@
 # ── from src/RSVDCBEBondUpdate/expansion/dd_cbe.jl ──
 
 # ── implicit DD-projected, MPO-streamed, QR-only CBE ──
-# The frame grows by Om~ = P^D Om, Z = X Om~ streamed through the MPO, and Y = Q R: neither X nor the
-# DD projector is formed. One side per call, since the two QRs belong to the two half-sweep orientations.
+# The frame grows by Om~ = P^D Om, Z = X Om~ streamed through the MPO, and Y = Q R: neither X nor
+# the DD projector is formed. One side per call, since the two QRs belong to the two half-sweep
+# orientations.
 
 # ── one operator-action interface ──
 # Each operator is immutable and built per bond visit, so a stale one cannot see a later gauge.
 # Outputs go to a caller-held `Ref`, since Telum contractions allocate their result.
 
 """
-    TwoSiteSketchOp(f, mpo, i, lenv, renv; adjoint = false, version = 0, counters)
+    TwoSiteSketchOp(frame, mpo, bond, lenv, renv; adjoint = false, version = 0, counters)
 
-The two-site effective Hamiltonian at bond `(i, i+1)` as a THIN-PROBE action.
+The two-site effective Hamiltonian at bond `(bond, bond+1)` as a THIN-PROBE action.
 `adjoint = false` is `Z = X Om` for a probe in `V0`'s layout `(g, site_r, link_r)`, returning
 `(link_l, site_l, g)` (the K-sweep); `adjoint = true` is `X' Om` for a probe in `U0`'s layout,
 returned as rows `(g, site_r, link_r)` (the L-sweep). The MPO channels are summed inside the
@@ -36,24 +37,26 @@ struct TwoSiteSketchOp
     counters::KernelCounters
 end
 
+# Builds the operator from a bond frame, precomputing the core on the side the probe does not
+# touch and recording the active symmetry so a later mode switch is caught.
 function TwoSiteSketchOp(
-    f::BondFrame,
+    frame::BondFrame,
     mpo::MPO,
-    i::Int,
+    bond::Int,
     lenv::MPOLink,
     renv::MPOLink;
     adjoint::Bool = false,
     version::Int = 0,
     counters::KernelCounters = KernelCounters(),
 )
-    core = adjoint ? to_concrete(f.S0 * f.V0) : to_concrete(f.U0 * f.S0)
+    core = adjoint ? to_concrete(frame.S0 * frame.V0) : to_concrete(frame.U0 * frame.S0)
     return TwoSiteSketchOp(
         mpo,
-        i,
+        bond,
         lenv,
         renv,
-        f.U0,
-        f.V0,
+        frame.U0,
+        frame.V0,
         core,
         adjoint,
         symmetry_mode(),
@@ -63,17 +66,19 @@ function TwoSiteSketchOp(
 end
 
 """
-    apply_two_site_sketch!(Y::Ref, Om, op::TwoSiteSketchOp) -> Y
+    apply_two_site_sketch!(result_ref::Ref, Om, op::TwoSiteSketchOp) -> result_ref
 
-`Y[] = X Om` (or `X' Om` for `op.adjoint`), unprojected, streamed through the MPO channels.
+`result_ref[] = X Om` (or `X' Om` for `op.adjoint`), unprojected, streamed through the MPO
+channels.
 """
-function apply_two_site_sketch!(Y::Base.RefValue, Om, op::TwoSiteSketchOp)
+function apply_two_site_sketch!(result_ref::Base.RefValue, Om, op::TwoSiteSketchOp)
     op.symmetry === symmetry_mode() || throw(
         ErrorException(
-            "TwoSiteSketchOp was built under $(op.symmetry), the active symmetry is $(symmetry_mode())",
+            "TwoSiteSketchOp was built under $(op.symmetry), " *
+            "the active symmetry is $(symmetry_mode())",
         ),
     )
-    Z, dt, db = _measure(
+    sketch, dt, db = _measure(
         () ->
             op.adjoint ? _stream_right(op.U0, op.core, op.mpo, op.bond, op.lenv, op.renv, Om) :
             _stream_left(op.core, op.V0, op.mpo, op.bond, op.lenv, op.renv, Om),
@@ -83,17 +88,18 @@ function apply_two_site_sketch!(Y::Base.RefValue, Om, op::TwoSiteSketchOp)
     kc.n_stream_cols += leg_dim(Om, op.adjoint ? 3 : 1)
     kc.t_stream += dt
     kc.b_stream += db
-    Y[] = Z
-    return Y
+    result_ref[] = sketch
+    return result_ref
 end
 
-"`Y[] = H1 X` through the shared interface."
-apply_one_site!(Y::Base.RefValue, X, op::OneSiteOp) = (Y[] = apply_one_site(op, X); Y)
+"`result_ref[] = H1 vector` through the shared interface."
+apply_one_site!(result_ref::Base.RefValue, vector, op::OneSiteOp) =
+    (result_ref[] = apply_one_site(op, vector); result_ref)
 
 """
     RootOp(h, version, counters)
 
-The root (zero-site) generator with counted applications; `apply_zero_site(op, S)` forwards.
+The root (zero-site) generator with counted applications; `apply_zero_site(op, core)` forwards.
 """
 struct RootOp{H}
     h::H
@@ -101,45 +107,52 @@ struct RootOp{H}
     counters::KernelCounters
 end
 
-function apply_zero_site(op::RootOp, S)
-    y, dt, db = _measure(() -> apply_zero_site(op.h, S))
+# Applies the wrapped root generator to `core`, counting the call, its time and its allocation.
+function apply_zero_site(op::RootOp, core)
+    image, dt, db = _measure(() -> apply_zero_site(op.h, core))
     op.counters.n_root += 1
     op.counters.t_root += dt
     op.counters.b_root += db
-    return y
+    return image
 end
 
-"`Y[] = H0 S` through the shared interface."
-apply_root!(Y::Base.RefValue, S, op::RootOp) = (Y[] = apply_zero_site(op, S); Y)
+"`result_ref[] = H0 core` through the shared interface."
+apply_root!(result_ref::Base.RefValue, core, op::RootOp) =
+    (result_ref[] = apply_zero_site(op, core); result_ref)
 
 """
-    dd_reference_sketch(f, mpo, i, lenv, renv, Om, side) -> TLArray
+    dd_reference_sketch(frame, mpo, bond, lenv, renv, Om, side) -> TLArray
 
 TEST/DEBUG ONLY (plan T2.5 "full-DD exact tiny reference"): `P_L^D X P_R^D Om` (`side = :left`)
 or `P_R^D X' P_L^D Om` (`:right`) through the MATERIALISED `H Theta` and the project-first
 closures of `_sketch_closures`. Never on the production path.
 """
 function dd_reference_sketch(
-    f::BondFrame,
+    frame::BondFrame,
     mpo::MPO,
-    i::Int,
+    bond::Int,
     lenv::MPOLink,
     renv::MPOLink,
     Om,
     side::Symbol,
 )
-    skl, skr = _sketch_closures(f, () -> apply_h_two_site(frame_theta(f), mpo, i, lenv, renv))
-    return side === :left ? skl(perp_component_right(f.V0, Om)) : skr(perp_component(f.U0, Om))
+    skl, skr = _sketch_closures(
+        frame,
+        () -> apply_h_two_site(frame_theta(frame), mpo, bond, lenv, renv),
+    )
+    return side === :left ? skl(perp_component_right(frame.V0, Om)) :
+           skr(perp_component(frame.U0, Om))
 end
 
 # ── T2.3: probes in the discarded space only ──────────────────────────────────────────────
 
 """
-    _dd_probe(frame, side, w; rng, boost, exact, kc) -> P^D Om, or nothing
+    _dd_probe(frame, side, column_budget; rng, boost, exact, kc) -> P^D Om, or nothing
 
-A sector-graded Gaussian probe in `frame`'s layout, drawn only in the discarded space: columns are
-allotted by each sector's discarded dimension, then the frame is projected out. `exact = true`
-projects the complete fused basis instead. Returns `nothing` when there is no discarded space.
+A sector-graded Gaussian probe in `frame`'s layout with `column_budget` columns, drawn only in the
+discarded space: columns are allotted by each sector's discarded dimension, then the frame is
+projected out. `exact = true` projects the complete fused basis instead. Returns `nothing` when
+there is no discarded space.
 
 Unlike `sector_graded_sketch(...; comp_ratio = 1.0)`, a short complement is not topped up from the
 kept space.
@@ -147,31 +160,32 @@ kept space.
 function _dd_probe(
     frame,
     side::Symbol,
-    w::Int;
+    column_budget::Int;
     rng::AbstractRNG,
     boost = nothing,
     exact::Bool = false,
     kc::KernelCounters = KernelCounters(),
 )
-    a, b = side === :left ? (1, 2) : (2, 3)
-    F = fusion_basis(frame, a, b; tag = "cbeG")
-    dfull, dT = _frame_sector_dims(frame, side, F, "_dd_probe")
-    dC = Dict(q => max(dfull[q] - dT[q], 0) for q in keys(dfull))
+    # The two frame legs fused into the probe's rows: (link_l, site_l) or (site_r, link_r).
+    left_leg, right_leg = side === :left ? (1, 2) : (2, 3)
+    fused_basis = fusion_basis(frame, left_leg, right_leg; tag = "cbeG")
+    dfull, dT = _frame_sector_dims(frame, side, fused_basis, "_dd_probe")
+    dC = Dict(charge => max(dfull[charge] - dT[charge], 0) for charge in keys(dfull))
     sum(values(dC); init = 0) == 0 && return nothing
-    R = if exact
-        F
+    probe = if exact
+        fused_basis
     else
-        cols = _alloc_columns(dC, w)
+        cols = _alloc_columns(dC, column_budget)
         boost === nothing || _boost!(cols, boost, dC)
-        _trim_per_sector(_randomize_like(F, rng), 3, cols)
+        _trim_per_sector(_randomize_like(fused_basis, rng), 3, cols)
     end
-    R === nothing && return nothing
-    Om = side === :left ? R : to_concrete(permutedims(R, (3, 1, 2)))
+    probe === nothing && return nothing
+    Om = side === :left ? probe : to_concrete(permutedims(probe, (3, 1, 2)))
     perp = side === :left ? perp_component : perp_component_right
-    P, dt, db = _measure(() -> perp(frame, Om))
+    projected, dt, db = _measure(() -> perp(frame, Om))
     kc.t_input_dd += dt
     kc.b_input_dd += db
-    return norm(P) > 0 ? P : nothing
+    return norm(projected) > 0 ? projected : nothing
 end
 
 # ── T2.4: sectorwise thin Householder QR ──────────────────────────────────────────────────
@@ -184,132 +198,151 @@ function _block_matrix(rmt::AbstractArray, perm, rows::Int, dfl::Int)
 end
 
 """
-    _thin_qr(Y, fl, ref, tag, thr) -> Q or nothing
+    _thin_qr(sketch, fl, ref, tag, thr) -> orthonormal_basis or nothing
 
-Orthonormal basis of the span of `Y`'s leg-`fl` "columns" (fl = 3: columns of the left
+Orthonormal basis of the span of `sketch`'s leg-`fl` "columns" (fl = 3: columns of the left
 matricisation; fl = 1: rows of the right one), by column-pivoted Householder QR per charge
 sector of leg `fl`. A direction is kept when its pivot `|R_kk|` exceeds `thr` -- an absolute,
 machine-precision-scaled linear-dependence floor, not a physics cutoff; nothing is ranked.
 
-The new leg is built in `ref`'s arrow convention (`align_charge`), so `[frame | Q]` direct-sums
-directly. Abelian symmetries only (the block of a sector is then a plain matrix);
-callers use `_thin_orth_nonabelian` otherwise.
+The new leg is built in `ref`'s arrow convention (`align_charge`), so
+`[frame | orthonormal_basis]` direct-sums directly. Abelian symmetries only (the block of a sector
+is then a plain matrix); callers use `_thin_orth_nonabelian` otherwise.
 """
-function _thin_qr(Y, fl::Int, ref::TLIndex, tag::AbstractString, thr::Float64)
-    QD = length(Y.inds)
-    syms = symm(Y)
-    ydir = Y.inds[fl].dir
-    others = Tuple(l for l = 1:QD if l != fl)
+function _thin_qr(sketch, fl::Int, ref::TLIndex, tag::AbstractString, thr::Float64)
+    QD = length(sketch.inds)
+    syms = symm(sketch)
+    ydir = sketch.inds[fl].dir
+    others = Tuple(leg for leg = 1:QD if leg != fl)
+    # Group the defined blocks by their charge on leg `fl`, in first-seen order.
     groups = Dict{Any,Vector{Int}}()
     order = Any[]
-    for k in eachindex(Y.qlabels)
-        Y.isdefined[k] || continue
-        q = Y.qlabels[k][fl]
-        haskey(groups, q) || (groups[q] = Int[]; push!(order, q))
-        push!(groups[q], k)
+    for block in eachindex(sketch.qlabels)
+        sketch.isdefined[block] || continue
+        charge = sketch.qlabels[block][fl]
+        haskey(groups, charge) || (groups[charge] = Int[]; push!(order, charge))
+        push!(groups[charge], block)
     end
-    newq = similar(Y.qlabels, 0)
-    newR = similar(Y.RMTs, 0)
+    newq = similar(sketch.qlabels, 0)
+    newR = similar(sketch.RMTs, 0)
     keep = Int[]
-    space = similar(Y.spaces[fl], 0)
-    for q in order
-        ks = groups[q]
-        rmt1 = Y.RMTs[ks[1]]
+    space = similar(sketch.spaces[fl], 0)
+    for charge in order
+        ks = groups[charge]
+        rmt1 = sketch.RMTs[ks[1]]
         nd = ndims(rmt1)
-        all(size(rmt1, l) == 1 for l = (QD+1):nd) || throw(
+        all(size(rmt1, leg) == 1 for leg = (QD+1):nd) || throw(
             ArgumentError(
                 "_thin_qr: sector multiplicity axes are not trivial -- non-abelian blocks",
             ),
         )
+        # Stack the sector's blocks row-wise into one matrix whose columns are leg `fl`.
         perm = (others..., fl, ((QD+1):nd)...)
         dfl = size(rmt1, fl)
         mats = [
-            _block_matrix(Y.RMTs[k], perm, prod(size(Y.RMTs[k], l) for l in others), dfl) for
-            k in ks
+            _block_matrix(
+                sketch.RMTs[block],
+                perm,
+                prod(size(sketch.RMTs[block], leg) for leg in others),
+                dfl,
+            ) for block in ks
         ]
-        M = reduce(vcat, mats)
-        size(M, 1) == 0 && continue
-        F = qr(M, ColumnNorm())
-        r = count(x -> abs(x) > thr, diag(F.R))
-        r == 0 && continue
-        Qm = Matrix(F.Q)[:, 1:r]
-        qn = align_charge(syms, q, ydir, ref.dir)
-        push!(space, (qn, r))
+        stacked = reduce(vcat, mats)
+        size(stacked, 1) == 0 && continue
+        factorization = qr(stacked, ColumnNorm())
+        rank_kept = count(pivot -> abs(pivot) > thr, diag(factorization.R))
+        rank_kept == 0 && continue
+        Qm = Matrix(factorization.Q)[:, 1:rank_kept]
+        qn = align_charge(syms, charge, ydir, ref.dir)
+        push!(space, (qn, rank_kept))
+        # Cut `Qm` back into the sector's blocks, row range by row range.
         row = 0
-        for (k, Mk) in zip(ks, mats)
+        for (block, Mk) in zip(ks, mats)
             nr = size(Mk, 1)
-            sz = size(Y.RMTs[k])
-            blk =
-                reshape(Qm[(row+1):(row+nr), :], (map(l -> sz[l], others)..., r, sz[(QD+1):nd]...))
+            sz = size(sketch.RMTs[block])
+            blk = reshape(
+                Qm[(row+1):(row+nr), :],
+                (map(leg -> sz[leg], others)..., rank_kept, sz[(QD+1):nd]...),
+            )
             row += nr
-            push!(keep, k)
+            push!(keep, block)
             push!(newR, permutedims(blk, invperm(collect(perm))))
-            lab = Y.qlabels[k]
-            push!(newq, ntuple(l -> l == fl ? qn : lab[l], QD))
+            lab = sketch.qlabels[block]
+            push!(newq, ntuple(leg -> leg == fl ? qn : lab[leg], QD))
         end
     end
     isempty(keep) && return nothing
-    wd, wi = Telum._copy_wmat_storage(Y, keep; deep = true)
-    inds = ntuple(l -> l == fl ? TLIndex(tag, ref.dir, ref.plev, 0, ref.dual) : Y.inds[l], QD)
-    spaces = ntuple(l -> l == fl ? space : copy(Y.spaces[l]), QD)
+    wd, wi = Telum._copy_wmat_storage(sketch, keep; deep = true)
+    inds = ntuple(
+        leg -> leg == fl ? TLIndex(tag, ref.dir, ref.plev, 0, ref.dual) : sketch.inds[leg],
+        QD,
+    )
+    spaces = ntuple(leg -> leg == fl ? space : copy(sketch.spaces[leg]), QD)
     return TLArray(syms, newq, wd, wi, newR, inds, spaces)
 end
 
 """
-Plan T2.4 "twice is enough", read as the DGKS/Kahan-Parlett acceptance test: a unit column of `Q1`
-is a direction only if it keeps at least this fraction of its norm through the second `P^D`. A
-genuine direction keeps ~1. Roundoff that cleared the first floor collapses to the frame's own
-orthogonality level, which an absolute `100 eps` floor does not reject: in a sector the frame
-fills, that column is `P^D`'s cancellation noise renormalised, i.e. a unit vector INSIDE the frame.
-MEASURED (dissipative A2 L=32 finite density, closure frontier sweep, dr6z): pass-1 residuals
-3.0e-14 against a floor of 2.65e-14 in the filled sectors, kept by pass 2 with `|frame'Q| = 1`; the
-controller's working frame absorbed them, the next selections projected against a non-isometric
-frame, and the grown frame reached a defect of 14 at site 13 and 1e26 at the root.
+Plan T2.4 "twice is enough", read as the DGKS/Kahan-Parlett acceptance test: a unit column of the
+first-pass basis is a direction only if it keeps at least this fraction of its norm through the
+second `P^D`. A genuine direction keeps ~1. Roundoff that cleared the first floor collapses to the
+frame's own orthogonality level, which an absolute `100 eps` floor does not reject: in a sector the
+frame fills, that column is `P^D`'s cancellation noise renormalised, i.e. a unit vector INSIDE the
+frame. MEASURED (dissipative A2 L=32 finite density, closure frontier sweep, dr6z): pass-1
+residuals 3.0e-14 against a floor of 2.65e-14 in the filled sectors, kept by pass 2 with
+`|frame'Q| = 1`; the controller's working frame absorbed them, the next selections projected
+against a non-isometric frame, and the grown frame reached a defect of 14 at site 13 and 1e26 at
+the root.
 """
 const _REORTH_KEEP = 1 / sqrt(2)
 
 """
-    _dd_select(frame, Z, side, kc) -> (Q, backend)
+    _dd_select(frame, sketch, side, kc) -> (orthonormal_basis, backend)
 
-Output DD projection and the two-pass thin QR of plan T2.4: `Y = P^D Z`, `Q1 = qr(Y)` at the
-floor `100 eps max(||Z||, ||Y||)` (the cancellation noise `P^D` leaves when most of `Z` lies in
-the frame), then `Q = qr(P^D Q1)` -- reorthogonalisation against the old frame, "twice is
-enough", keeping the pivots `>= _REORTH_KEEP`. Returns `nothing` when `Y` is numerically zero.
-Under SU(2) the sector blocks are not plain matrices, so the existing numerical-rank SVD
+Output DD projection and the two-pass thin QR of plan T2.4: `projected = P^D sketch`,
+`first_pass = qr(projected)` at the floor `100 eps max(||sketch||, ||projected||)` (the
+cancellation noise `P^D` leaves when most of `sketch` lies in the frame), then
+`orthonormal_basis = qr(P^D first_pass)` -- reorthogonalisation against the old frame, "twice is
+enough", keeping the pivots `>= _REORTH_KEEP`. Returns `nothing` when `projected` is numerically
+zero. Under SU(2) the sector blocks are not plain matrices, so the existing numerical-rank SVD
 orthonormalisation (`_preselect_*` at `stol = 0`, no ranking) is used and reported as backend
 `:svd_orth`, never silently.
 """
-function _dd_select(frame, Z, side::Symbol, kc::KernelCounters)
+function _dd_select(frame, sketch, side::Symbol, kc::KernelCounters)
     left = side === :left
     if symmetry_mode() === :SU2
-        (Q, _), dt, db =
-            _measure(() -> left ? _preselect_left(frame, Z, 0.0) : _preselect_right(frame, Z, 0.0))
+        (orthonormal_basis, _), dt, db = _measure(
+            () ->
+                left ? _preselect_left(frame, sketch, 0.0) :
+                _preselect_right(frame, sketch, 0.0),
+        )
         kc.t_qr += dt
         kc.b_qr += db
         kc.n_qr += 1
-        Q === nothing || (kc.qr_rank += leg_dim(Q, left ? 3 : 1))
-        return (Q, :svd_orth)
+        orthonormal_basis === nothing ||
+            (kc.qr_rank += leg_dim(orthonormal_basis, left ? 3 : 1))
+        return (orthonormal_basis, :svd_orth)
     end
     fl = left ? 3 : 1
     perp = left ? perp_component : perp_component_right
-    Y, dt, db = _measure(() -> perp(frame, Z))
+    projected, dt, db = _measure(() -> perp(frame, sketch))
     kc.t_output_dd += dt
     kc.b_output_dd += db
-    nz, ny = norm(Z), norm(Y)
+    nz, ny = norm(sketch), norm(projected)
     ny <= _CBE_EPS * max(nz, 1.0) && return (nothing, :householder)
     ref = frame.inds[fl]
     tag = left ? _TAG_DD_L : _TAG_DD_R
-    Q, dt, db = _measure(
+    orthonormal_basis, dt, db = _measure(
         () -> begin
-            Q1 = _thin_qr(Y, fl, ref, tag, _CBE_EPS * max(nz, ny))
-            Q1 === nothing ? nothing : _thin_qr(perp(frame, Q1), fl, ref, tag, _REORTH_KEEP)
+            first_pass = _thin_qr(projected, fl, ref, tag, _CBE_EPS * max(nz, ny))
+            first_pass === nothing ? nothing :
+            _thin_qr(perp(frame, first_pass), fl, ref, tag, _REORTH_KEEP)
         end,
     )
     kc.t_qr += dt
     kc.b_qr += db
     kc.n_qr += 1
-    Q === nothing || (kc.qr_rank += leg_dim(Q, fl))
-    return (Q, :householder)
+    orthonormal_basis === nothing || (kc.qr_rank += leg_dim(orthonormal_basis, fl))
+    return (orthonormal_basis, :householder)
 end
 
 "The DD-QR backend this symmetry uses (`StepRecord.qr_backend`)."

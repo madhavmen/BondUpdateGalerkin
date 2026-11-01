@@ -55,7 +55,8 @@ function _resolve_step_options(
         frame_state === nothing ||
         throw(
             ArgumentError(
-                "order > 1 is a single-step method and does not combine with the midpoint predictor",
+                "order > 1 is a single-step method and does not combine with the midpoint " *
+                "predictor",
             ),
         )
     closure_probe >= 0 ||
@@ -88,7 +89,7 @@ end
     _refresh_expanded!(expanded, left_frames, right_frames, root_link) -> expanded
 
 Record the grown frame widths off the root bond: `left_frames[bond]` (bonds `1..root_link-1`) by
-its right leg, `right_frames[bond]` (bonds `root_link+1..L-1`) by its left leg.
+its right leg, `right_frames[bond]` (bonds `root_link+1..length(expanded)`) by its left leg.
 """
 function _refresh_expanded!(expanded, left_frames, right_frames, root_link::Int)
     for bond = 1:(root_link-1)
@@ -106,7 +107,7 @@ end
 
 The general-order stage (plan: krylov_closure_cbe_bug_realtime_L16_plan.md). The half-sweeps
 closed the frontier j = 0 (`psi` itself). For `order > 1` the frontiers j = 1..order-1 of the ROOT
-generator are closed against the GLOBAL operator, growing `frames.W` and `frames.Z` in place; the
+generator are closed against the GLOBAL operator, growing `frames.left_frames` and `frames.right_frames` in place; the
 root environments and the root start vector come back rebuilt in the final frames, and the single
 root solve runs in them. Returns those (and the closure's operator applications), or `nothing`
 when the frames are left as they were: for `order = 1`, and for a `closure_probe` measurement,
@@ -164,12 +165,12 @@ function _close_root_frontiers!(
             fold = fold,
             checks = closure_checks,
         )
-        _refresh_expanded!(expanded, frames.W, frames.Z, frames.c)
+        _refresh_expanded!(expanded, frames.left_frames, frames.right_frames, frames.root_link)
         recycle_report === nothing || recycle === nothing || (recycle_report[] = recycle.log)
         return (
             lenv = frames.lenv,
             renv = frames.renv,
-            root_start = closure.S0,
+            root_start = closure.root_start,
             operator_applications = closure.n_h1 + closure.n_root,
         )
     elseif closure_probe > 0
@@ -259,6 +260,8 @@ function _report_root!(
         nothing,
         Float64(eshift),
     )
+    # The outside-Galerkin action `(I - P) H state` in the current frames, from a copied `rng` so
+    # the measurement leaves the step's random stream untouched.
     outside_of(state) = estimate_global_complement_action(
         psi,
         mpo,
@@ -268,6 +271,7 @@ function _report_root!(
         rng = copy(rng),
     )
     outside = outside_residual ? outside_of(root_result) : nothing
+    # The step's defect `|tau| ||(I - P) H state|| / ||state||` (`NaN` when not measured).
     residual_of(action, state) =
         action === nothing ? NaN : abs(tau) * action.bound / max(norm(state), eps())
     initial_residual = residual_of(outside, root_result)
@@ -340,7 +344,7 @@ function _report_root!(
         outside = outside === nothing ? NaN : outside.bound / result_norm,
         outside_left = outside === nothing ? NaN : outside.left / result_norm,
         outside_right = outside === nothing ? NaN : outside.right / result_norm,
-        # per bond (left frames 1..c, right frames c..L-1), scale-free like the above
+        # per bond (left frames 1..root_link, right frames root_link..end), scale-free as above
         per_left = outside === nothing ? Float64[] : outside.per_left ./ result_norm,
         per_right = outside === nothing ? Float64[] : outside.per_right ./ result_norm,
         # the step's outside-Galerkin defect, `|tau| ||(I-P) H psi_1|| / ||psi_1||`

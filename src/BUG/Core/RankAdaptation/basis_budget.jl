@@ -41,6 +41,7 @@ struct BasisAllocation
     scale::Float64
     rule::Symbol
 end
+# The five-share constructor records the default `:rss` rule.
 BasisAllocation(per_bond, sample, tail, krylov, scale) =
     BasisAllocation(per_bond, sample, tail, krylov, scale, :rss)
 
@@ -120,7 +121,7 @@ mutable struct AdaptiveLedger
     # over every bond it cut -- the quantity `tol_trunc` bounds (plan §5, UT14). Not the
     # largest single bond's weight, which `CBEBugSweepInfo.discarded` still reports.
     discarded::Float64
-    expv_err::Float64            # worst root `expv` error estimate (Saad, relative to ||S0||)
+    expv_err::Float64            # worst root `expv` error estimate (Saad, rel. to the root start)
     n_probes::Int                # sketch columns drawn, summed over bonds and sides
     n_holdout::Int               # independent validation probes drawn
     n_selected::Int              # CBE directions retained
@@ -166,7 +167,7 @@ mutable struct AdaptiveLedger
     # probes; after the compression `cbe_bug_step!` adds `r_old`, `r_final` and that bond's
     # relative `discarded` norm. The step-level fields above are the max/sum over these.
     bond_log::Vector{Any}
-    # ── General-order Krylov closure (`krylov_closure.jl`; 1 / 0 / empty on `order = 1`) ──
+    # ── General-order Krylov closure (`krylov_closure_loop.jl`; 1 / 0 / empty on `order = 1`) ──
     order::Int                   # the temporal order the step was asked for
     n_passes::Int                # closure passes over the frontiers j = 1..order-1
     n_closure_sweeps::Int        # frontier half-sweep pairs run (enriching or measuring)
@@ -194,6 +195,8 @@ mutable struct AdaptiveLedger
     kls::Any
 end
 
+# A fresh ledger, field by field in declaration order: every indicator and count zero, the
+# tolerance met, no checks failed, empty logs, order 1 and no K/L/S account.
 AdaptiveLedger() = AdaptiveLedger(
     0.0,
     0.0,
@@ -305,50 +308,50 @@ end
 # NOT `Base.merge!`: that method is for associatives, and adding a `TLArray`-free method to it
 # from here would be type piracy in a module that already imports a great deal of Base.
 "Fold a second ledger into the first. The two half-sweeps each keep their own and merge."
-function merge_ledger!(a::AdaptiveLedger, b::AdaptiveLedger)
-    a.max_sample = max(a.max_sample, b.max_sample)
-    a.max_sample_l = max(a.max_sample_l, b.max_sample_l)
-    a.max_sample_r = max(a.max_sample_r, b.max_sample_r)
-    append!(a.sample_log, b.sample_log)
-    a.max_tail = max(a.max_tail, b.max_tail)
-    a.max_krylov = max(a.max_krylov, b.max_krylov)
-    a.max_krylov_c = max(a.max_krylov_c, b.max_krylov_c)
-    a.max_krylov_d = max(a.max_krylov_d, b.max_krylov_d)
-    a.n_c_pass += b.n_c_pass
-    a.n_d_after_c += b.n_d_after_c
-    a.discarded = max(a.discarded, b.discarded)
-    a.expv_err = max(a.expv_err, b.expv_err)
-    a.n_probes += b.n_probes
-    a.n_holdout += b.n_holdout
-    a.n_selected += b.n_selected
-    a.n_krylov += b.n_krylov
-    a.n_h1 += b.n_h1
-    a.n_targeted += b.n_targeted
-    a.workcap_reached |= b.workcap_reached
-    a.tolerance_met &= b.tolerance_met
-    a.maxdim_reached |= b.maxdim_reached
-    a.proj_err = max(a.proj_err, b.proj_err)
-    a.r_old = max(a.r_old, b.r_old)
-    a.r_aug = max(a.r_aug, b.r_aug)
-    a.r_final = max(a.r_final, b.r_final)
-    a.expv_iters += b.expv_iters
-    union!(a.unmet, b.unmet)
-    append!(a.bond_log, b.bond_log)
-    a.order = max(a.order, b.order)
-    a.n_passes += b.n_passes
-    a.n_closure_sweeps += b.n_closure_sweeps
-    append!(a.leak, b.leak)
-    a.defect = max(a.defect, b.defect)
-    a.n_root_frontier += b.n_root_frontier
-    a.n_h2_leak += b.n_h2_leak
-    a.n_h1_closure += b.n_h1_closure
-    append!(a.closure_log, b.closure_log)
-    a.t_closure += b.t_closure
-    a.n_compress += b.n_compress
-    append!(a.leak_initial, b.leak_initial)
-    append!(a.rho_initial, b.rho_initial)
-    b.kls === nothing || (a.kls = b.kls)
-    return a
+function merge_ledger!(ledger::AdaptiveLedger, other::AdaptiveLedger)
+    ledger.max_sample = max(ledger.max_sample, other.max_sample)
+    ledger.max_sample_l = max(ledger.max_sample_l, other.max_sample_l)
+    ledger.max_sample_r = max(ledger.max_sample_r, other.max_sample_r)
+    append!(ledger.sample_log, other.sample_log)
+    ledger.max_tail = max(ledger.max_tail, other.max_tail)
+    ledger.max_krylov = max(ledger.max_krylov, other.max_krylov)
+    ledger.max_krylov_c = max(ledger.max_krylov_c, other.max_krylov_c)
+    ledger.max_krylov_d = max(ledger.max_krylov_d, other.max_krylov_d)
+    ledger.n_c_pass += other.n_c_pass
+    ledger.n_d_after_c += other.n_d_after_c
+    ledger.discarded = max(ledger.discarded, other.discarded)
+    ledger.expv_err = max(ledger.expv_err, other.expv_err)
+    ledger.n_probes += other.n_probes
+    ledger.n_holdout += other.n_holdout
+    ledger.n_selected += other.n_selected
+    ledger.n_krylov += other.n_krylov
+    ledger.n_h1 += other.n_h1
+    ledger.n_targeted += other.n_targeted
+    ledger.workcap_reached |= other.workcap_reached
+    ledger.tolerance_met &= other.tolerance_met
+    ledger.maxdim_reached |= other.maxdim_reached
+    ledger.proj_err = max(ledger.proj_err, other.proj_err)
+    ledger.r_old = max(ledger.r_old, other.r_old)
+    ledger.r_aug = max(ledger.r_aug, other.r_aug)
+    ledger.r_final = max(ledger.r_final, other.r_final)
+    ledger.expv_iters += other.expv_iters
+    union!(ledger.unmet, other.unmet)
+    append!(ledger.bond_log, other.bond_log)
+    ledger.order = max(ledger.order, other.order)
+    ledger.n_passes += other.n_passes
+    ledger.n_closure_sweeps += other.n_closure_sweeps
+    append!(ledger.leak, other.leak)
+    ledger.defect = max(ledger.defect, other.defect)
+    ledger.n_root_frontier += other.n_root_frontier
+    ledger.n_h2_leak += other.n_h2_leak
+    ledger.n_h1_closure += other.n_h1_closure
+    append!(ledger.closure_log, other.closure_log)
+    ledger.t_closure += other.t_closure
+    ledger.n_compress += other.n_compress
+    append!(ledger.leak_initial, other.leak_initial)
+    append!(ledger.rho_initial, other.rho_initial)
+    other.kls === nothing || (ledger.kls = other.kls)
+    return ledger
 end
 
 """
@@ -366,10 +369,12 @@ function _log_bond!(ledger::AdaptiveLedger, bl::AdaptiveLedger, bond::Int, side:
     # logs every widening attempt; the last one is what the frame was built from). Empty on
     # `exact = true`, which draws no sketch.
     final = Dict{Symbol,Any}()
-    for s in bl.sample_log
-        final[s.side] = s.sketch
+    for sample_entry in bl.sample_log
+        final[sample_entry.side] = sample_entry.sketch
     end
-    probes = Dict{Symbol,Dict{Any,Int}}(k => v for (k, v) in final)
+    probes = Dict{Symbol,Dict{Any,Int}}(
+        sketch_side => sector_probes for (sketch_side, sector_probes) in final
+    )
     push!(
         bl.bond_log,
         (
@@ -399,10 +404,11 @@ function _log_bond!(ledger::AdaptiveLedger, bl::AdaptiveLedger, bond::Int, side:
 end
 
 """
-    work_ceiling(maxdim, r, d = 2) -> Int
+    work_ceiling(maxdim, bond_rank, site_dim = 2) -> Int
 
 The internal cap on temporary working rank at one bond, from the resource limit, the bond's
-current rank and the local dimension `d` (`local_dim`). Not a user setting.
+current rank `bond_rank` (`r` below) and the local dimension `site_dim` (`d` below, the
+`local_dim` of the site). Not a user setting.
 
 Expansion may overshoot `maxdim` while the trial space is built, since that is how a rank-`r` state
 discovers rank-`r'` structure. It may not grow without bound, which an uncapped spectrum-driven rule
@@ -413,7 +419,8 @@ frozen. USER 10-28: `d`, not 2 -- at the d = 4 Hubbard site `2*maxdim` held A1 a
 every step whatever `tol_krylov` (dq7a). It is a tuned policy, not a theorem; `workcap_reached` in
 the ledger reports when it binds.
 """
-work_ceiling(maxdim::Int, r::Int, d::Int = 2) = max(d * maxdim, d * r, 1)
+work_ceiling(maxdim::Int, bond_rank::Int, site_dim::Int = 2) =
+    max(site_dim * maxdim, site_dim * bond_rank, 1)
 
 """
 The adaptive search's STARTING width schedule (`budget = ceil(growth*dmax) - r`, probe `1.2x` that).

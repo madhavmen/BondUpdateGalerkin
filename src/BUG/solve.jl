@@ -90,30 +90,38 @@ struct LowestEigen <: SStepSolver end
 `value` is the Ritz value for [`LowestEigen`](@ref) and `NaN` when the solver has no
 eigenvalue to report.
 """
-_reduce_krylov(p::Propagate, alpha, betas, beta0) =
-    (ComplexF64[beta0 * c for c in hermitian_tridiagonal_exp_coeffs(alpha, betas, p.tau)], NaN)
+_reduce_krylov(solver::Propagate, alpha, betas, beta0) = (
+    # `beta0 exp(tau T) e_1`: the start vector's norm times the exponential's first column
+    ComplexF64[
+        beta0 * coeff for coeff in hermitian_tridiagonal_exp_coeffs(alpha, betas, solver.tau)
+    ],
+    NaN,
+)
 
 function _reduce_krylov(::LowestEigen, alpha, betas, beta0)
     # `beta0` is deliberately UNUSED: the propagator carries the state's norm through the
     # step, an eigensolve replaces the state outright and the Ritz vector is normalised.
     isempty(betas) && return (ComplexF64[1.0], alpha[1])
-    F = eigen(SymTridiagonal(alpha, betas))
-    return (ComplexF64.(@view F.vectors[:, 1]), F.values[1])
+    decomposition = eigen(SymTridiagonal(alpha, betas))
+    # eigenvalues come sorted ascending, so column 1 is the lowest Ritz pair
+    return (ComplexF64.(@view decomposition.vectors[:, 1]), decomposition.values[1])
 end
 # ══════════════════════════════════════════════════════════════════════════════════════
 
 # ── CBE as the basis update of the validated gate-based integrator ──
-# A gate-only path has no environments, so a rank stall here isolates the CBE selection itself, which
-# is shared with the MPO path. It replaces the K/L ODE solves and the random sector fill of
+# A gate-only path has no environments, so a rank stall here isolates the CBE selection itself,
+# which is shared with the MPO path. It replaces the K/L ODE solves and the random sector fill of
 # `kls_bond_update`.
 
 # ── the sketched gate action ──
-# Never forms H*Theta: `Om` is folded into the gate first, so the largest intermediate is O(d^2 g r).
+# Never forms H*Theta: `Om` is folded into the gate first, so the largest intermediate is
+# O(d^2 g r).
 # Checked against `P_perp` of `apply_gate` on Theta, for arbitrary `Om`.
 
-"Check `gate` is tagged for the bond `f` describes, as `apply_gate` does for `theta`."
-function _check_gate(f::BondFrame, gate)
-    tl, tr = f.site_l.itags, f.site_r.itags
+"Check `gate` is tagged for the bond `frame` describes, as `apply_gate` does for `theta`; returns
+`nothing` or throws `ArgumentError`."
+function _check_gate(frame::BondFrame, gate)
+    tl, tr = frame.site_l.itags, frame.site_r.itags
     (gate.inds[1].itags == tl && gate.inds[2].itags == tr) || throw(
         ArgumentError(
             "gate is tagged for ($(gate.inds[1].itags), $(gate.inds[2].itags)), " *

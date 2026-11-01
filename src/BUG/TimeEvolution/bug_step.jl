@@ -6,8 +6,9 @@
 One step of the CBE-BUG sweep, in place. `tau = -im*dt` is real time, `tau = -dt` imaginary; the
 caller renormalises. Only the root bond evolves; both half-sweeps just generate bases.
 
-Keywords: `tol_basis` (its local Krylov share separately: `tol_krylov`), `tol_trunc`, `tol_expv` (alias `tol_root`) and `maxdim` (the resource limit,
-`adaptive_budget.jl`); `order` (temporal order `p`, see `krylov_closure.jl`); `root` (the Galerkin
+Keywords: `tol_basis` (its local Krylov share separately: `tol_krylov`), `tol_trunc`, `tol_expv`
+(alias `tol_root`) and `maxdim` (the resource limit, `Core/RankAdaptation/basis_budget.jl`);
+`order` (temporal order `p`, see `Core/RankAdaptation/krylov_closure_loop.jl`); `root` (the Galerkin
 bond, default `L/2`); `reorth` (re-orthogonalisation in the root solve); `expansion` (the
 basis-selection strategy of both half-sweeps and the frontier sweeps, a `BasisExpansion`;
 default `DDQRExpansion()`, the DD-projected, MPO-streamed, QR-only CBE).
@@ -17,7 +18,7 @@ function cbe_bug_step!(
     mpo::MPO,
     tau::ComplexF64;
     # ── THE API: three tolerances and one resource limit ──────────────
-    # `nothing` takes the default of `TOL_DEFAULTS` (`adaptive_budget.jl`).
+    # `nothing` takes the default in `TOL_DEFAULTS` (`Core/RankAdaptation/basis_budget.jl`).
     tol_basis::Union{Nothing,Float64} = nothing,
     tol_trunc::Union{Nothing,Float64} = nothing,
     tol_expv::Union{Nothing,Float64} = nothing,
@@ -30,7 +31,7 @@ function cbe_bug_step!(
     tol_krylov::Union{Nothing,Float64} = nothing,
     # The temporal order `p` -- a METHOD choice, not a fourth tolerance.
     # `p > 1` closes the global Krylov frontiers `j = 1..p-1` of the root
-    # generator before the one root solve (`krylov_closure.jl`); `1` is the
+    # generator before the one root solve (`krylov_closure_loop.jl`); `1` is the
     # ordinary step, unchanged.
     order::Int = 1,
     # ⚠ INSTRUMENTATION, NOT A METHOD CHOICE. `m > 0` on an `order = 1`
@@ -125,7 +126,7 @@ function cbe_bug_step!(
     # parallel K/L/S step in the preliminary frames, with this K/L/S schedule
     # (`KLS_SCHEDULES`). `nothing` is the standard augmented root step.
     kls::Union{Nothing,Symbol} = nothing,
-    # The closure's leak measurement (`krylov_closure.jl`): fold the probe into
+    # The closure's leak measurement (`krylov_frontier_bonds.jl`): fold the probe into
     # the two-site contraction instead of building `H*Theta`. `nothing` folds
     # for `order > 1`, so the closure forms no dense two-site action (dissipative
     # plan §1.2), except under `exact`: the folded leak is sampled, and the debug
@@ -165,7 +166,7 @@ function cbe_bug_step!(
         outside_residual = outside_residual,
         maxdim = maxdim,
     )
-    L, c, budget = options.site_count, options.root_link, options.budget
+    site_count, root_link, budget = options.site_count, options.root_link, options.budget
     parallel_sym, parallel, kls = options.parallel_mode, options.run_parallel, options.kls
     fold_omega, maxdim = options.fold_omega, options.maxdim
 
@@ -173,11 +174,11 @@ function cbe_bug_step!(
     # residual is measured in. The norm comes from the centre tensor, which carries the whole norm
     # only while the state is canonical (the sweeps gauge before reading). An out-of-range `center`
     # falls back to 1.0 rather than erroring in a diagnostic.
-    _nrm = (1 <= psi.center <= L) ? norm(psi[psi.center]) : 1.0
+    _nrm = (1 <= psi.center <= site_count) ? norm(psi[psi.center]) : 1.0
     # Plan T3.2: DD-QR spends `tol_basis` as a linear sum of shares.
     alloc = basis_allocation(
         budget,
-        L - 1;
+        site_count - 1;
         tau = tau,
         nrm = _nrm,
         nfront = order,
@@ -188,16 +189,16 @@ function cbe_bug_step!(
     ledger.order = order
     bd0 = bond_dims(psi)                 # per-bond `r_old` for the bond log (plan §8)
     ledger.r_old = maximum(bd0; init = 0)
-    bwts = zeros(L - 1)                  # per-bond discarded norm of the compression
+    bwts = zeros(site_count - 1)         # per-bond discarded norm of the compression
 
-    expanded = zeros(Int, L - 1)
-    # ⚠ ONE ARRAY PER HALF-SWEEP: bond `c` is written by BOTH (`n_new_l` from the left sweep,
-    # `n_new_r` from the right), so a single shared array is a genuine write conflict there --
-    # benign when the sweeps ran in sequence and last-writer-wins, undefined when they run
-    # concurrently. Merged after the join with the RIGHT sweep winning at `c`, which is exactly
-    # what the sequential order used to produce.
-    n_newL = zeros(Int, L - 1)
-    n_newR = zeros(Int, L - 1)
+    expanded = zeros(Int, site_count - 1)
+    # ⚠ ONE ARRAY PER HALF-SWEEP: bond `root_link` is written by BOTH (`n_newL` from the left
+    # sweep, `n_newR` from the right), so a single shared array is a genuine write conflict there
+    # -- benign when the sweeps ran in sequence and last-writer-wins, undefined when they run
+    # concurrently. Merged after the join with the RIGHT sweep winning at `root_link`, which is
+    # exactly what the sequential order used to produce.
+    n_newL = zeros(Int, site_count - 1)
+    n_newR = zeros(Int, site_count - 1)
     accL = _HalfAcc()
     accR = _HalfAcc()
 
@@ -228,7 +229,7 @@ function cbe_bug_step!(
         mpo,
         tau,
         eshift,
-        c,
+        root_link,
         alloc,
         expansion,
         exkw,
@@ -243,22 +244,23 @@ function cbe_bug_step!(
     ttrunc = Ref(0.0)
     _t0step = time_ns()
     _b0step = Base.gc_bytes()
-    W = Vector{Any}(undef, c)          # augmented LEFT frames,  sites 1 … c
-    Z = Vector{Any}(undef, L - 1)      # augmented RIGHT frames, Z[j] absorbs site j+1
+    left_frames = Vector{Any}(undef, root_link)  # augmented LEFT frames, sites 1 … root_link
+    # augmented RIGHT frames, right_frames[bond] absorbs site bond+1
+    right_frames = Vector{Any}(undef, site_count - 1)
 
     # ── `frame_state`: bases from one state, evolution from another ──
     # The midpoint BUG integrator (arXiv:2402.08607) takes its bases from `Y_{1/2}` but integrates
-    # the Galerkin ODE over the full step from `Y_0`. The start vector `S0 = <frames|Y_0>` must not
-    # come from the half-step state, or the second half would be integrated twice. `psi` stays
-    # L-canonical so that all assembly reads one gauge; with no `frame_state`, `psiR` aliases `psi`.
+    # the Galerkin ODE over the full step from `Y_0`. The start vector `root_start = <frames|Y_0>`
+    # must not come from the half-step state, or the second half would be integrated twice. `psi`
+    # stays L-canonical so that assembly reads one gauge; with no `frame_state`, `psiR` is `psi`.
     psiL = copy(frame_state === nothing ? psi : frame_state)
     psiR = frame_state === nothing ? psi : copy(frame_state)
 
     # ── RUN THEM ── (`parallel` needs `julia -t 2`; why it is safe: `half_sweeps.jl`)
-    # `lenv_root` / `renv_root`: the root environments at links `c` / `c+2`, in the NEW basis;
-    # the right sweep's final carry IS `AR` (`_half_right!`).
-    run_left() = _half_left!(psiL, W, expanded, n_newL, accL, ledgerL, rng, cx)
-    run_right() = _half_right!(psiR, Z, expanded, n_newR, accR, ledgerR, rngR, cx)
+    # `lenv_root` / `renv_root`: the root environments at links `root_link` / `root_link+2`, in the
+    # NEW basis; the right sweep's final carry IS `AR` (`_half_right!`).
+    run_left() = _half_left!(psiL, left_frames, expanded, n_newL, accL, ledgerL, rng, cx)
+    run_right() = _half_right!(psiR, right_frames, expanded, n_newR, accR, ledgerR, rngR, cx)
     if parallel
         tR = Threads.@spawn run_right()
         lenv_root = run_left()
@@ -270,33 +272,43 @@ function cbe_bug_step!(
     merge_ledger!(ledger, ledgerL)
     merge_ledger!(ledger, ledgerR)
 
-    # `n_new` at bond `c` is written by BOTH sweeps; the right one wins, which is what the old
-    # sequential order produced.
-    n_new = vcat(n_newL[1:(c-1)], n_newR[c:(L-1)])
+    # `n_new` at bond `root_link` is written by BOTH sweeps; the right one wins, which is what the
+    # old sequential order produced.
+    n_new = vcat(n_newL[1:(root_link-1)], n_newR[root_link:(site_count-1)])
     epre = max(accL.epre, accR.epre)
     efnl = max(accL.efnl, accR.efnl)
 
     # ── with a separate `frame_state`, the right sweep no longer touches `psi` ──
     # Gauge: `AL` and `AR` must be contracted in one gauge, since mixing them is silently wrong
-    # rather than an error. `AR` must be `<Z|psi>`, not the right carry `<Z|frame_state>`: the
-    # midpoint's Galerkin step starts from `Y_0`, and reusing the carry integrates the first
-    # half-step twice, quietly making the method first order.
+    # rather than an error. `AR` must be `<right_frames|psi>`, not the right carry
+    # `<right_frames|frame_state>`: the midpoint's Galerkin step starts from `Y_0`, and reusing the
+    # carry integrates the first half-step twice, quietly making the method first order.
     if frame_state !== nothing
-        canonical!(psi, L)
-        AR = _overlap_right(psi, Z, c)           # mirrors `_half_right!`'s `D` recursion on `psi`
+        canonical!(psi, site_count)
+        AR = _overlap_right(psi, right_frames, root_link)  # mirrors `_half_right!`'s `D` recursion
     end
 
-    AL = _overlap_left(psi, W, c)                                     # (b_L, link_{c+1})
-    S0 = to_concrete!(contract(AL, (2,), AR, (1,)))                   # (b_L, b_R)
+    AL = _overlap_left(psi, left_frames, root_link)          # (b_L, link_{root_link+1})
+    root_start = to_concrete!(contract(AL, (2,), AR, (1,)))  # (b_L, b_R)
 
     # ── GENERAL ORDER: for `order > 1` close the root generator's frontiers j = 1..order-1,
-    # growing `W` and `Z` in place; `closure_probe` only measures them (`bug_step_stages.jl`).
+    # growing both frame vectors in place; `closure_probe` only measures (`bug_step_stages.jl`).
     nclose = 0
     closure = _close_root_frontiers!(
-        KLFrames(W, Z, c, lenv_root, renv_root, 0, nothing, nothing, Float64(eshift)),
+        KLFrames(
+            left_frames,
+            right_frames,
+            root_link,
+            lenv_root,
+            renv_root,
+            0,
+            nothing,
+            nothing,
+            Float64(eshift),
+        ),
         psi,
         mpo,
-        S0,
+        root_start,
         tau,
         alloc,
         exkw,
@@ -317,28 +329,30 @@ function cbe_bug_step!(
         fold = fold_omega,
     )
     if closure !== nothing
-        lenv_root, renv_root, S0 = closure.lenv, closure.renv, closure.root_start
+        lenv_root, renv_root, root_start = closure.lenv, closure.renv, closure.root_start
         nclose = closure.operator_applications
     end
     # PLAN §5 `state_projection_error`: how much of `psi` the frames miss. On the ordinary step the
     # frames contain `psi`, so this is roundoff; on the midpoint's second stage it is the genuine
     # error of projecting `Y_0` onto frames built from `Y_{1/2}`, charged against `tol_basis`. The
-    # norm is taken from the state, not from `sqrt(||psi||^2 - ||S0||^2)`, which is pure
+    # norm is taken from the state, not from `sqrt(||psi||^2 - ||root_start||^2)`, which is pure
     # cancellation at ~1e-8 and would flag steps spuriously.
     npsi = norm(psi[psi.center])
-    ledger.r_aug = max(maximum(expanded; init = 0), leg_dim(Z[c], 1))
-    ledger.proj_err = npsi > 0 ? _projection_miss(psi, W, Z, c) / npsi : 0.0
+    ledger.r_aug = max(maximum(expanded; init = 0), leg_dim(right_frames[root_link], 1))
+    ledger.proj_err =
+        npsi > 0 ? _projection_miss(psi, left_frames, right_frames, root_link) / npsi : 0.0
     ledger.proj_err > budget.basis && _unmet!(ledger, :projection)
-    peak = accL.peak + accR.peak + sum(tensor_elements(t) for t in (W[c], Z[c], S0); init = 0)
+    root_tensors = (left_frames[root_link], right_frames[root_link], root_start)
+    peak = accL.peak + accR.peak + sum(tensor_elements(tensor) for tensor in root_tensors; init = 0)
 
     # Plan Task 6: the K and L stages of the parallel K/L/S step start from `psi` in these frames
     # and run beside the root solve (the S stage), and `_kls_finish` merges the three. `tol_expv`
     # drives the root solve's substep split (`substeps = 0`), so the iteration count follows from
     # it; the basis cap and breakdown threshold are numerical settings only.
-    kls_stage(apply, x, rep) = expv(
+    kls_stage(apply, start_vector, rep) = expv(
         apply,
         tau,
-        x;
+        start_vector;
         hermitian = hermitian,
         maxiter = _ROOT_MAXITER,
         tol = 1e-15,
@@ -350,17 +364,37 @@ function cbe_bug_step!(
     )
     klsst =
         kls === nothing ? nothing :
-        _kls_start(psi, mpo, W, Z, c, lenv_root, renv_root, kls_stage, eshift, kls)
+        _kls_start(
+            psi,
+            mpo,
+            left_frames,
+            right_frames,
+            root_link,
+            lenv_root,
+            renv_root,
+            kls_stage,
+            eshift,
+            kls,
+        )
 
     kroot = KernelCounters()
-    H0 = RootOp(shift_h(zero_site_h(mpo, c, lenv_root, renv_root, W[c], Z[c]), eshift), c, kroot)
+    # The zero-site (root) generator between the root frames, shifted to `H - eshift`.
+    root_generator = zero_site_h(
+        mpo,
+        root_link,
+        lenv_root,
+        renv_root,
+        left_frames[root_link],
+        right_frames[root_link],
+    )
+    root_operator = RootOp(shift_h(root_generator, eshift), root_link, kroot)
     nroot = Ref(0)
     rootrep = Ref{Any}(nothing)
     _t0root = time_ns()
     # The root solver for any root operator; it counts every application in `nroot`.
-    solve_with(operator, S) =
-        kls_stage(x -> (nroot[] += 1; apply_zero_site(operator, x)), S, rootrep)
-    S1 = solve_with(H0, S0)
+    solve_with(operator, start_vector) =
+        kls_stage(input -> (nroot[] += 1; apply_zero_site(operator, input)), start_vector, rootrep)
+    root_result = solve_with(root_operator, root_start)
     troot[] = (time_ns() - _t0root) / 1e9
     if root_report !== nothing
         # Energies, the outside-Galerkin residual and its re-enrichment (`bug_step_stages.jl`).
@@ -368,14 +402,14 @@ function cbe_bug_step!(
             root_report,
             psi,
             mpo,
-            W,
-            Z,
-            c,
+            left_frames,
+            right_frames,
+            root_link,
             lenv_root,
             renv_root,
-            H0,
-            S0,
-            S1,
+            root_operator,
+            root_start,
+            root_result,
             solve_with;
             tau = tau,
             eshift = eshift,
@@ -398,36 +432,43 @@ function cbe_bug_step!(
             root_solve_report = rootrep,
             root_applications = nroot,
         )
-        S0, S1 = report.root_start, report.root_result
+        root_start, root_result = report.root_start, report.root_result
         lenv_root, renv_root = report.lenv, report.renv
     end
     nkls = 0
     if klsst !== nothing
         # The four-block core in the grown root frames, or -- when the omitted new-new block is
         # above `tol_basis` -- the standard augmented root solve in them (plan T6.3).
-        solve_aug(h, S) = (op = RootOp(shift_h(h, eshift), c, kroot);
-        kls_stage(x -> (nroot[] += 1; apply_zero_site(op, x)), S, rootrep))
+        solve_aug(generator, start_vector) = (
+            op = RootOp(shift_h(generator, eshift), root_link, kroot);
+            kls_stage(input -> (nroot[] += 1; apply_zero_site(op, input)), start_vector, rootrep)
+        )
         kr = _kls_finish(
             klsst,
             mpo,
-            W,
-            Z,
-            c,
+            left_frames,
+            right_frames,
+            root_link,
             lenv_root,
             renv_root,
-            S0,
-            S1,
+            root_start,
+            root_result,
             tau,
             solve_aug;
             nrm = _nrm,
             tol_missing = budget.basis,
         )
-        W[c], Z[c], S1 = kr.W, kr.Z, kr.S1
+        left_frames[root_link], right_frames[root_link], root_result = kr.left_root, kr.right_root, kr.root_result
         merge_counters!(kroot, kr.kc)
         nkls = kr.account.n_K + kr.account.n_L
         ledger.kls = kr.account
-        ledger.r_aug = max(ledger.r_aug, leg_dim(W[c], 3), leg_dim(Z[c], 1))
-        max(kr.account.err_K, kr.account.err_L) > budget.expv * (1 + 1e-8) && _unmet!(ledger, :expv)
+        ledger.r_aug = max(
+            ledger.r_aug,
+            leg_dim(left_frames[root_link], 3),
+            leg_dim(right_frames[root_link], 1),
+        )
+        max(kr.account.err_K, kr.account.err_L) > budget.expv * (1 + 1e-8) &&
+            _unmet!(ledger, :expv)
     end
     if rootrep[] !== nothing
         ledger.expv_err = rootrep[].err
@@ -437,23 +478,32 @@ function cbe_bug_step!(
         rootrep[].err > budget.expv * (1 + 1e-8) && _unmet!(ledger, :expv)
     end
 
-    # ⛔ THE ROOT CORE SPLIT IS LOSSLESS (plan §5). This SVD only splits `S1` into the two site
-    # tensors below: `cutoff = 0.0` keeps every singular value with `sv > 0` (Telum's selector is
-    # relative to `sv_max`) and there is no `Nkeep`, so the closing pass is the step's one
+    # ⛔ THE ROOT CORE SPLIT IS LOSSLESS (plan §5). This SVD only splits `root_result` into the two
+    # site tensors below: `cutoff = 0.0` keeps every singular value with `sv > 0` (Telum's selector
+    # is relative to `sv_max`) and there is no `Nkeep`, so the closing pass is the step's one
     # compression -- and, with `truncate = false`, there is no rank control at the root at all.
     frames_report === nothing || (
-        frames_report[] =
-            KLFrames(W, Z, c, lenv_root, renv_root, 0, nothing, nothing, Float64(eshift))
+        frames_report[] = KLFrames(
+            left_frames,
+            right_frames,
+            root_link,
+            lenv_root,
+            renv_root,
+            0,
+            nothing,
+            nothing,
+            Float64(eshift),
+        )
     )
-    res = svd(S1, (1,); cutoff = 0.0, get_lists = true)
-    expanded[c] = leg_dim(W[c], 3)
+    res = svd(root_result, (1,); cutoff = 0.0, get_lists = true)
+    expanded[root_link] = leg_dim(left_frames[root_link], 3)
     # bytes by hand, not `_measure`: a closure here would box the reassigned `maxdim`
     bcomp = Base.gc_bytes()
     root_rank, discarded, ttrunc[] = _assemble_and_compress!(
         psi,
-        W,
-        Z,
-        c,
+        left_frames,
+        right_frames,
+        root_link,
         res,
         ledger,
         bwts,
@@ -481,7 +531,7 @@ function cbe_bug_step!(
         kls === nothing ? parallel_sym : :full,
         kc,
         maximum(bd0; init = 0),
-        max(maximum(expanded; init = 0), leg_dim(Z[c], 1)),
+        max(maximum(expanded; init = 0), leg_dim(right_frames[root_link], 1)),
         maximum(bond_dims(psi); init = 0),
         maxdim,
         wcap_step,
@@ -495,7 +545,7 @@ function cbe_bug_step!(
     return CBEBugSweepInfo(
         expanded,
         n_new,
-        c,
+        root_link,
         root_rank,
         epre,
         efnl,
@@ -503,7 +553,7 @@ function cbe_bug_step!(
         accL.nmv + accR.nmv + nroot[] + nclose + nkls,
         peak,
         accL.ngrow + accR.ngrow,
-        leg_dim(Z[c], 1),
+        leg_dim(right_frames[root_link], 1),
         accL.tcbe + accR.tcbe,
         accL.tkry + accR.tkry,
         troot[],
@@ -519,31 +569,3 @@ end
 
 cbe_bug_step!(psi::SymMPS, mpo::MPO, tau::Number; kwargs...) =
     cbe_bug_step!(psi, mpo, ComplexF64(tau); kwargs...)
-
-# ── from BUG/Core/Sweeps/parallel_kls.jl: the step entry point of the K/L/S kernel there ──
-
-"""
-    parallel_kls_step!(psi, mpo, tau; schedule = :concurrent, kwargs...) -> CBEBugSweepInfo
-
-ONE step of the fully parallel K/L/S integrator (plan Task 6): the preliminary half-sweeps (and,
-for `order = p > 1`, the frontier closure) of [`cbe_bug_step!`](@ref), then the K, L and root S
-equations from `psi` in those frames, the four-block reconstruction and the one compression.
-Takes `cbe_bug_step!`'s normal-API keywords. `schedule` is `:sequential` (K, L, then S),
-`:kl_then_s` (K and L concurrently, then S) or `:concurrent` (all three); the three give the
-same state up to the order of floating-point reductions. `ledger.kls` reports the new directions,
-the omitted block `missing` and whether the step fell back to the standard augmented root solve.
-"""
-parallel_kls_step!(psi::SymMPS, mpo, tau; schedule::Symbol = :concurrent, kwargs...) =
-    cbe_bug_step!(psi, mpo, tau; kwargs..., kls = schedule)
-
-# From BUG-Julia@b155550:src/RSVDCBEBondUpdate/qtt/qtt_flows.jl.
-"Overwrite `psi` with the tensors and gauge centre of `src` (same length)."
-function _replace_state!(psi::SymMPS, src::SymMPS)
-    length(psi) == length(src) ||
-        throw(DimensionMismatch("_replace_state!: $(length(psi)) vs $(length(src)) sites"))
-    for i = 1:length(psi)
-        psi[i] = src[i]
-    end
-    psi.center = src.center
-    return psi
-end

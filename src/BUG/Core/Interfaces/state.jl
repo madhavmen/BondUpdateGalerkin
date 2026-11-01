@@ -3,7 +3,7 @@
 # suite against every state type.
 #
 # Copy semantics: `copy(psi)` copies the site-tensor vector and shares the tensors. That is safe
-# because every operation in this package REPLACES a site tensor (`psi[i] = ...`) and never
+# because every operation in this package REPLACES a site tensor (`psi[site] = ...`) and never
 # mutates one in place; a kernel that mutates a tensor must own it first.
 
 """
@@ -14,16 +14,16 @@ Number of sites (tensors) of the tensor train.
 function nsites end
 
 """
-    physical_dimension(psi, i) -> Int
+    physical_dimension(psi, site) -> Int
 
-Dimension of the physical leg of site `i`, summed over its charge sectors.
+Dimension of the physical leg of site `site`, summed over its charge sectors.
 """
 function physical_dimension end
 
 """
-    bond_dimension(psi, b) -> Int
+    bond_dimension(psi, bond) -> Int
 
-Dimension of bond `b`, the link between sites `b` and `b + 1`, summed over charge sectors.
+Dimension of bond `bond`, the link between sites `bond` and `bond + 1`, summed over charge sectors.
 """
 function bond_dimension end
 
@@ -43,9 +43,9 @@ isometry of.
 function orthogonality_center end
 
 """
-    canonicalize!(psi, i) -> psi
+    canonicalize!(psi, site) -> psi
 
-Move the orthogonality centre to site `i` without truncation. The state is unchanged; only its
+Move the orthogonality centre to site `site` without truncation. The state is unchanged; only its
 gauge is.
 """
 function canonicalize! end

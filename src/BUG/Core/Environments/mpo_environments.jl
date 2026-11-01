@@ -1,6 +1,8 @@
 # Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/operators/mpo_env.jl.
 
-# mpo_env.jl: MPO environments (Eq. 1.8) and the effective Hamiltonians (Eq. 1.7) (from `mpo.jl`, included right after it).
+# MPO environments (Eq. 1.8), the two-site effective Hamiltonian (Eq. 1.7) and the link-leg and
+# streamed two-site contractions the Core sweeps share. Included right after
+# `Core/TensorNetworks/mpo.jl`, whose `MPO` type the signatures here use.
 
 # ── environments: Eq. (1.8) ──────────────────────────────────────────────────
 
@@ -22,65 +24,73 @@ end
 boundary_channels(::MPO) = MPOLink(nothing)
 
 """
-    _mpo_left_step(E, A, W) -> TLArray
+    _mpo_left_step(environment, site_tensor, mpo_tensor, bra_tensor = site_tensor) -> TLArray
 
-One step of Eq. (1.8): push the left environment on link `i` through site tensor `A` and
-MPO tensor `W`, returning the environment on link `i+1` with legs `(bra, mpo, ket)`.
+One step of Eq. (1.8): push the left `environment` on link `i` through `site_tensor` and
+`mpo_tensor` at site `i`, returning the environment on link `i+1` with legs `(bra, mpo, ket)`.
 
-`A` may be a state tensor OR an expanded frame -- both carry an MPS tensor's
+`site_tensor` may be a state tensor OR an expanded frame -- both carry an MPS tensor's
 `(link_l, site, link_r)` layout, which is what lets `zero_site_h` push an environment
-through `U_ex` with this same function. `B` is the bra tensor, `A` unless a matrix element
+through `U_ex` with this same function. `bra_tensor` is `site_tensor` unless a matrix element
 between two states is wanted ([`mpo_matrix_element`](@ref)).
 """
-function _mpo_left_step(E, A, W, B = A)
-    if E === nothing
-        # Boundary: `link_l` is the dim-1 vacuum, contracted bra-to-ket, and `W`'s `w_l`
+function _mpo_left_step(environment, site_tensor, mpo_tensor, bra_tensor = site_tensor)
+    if environment === nothing
+        # Boundary: `link_l` is the dim-1 vacuum, contracted bra-to-ket, and the MPO's `w_l`
         # is the dim-1 leg left by trimming, dropped rather than contracted.
-        T = contract(W, (2,), A, (2,))                  # (w_l, s_bra, w_r, ℓ_l, ℓ_r)
-        T = contract(to_concrete!(T), (2, 4), _bra_left_boundary(B), (2, 1))
-        T = to_concrete(deleteSingleton(to_concrete!(T), 1))   # (w_r, ℓ_r, ℓ_r')
-        return to_concrete(permutedims(T, (3, 1, 2)))
+        contracted = contract(mpo_tensor, (2,), site_tensor, (2,))  # (w_l, s_bra, w_r, ℓ_l, ℓ_r)
+        contracted =
+            contract(to_concrete!(contracted), (2, 4), _bra_left_boundary(bra_tensor), (2, 1))
+        contracted = to_concrete(deleteSingleton(to_concrete!(contracted), 1))  # (w_r, ℓ_r, ℓ_r')
+        return to_concrete(permutedims(contracted, (3, 1, 2)))
     end
     # `to_concrete!` on each fresh `contract` result: the copying form deep-copied the
     # chi^2*w*d intermediates nobody else holds, on the most-called kernel of every sweep.
     # The outer `to_concrete` stays -- `permutedims`/`deleteSingleton` return views.
-    T = contract(E, (3,), A, (1,))                       # (bra, w, s, ℓ_r)
-    T = contract(to_concrete!(T), (2, 3), W, (1, 2))      # (bra, ℓ_r, s_bra, w_r)
-    T = contract(to_concrete!(T), (1, 3), _bra_interior(B), (1, 2))  # (ℓ_r, w_r, ℓ_r')
-    return to_concrete(permutedims(to_concrete!(T), (3, 2, 1)))
+    contracted = contract(environment, (3,), site_tensor, (1,))         # (bra, w, s, ℓ_r)
+    # (bra, ℓ_r, s_bra, w_r)
+    contracted = contract(to_concrete!(contracted), (2, 3), mpo_tensor, (1, 2))
+    # (ℓ_r, w_r, ℓ_r')
+    contracted = contract(to_concrete!(contracted), (1, 3), _bra_interior(bra_tensor), (1, 2))
+    return to_concrete(permutedims(to_concrete!(contracted), (3, 2, 1)))
 end
 
 """
-    _mpo_right_step(E, A, W) -> TLArray
+    _mpo_right_step(environment, site_tensor, mpo_tensor) -> TLArray
 
-The mirror: push the right environment on link `i+1` through site `i`, giving link `i`.
+The mirror: push the right `environment` on link `i+1` through site `i`, giving link `i`.
 
 No asymmetry to get backwards here -- unlike the channel recursion, which has to OPEN
 with `term.right` and CLOSE with `term.left` on the way back. The MPO tensor is the same
 object read the other way, which is the second reason this file exists.
 """
-function _mpo_right_step(E, A, W)
-    if E === nothing
-        T = contract(W, (2,), A, (2,))                   # (w_l, s_bra, w_r, ℓ_l, ℓ_r)
-        T = contract(to_concrete!(T), (2, 5), _bra_right_boundary(A), (2, 3))
-        T = to_concrete(deleteSingleton(to_concrete!(T), 2))   # (w_l, ℓ_l, ℓ_l')
-        return to_concrete(permutedims(T, (3, 1, 2)))
+function _mpo_right_step(environment, site_tensor, mpo_tensor)
+    if environment === nothing
+        # Boundary: `link_r` is the dim-1 vacuum, contracted bra-to-ket; the MPO's dim-1 `w_r`
+        # is dropped.
+        contracted = contract(mpo_tensor, (2,), site_tensor, (2,))  # (w_l, s_bra, w_r, ℓ_l, ℓ_r)
+        contracted =
+            contract(to_concrete!(contracted), (2, 5), _bra_right_boundary(site_tensor), (2, 3))
+        contracted = to_concrete(deleteSingleton(to_concrete!(contracted), 2))  # (w_l, ℓ_l, ℓ_l')
+        return to_concrete(permutedims(contracted, (3, 1, 2)))
     end
-    T = contract(A, (3,), E, (3,))                       # (ℓ_l, s, bra, w)
-    T = contract(to_concrete!(T), (2, 4), W, (2, 4))      # (ℓ_l, bra, w_l, s_bra)
-    T = contract(to_concrete!(T), (2, 4), _bra_interior(A), (3, 2))  # (ℓ_l, w_l, ℓ_l')
-    return to_concrete(permutedims(to_concrete!(T), (3, 2, 1)))
+    contracted = contract(site_tensor, (3,), environment, (3,))         # (ℓ_l, s, bra, w)
+    # (ℓ_l, bra, w_l, s_bra)
+    contracted = contract(to_concrete!(contracted), (2, 4), mpo_tensor, (2, 4))
+    # (ℓ_l, w_l, ℓ_l')
+    contracted = contract(to_concrete!(contracted), (2, 4), _bra_interior(site_tensor), (3, 2))
+    return to_concrete(permutedims(to_concrete!(contracted), (3, 2, 1)))
 end
 
-"Carry the left environment on link `i` through site `i` onto link `i+1`. `open_next` is
+"Carry the left environment on link `site` through `site` onto link `site+1`. `open_next` is
 accepted for signature compatibility with the channel path and ignored: an MPO cannot
 leave a term dangling past the boundary, the trimmed `W^[L]` forbids it."
-push_left_channels(cs::MPOLink, mpo::MPO, A, i::Int; open_next::Bool = true) =
-    MPOLink(_mpo_left_step(cs.E, A, mpo[i]))
+push_left_channels(cs::MPOLink, mpo::MPO, site_tensor, site::Int; open_next::Bool = true) =
+    MPOLink(_mpo_left_step(cs.E, site_tensor, mpo[site]))
 
 "Mirror of [`push_left_channels`](@ref) for the right environment."
-push_right_channels(cs::MPOLink, mpo::MPO, A, i::Int; open_next::Bool = true) =
-    MPOLink(_mpo_right_step(cs.E, A, mpo[i]))
+push_right_channels(cs::MPOLink, mpo::MPO, site_tensor, site::Int; open_next::Bool = true) =
+    MPOLink(_mpo_right_step(cs.E, site_tensor, mpo[site]))
 
 """
     MPOLeftEnvStack / MPORightEnvStack
@@ -105,17 +115,19 @@ Build the left MPO environments on links `1 … upto+1`. The stack IS the carry,
 link by link, so a sweep that carries and a sweep that prebuilds cannot drift.
 """
 function left_env_stack(psi::SymMPS, mpo::MPO; upto::Int = length(psi) - 1)
-    L = length(psi)
-    length(mpo) == L || throw(DimensionMismatch("MPO has $(length(mpo)) sites, state has $L"))
-    0 <= upto <= L || throw(ArgumentError("upto must be in 0:$L, got $upto"))
-    E = Any[missing for _ = 1:(L+1)]
-    E[1] = nothing
+    site_count = length(psi)
+    length(mpo) == site_count ||
+        throw(DimensionMismatch("MPO has $(length(mpo)) sites, state has $site_count"))
+    0 <= upto <= site_count ||
+        throw(ArgumentError("upto must be in 0:$site_count, got $upto"))
+    environments = Any[missing for _ = 1:(site_count+1)]
+    environments[1] = nothing
     cur = nothing
-    for i = 1:upto
-        cur = _mpo_left_step(cur, psi[i], mpo[i])
-        E[i+1] = cur
+    for site = 1:upto
+        cur = _mpo_left_step(cur, psi[site], mpo[site])
+        environments[site+1] = cur
     end
-    return MPOLeftEnvStack(E)
+    return MPOLeftEnvStack(environments)
 end
 
 """
@@ -124,39 +136,42 @@ end
 Build the right MPO environments on links `downto … L+1`.
 """
 function right_env_stack(psi::SymMPS, mpo::MPO; downto::Int = 2)
-    L = length(psi)
-    length(mpo) == L || throw(DimensionMismatch("MPO has $(length(mpo)) sites, state has $L"))
-    1 <= downto <= L + 1 || throw(ArgumentError("downto must be in 1:$(L + 1), got $downto"))
-    E = Any[missing for _ = 1:(L+1)]
-    E[L+1] = nothing
+    site_count = length(psi)
+    length(mpo) == site_count ||
+        throw(DimensionMismatch("MPO has $(length(mpo)) sites, state has $site_count"))
+    1 <= downto <= site_count + 1 ||
+        throw(ArgumentError("downto must be in 1:$(site_count + 1), got $downto"))
+    environments = Any[missing for _ = 1:(site_count+1)]
+    environments[site_count+1] = nothing
     cur = nothing
-    for i = L:-1:downto
-        cur = _mpo_right_step(cur, psi[i], mpo[i])
-        E[i] = cur
+    for site = site_count:-1:downto
+        cur = _mpo_right_step(cur, psi[site], mpo[site])
+        environments[site] = cur
     end
-    return MPORightEnvStack(E)
+    return MPORightEnvStack(environments)
 end
 
-"Link `i` of a prebuilt left stack."
-left_channels(st::MPOLeftEnvStack, i::Int) = MPOLink(st.E[i])
+"Link `link` of a prebuilt left stack."
+left_channels(st::MPOLeftEnvStack, link::Int) = MPOLink(st.E[link])
 
-"Link `i` of a prebuilt right stack."
-right_channels(st::MPORightEnvStack, i::Int) = MPOLink(st.E[i])
+"Link `link` of a prebuilt right stack."
+right_channels(st::MPORightEnvStack, link::Int) = MPOLink(st.E[link])
 
 """
-    _mpo_left_close(E, A, W) -> ComplexF64
+    _mpo_left_close(environment, site_tensor, mpo_tensor, bra_tensor = site_tensor) -> ComplexF64
 
 As [`_mpo_left_step`](@ref) at the LAST site: `link_r` is the dim-1 vacuum boundary so it
-is contracted bra-to-ket, and `W`'s `w_r` is the dim-1 leg left by trimming to the `done`
+is contracted bra-to-ket, and the MPO's `w_r` is the dim-1 leg left by trimming to the `done`
 column, so it is dropped. The result is a scalar. `deleteSingleton` doubles as the
 assertion that the trimming really did leave a singleton there.
 """
-function _mpo_left_close(E, A, W, B = A)
-    T = contract(E, (3,), A, (1,))                       # (bra, w, s, ℓ_r)
-    T = contract(to_concrete!(T), (2, 3), W, (1, 2))       # (bra, ℓ_r, s_bra, w_r)
-    T = to_concrete(deleteSingleton(to_concrete!(T), 4))   # (bra, ℓ_r, s_bra)
-    s = contract(T, (1, 3, 2), _bra_right_boundary(B), (1, 2, 3))
-    return ComplexF64(to_concrete(s)[])
+function _mpo_left_close(environment, site_tensor, mpo_tensor, bra_tensor = site_tensor)
+    contracted = contract(environment, (3,), site_tensor, (1,))         # (bra, w, s, ℓ_r)
+    # (bra, ℓ_r, s_bra, w_r)
+    contracted = contract(to_concrete!(contracted), (2, 3), mpo_tensor, (1, 2))
+    contracted = to_concrete(deleteSingleton(to_concrete!(contracted), 4))  # (bra, ℓ_r, s_bra)
+    scalar = contract(contracted, (1, 3, 2), _bra_right_boundary(bra_tensor), (1, 2, 3))
+    return ComplexF64(to_concrete(scalar)[])
 end
 
 """
@@ -179,45 +194,54 @@ same site legs and, under a symmetry, total charges that the MPO connects. Reads
 MPO (`no_jump_mpo`) as a matrix on a small product basis.
 """
 function mpo_matrix_element(bra::SymMPS, mpo::MPO, ket::SymMPS)
-    L = length(ket)
-    length(mpo) == L && length(bra) == L ||
-        throw(DimensionMismatch("MPO has $(length(mpo)) sites, ket $L, bra $(length(bra))"))
-    E = nothing
-    for i = 1:(L-1)
-        E = _mpo_left_step(E, ket[i], mpo[i], bra[i])
+    site_count = length(ket)
+    length(mpo) == site_count && length(bra) == site_count || throw(
+        DimensionMismatch(
+            "MPO has $(length(mpo)) sites, ket $site_count, bra $(length(bra))",
+        ),
+    )
+    environment = nothing
+    for site = 1:(site_count-1)
+        environment = _mpo_left_step(environment, ket[site], mpo[site], bra[site])
     end
-    return _mpo_left_close(E, ket[L], mpo[L], bra[L])
+    return _mpo_left_close(environment, ket[site_count], mpo[site_count], bra[site_count])
 end
 
 """
-    _mpo2_left_step(E, A, W) -> TLArray
+    _mpo2_left_step(environment, site_tensor, mpo_tensor) -> TLArray
 
-[`_mpo_left_step`](@ref) with two copies of `W` between bra and ket: the left environment of
-`<psi|H H|psi>` on link `i+1`, legs `(bra, w_a, w_b, ket)`.
+[`_mpo_left_step`](@ref) with two copies of `mpo_tensor` between bra and ket: the left
+environment of `<psi|H H|psi>` on link `i+1`, legs `(bra, w_a, w_b, ket)`.
 
-The outer copy's virtual legs are primed (`_mpo_outer`): two copies of one `W` carry identical tags,
-which Telum refuses as a duplicate index.
+The outer copy's virtual legs are primed (`_mpo_outer`): two copies of one MPO tensor carry
+identical tags, which Telum refuses as a duplicate index.
 """
 # `inc = 5`: far above any prime level the inner copy, the state or the bra carries, so the
 # outer layer's virtual legs cannot coincide with any other leg whatever their direction.
-_mpo_outer(W) = to_concrete(prime(prime(W, 1; inc = 5), 4; inc = 5))
+_mpo_outer(mpo_tensor) = to_concrete(prime(prime(mpo_tensor, 1; inc = 5), 4; inc = 5))
 
-function _mpo2_left_step(E, A, W)
-    Wa = _mpo_outer(W)
-    if E === nothing
-        T = contract(W, (2,), A, (2,))                    # (wb_l, s1, wb_r, ℓ_l, ℓ_r)
-        T = contract(to_concrete!(T), (2,), Wa, (2,))      # (wb_l, wb_r, ℓ_l, ℓ_r, wa_l, s2, wa_r)
-        T = contract(to_concrete!(T), (6, 3), _bra_left_boundary(A), (2, 1))
+function _mpo2_left_step(environment, site_tensor, mpo_tensor)
+    Wa = _mpo_outer(mpo_tensor)
+    if environment === nothing
+        contracted = contract(mpo_tensor, (2,), site_tensor, (2,))  # (wb_l, s1, wb_r, ℓ_l, ℓ_r)
+        # (wb_l, wb_r, ℓ_l, ℓ_r, wa_l, s2, wa_r)
+        contracted = contract(to_concrete!(contracted), (2,), Wa, (2,))
+        contracted =
+            contract(to_concrete!(contracted), (6, 3), _bra_left_boundary(site_tensor), (2, 1))
         #                                                   (wb_l, wb_r, ℓ_r, wa_l, wa_r, ℓ_r')
-        T = to_concrete(deleteSingleton(to_concrete!(T), 1))   # (wb_r, ℓ_r, wa_l, wa_r, ℓ_r')
-        T = to_concrete(deleteSingleton(T, 3))                # (wb_r, ℓ_r, wa_r, ℓ_r')
-        return to_concrete(permutedims(T, (4, 3, 1, 2)))
+        # (wb_r, ℓ_r, wa_l, wa_r, ℓ_r')
+        contracted = to_concrete(deleteSingleton(to_concrete!(contracted), 1))
+        contracted = to_concrete(deleteSingleton(contracted, 3))  # (wb_r, ℓ_r, wa_r, ℓ_r')
+        return to_concrete(permutedims(contracted, (4, 3, 1, 2)))
     end
-    T = contract(E, (4,), A, (1,))                        # (bra, wa, wb, s, ℓ_r)
-    T = contract(to_concrete!(T), (3, 4), W, (1, 2))       # (bra, wa, ℓ_r, s1, wb_r)
-    T = contract(to_concrete!(T), (2, 4), Wa, (1, 2))      # (bra, ℓ_r, wb_r, s2, wa_r)
-    T = contract(to_concrete!(T), (1, 4), _bra_interior(A), (1, 2))  # (ℓ_r, wb_r, wa_r, ℓ_r')
-    return to_concrete(permutedims(to_concrete!(T), (4, 3, 2, 1)))
+    contracted = contract(environment, (4,), site_tensor, (1,))  # (bra, wa, wb, s, ℓ_r)
+    # (bra, wa, ℓ_r, s1, wb_r)
+    contracted = contract(to_concrete!(contracted), (3, 4), mpo_tensor, (1, 2))
+    # (bra, ℓ_r, wb_r, s2, wa_r)
+    contracted = contract(to_concrete!(contracted), (2, 4), Wa, (1, 2))
+    # (ℓ_r, wb_r, wa_r, ℓ_r')
+    contracted = contract(to_concrete!(contracted), (1, 4), _bra_interior(site_tensor), (1, 2))
+    return to_concrete(permutedims(to_concrete!(contracted), (4, 3, 2, 1)))
 end
 
 """
@@ -231,107 +255,121 @@ eigenstate, and `variance / gap` bounds the energy error.
 ⚠ A difference of two `O(E^2)` numbers: its floor is `~eps * E^2`, i.e. ~1e-13 at `E ~ 30`.
 """
 function mpo_variance(psi::SymMPS, mpo::MPO)
-    L = length(psi)
-    length(mpo) == L || throw(DimensionMismatch("MPO has $(length(mpo)) sites, state has $L"))
-    L >= 2 || throw(ArgumentError("mpo_variance needs at least two sites"))
-    E = nothing
-    for i = 1:(L-1)
-        E = _mpo2_left_step(E, psi[i], mpo[i])
+    site_count = length(psi)
+    length(mpo) == site_count ||
+        throw(DimensionMismatch("MPO has $(length(mpo)) sites, state has $site_count"))
+    site_count >= 2 || throw(ArgumentError("mpo_variance needs at least two sites"))
+    environment = nothing
+    for site = 1:(site_count-1)
+        environment = _mpo2_left_step(environment, psi[site], mpo[site])
     end
-    A, W = psi[L], mpo[L]
-    T = contract(E, (4,), A, (1,))                        # (bra, wa, wb, s, ℓ_r)
-    T = contract(to_concrete!(T), (3, 4), W, (1, 2))       # (bra, wa, ℓ_r, s1, wb_r)
-    T = to_concrete(deleteSingleton(to_concrete!(T), 5))   # (bra, wa, ℓ_r, s1)
-    T = contract(T, (2, 4), _mpo_outer(W), (1, 2))        # (bra, ℓ_r, s2, wa_r)
-    T = to_concrete(deleteSingleton(to_concrete!(T), 4))   # (bra, ℓ_r, s2)
-    h2 = real(ComplexF64(to_concrete(contract(T, (1, 3, 2), _bra_right_boundary(A), (1, 2, 3)))[]))
-    n2 = norm(psi)^2
-    e = real(mpo_energy(psi, mpo)) / n2
-    return h2 / n2 - e^2
+    # Close the two-layer environment on the last site, dropping both trimmed dim-1 `w_r` legs.
+    last_tensor, last_mpo = psi[site_count], mpo[site_count]
+    contracted = contract(environment, (4,), last_tensor, (1,))  # (bra, wa, wb, s, ℓ_r)
+    # (bra, wa, ℓ_r, s1, wb_r)
+    contracted = contract(to_concrete!(contracted), (3, 4), last_mpo, (1, 2))
+    contracted = to_concrete(deleteSingleton(to_concrete!(contracted), 5))  # (bra, wa, ℓ_r, s1)
+    contracted = contract(contracted, (2, 4), _mpo_outer(last_mpo), (1, 2))  # (bra, ℓ_r, s2, wa_r)
+    contracted = to_concrete(deleteSingleton(to_concrete!(contracted), 4))  # (bra, ℓ_r, s2)
+    h_squared = real(
+        ComplexF64(
+            to_concrete(
+                contract(contracted, (1, 3, 2), _bra_right_boundary(last_tensor), (1, 2, 3)),
+            )[],
+        ),
+    )
+    norm_squared = norm(psi)^2
+    mean_energy = real(mpo_energy(psi, mpo)) / norm_squared
+    return h_squared / norm_squared - mean_energy^2
 end
 
 # ── the effective Hamiltonians: Eq. (1.7) ────────────────────────────────────
 
 """
-    apply_h_two_site(Theta, mpo, i, lenv, renv) -> TLArray
+    apply_h_two_site(Theta, mpo, bond, lenv, renv) -> TLArray
 
-`H Theta` for the two-site block at bond `(i, i+1)`, legs
+`H Theta` for the two-site block at bond `(bond, bond+1)`, legs
 `(link_l, site_l, site_r, link_r)` in and out -- Eq. (1.7) with two MPO tensors between
 the environments.
 
 ONE contraction chain, against the channel version's five-case sum: the automaton's
 states are summed over inside the MPO leg instead of being enumerated here. `lenv` must
-sit on link `i` and `renv` on link `i+2`, and the state they were built from must be
+sit on link `bond` and `renv` on link `bond+2`, and the state they were built from must be
 canonical at the bond, since a boundary environment is the identity only in that gauge.
 """
-function apply_h_two_site(Theta, mpo::MPO, i::Int, lenv::MPOLink, renv::MPOLink)
-    W1, W2 = mpo[i], mpo[i+1]
+function apply_h_two_site(Theta, mpo::MPO, bond::Int, lenv::MPOLink, renv::MPOLink)
+    left_mpo_tensor, right_mpo_tensor = mpo[bond], mpo[bond+1]
 
     # Left end: attach the environment, or -- at the boundary -- keep `Theta`'s own link
     # leg and drop the MPO's dim-1 boundary leg.
-    T = if lenv.E === nothing
-        X = to_concrete!(contract(Theta, (2,), W1, (2,)))  # (ℓ_l,s_r,ℓ_r,w_l,s_bra,w_mid)
-        to_concrete(deleteSingleton(X, 4))
+    contracted = if lenv.E === nothing
+        # (ℓ_l, s_r, ℓ_r, w_l, s_bra, w_mid)
+        partial = to_concrete!(contract(Theta, (2,), left_mpo_tensor, (2,)))
+        to_concrete(deleteSingleton(partial, 4))
     else
-        X = to_concrete!(contract(lenv.E, (3,), Theta, (1,)))       # (bra,w,s_l,s_r,ℓ_r)
-        to_concrete!(contract(X, (2, 3), W1, (1, 2)))
+        partial = to_concrete!(contract(lenv.E, (3,), Theta, (1,)))  # (bra,w,s_l,s_r,ℓ_r)
+        to_concrete!(contract(partial, (2, 3), left_mpo_tensor, (1, 2)))
     end                                                  # (link_l, s_r, ℓ_r, s_bra_l, w)
-    T = to_concrete!(contract(T, (5, 2), W2, (1, 2)))      # (link_l,ℓ_r,s_bra_l,s_bra_r,w)
+    # (link_l, ℓ_r, s_bra_l, s_bra_r, w)
+    contracted = to_concrete!(contract(contracted, (5, 2), right_mpo_tensor, (1, 2)))
 
-    T = if renv.E === nothing
-        X = to_concrete(deleteSingleton(T, 5))            # (link_l, ℓ_r, s_bra_l, s_bra_r)
-        to_concrete(permutedims(X, (1, 3, 4, 2)))
+    contracted = if renv.E === nothing
+        partial = to_concrete(deleteSingleton(contracted, 5))  # (link_l, ℓ_r, s_bra_l, s_bra_r)
+        to_concrete(permutedims(partial, (1, 3, 4, 2)))
     else
-        to_concrete!(contract(T, (5, 2), renv.E, (2, 3)))  # (link_l,s_bra_l,s_bra_r,bra_r)
+        # (link_l, s_bra_l, s_bra_r, bra_r)
+        to_concrete!(contract(contracted, (5, 2), renv.E, (2, 3)))
     end
 
-    lenv.E === nothing || (T = _unprime(T, 1))
-    renv.E === nothing || (T = _unprime(T, 4))
-    return T
+    # Each environment's bra leg replaced a link leg: give it that link's prime level back.
+    lenv.E === nothing || (contracted = _unprime(contracted, 1))
+    renv.E === nothing || (contracted = _unprime(contracted, 4))
+    return contracted
 end
 
-apply_h_two_site(Theta, mpo::MPO, i::Int, lenv::MPOLeftEnvStack, renv::MPORightEnvStack) =
-    apply_h_two_site(Theta, mpo, i, left_channels(lenv, i), right_channels(renv, i + 2))
+# The same action with the bond's two links read out of prebuilt stacks.
+apply_h_two_site(Theta, mpo::MPO, bond::Int, lenv::MPOLeftEnvStack, renv::MPORightEnvStack) =
+    apply_h_two_site(Theta, mpo, bond, left_channels(lenv, bond), right_channels(renv, bond + 2))
 
 # ── from BUG/Randomised/cbe.jl: deterministic, used by the Core sweeps ──
 
 """
-    _unprime(t, leg) -> TLArray
+    _unprime(tensor, leg) -> TLArray
 
 Drop one prime level from `leg`. An environment's bra leg is primed to keep it distinct
-from the ket while both are open (`henv.jl`); once it has replaced a link leg it must
-carry that link's original prime level again.
+from the ket while both are open (`environment_stacks.jl`); once it has replaced a link leg it
+must carry that link's original prime level again.
 """
 #
 # `to_concrete!`, not `to_concrete`: `prime` already returns a deep copy the caller owns, so a second
 # copy is pure waste.
-_unprime(t, leg::Int) = to_concrete!(prime(t, leg; inc = -1))
+_unprime(tensor, leg::Int) = to_concrete!(prime(tensor, leg; inc = -1))
 
 """
-    _env_on_link(T, E, leg) -> TLArray
+    _env_on_link(tensor, environment, leg) -> TLArray
 
-Contract environment `E` onto `leg` of `T`, leaving the bra leg in `leg`'s place,
-unprimed. If both carry an op-leg -- `T`'s last, `E`'s third -- they are contracted too
-(the channel closes).
+Contract `environment` onto `leg` of `tensor`, leaving the bra leg in `leg`'s place,
+unprimed. If both carry an op-leg -- the tensor's last, the environment's third -- they are
+contracted too (the channel closes).
 
-`T` is `K0`-shaped `(link_l, site_l, bond [, op])` with `leg = 1`, or `V0`-shaped
+`tensor` is `K0`-shaped `(link_l, site_l, bond [, op])` with `leg = 1`, or `V0`-shaped
 `(bond, site_r, link_r [, op])` with `leg = 3`. In both cases the contracted link leg is
 at an END of the tensor, so the bra comes back out in exactly the position it vacated
 and no permutation is needed beyond the two written below.
 """
-function _env_on_link(T, E, leg::Int)
-    nT, nE = length(T.inds), length(E.inds)
+function _env_on_link(tensor, environment, leg::Int)
+    nT, nE = length(tensor.inds), length(environment.inds)
     out = if nE == 3 && nT == 4
-        contract(T, (leg, nT), E, (2, 3))
+        contract(tensor, (leg, nT), environment, (2, 3))
     elseif nE == 2 && nT == 3
-        contract(T, (leg,), E, (2,))
+        contract(tensor, (leg,), environment, (2,))
     else
         error(
             "_env_on_link: rank-$nT tensor against a rank-$nE environment leaves an " *
             "operator channel dangling",
         )
     end
-    # `out` = T's remaining legs in order, then E's bra leg.
+    # `out` = the tensor's remaining legs in order, then the environment's bra leg.
     #   leg == 1 (K0): (site_l, bond, bra) -> bra first
     #   leg == 3 (V0): (bond, site_r, bra) -> already in place
     if leg == 1
@@ -346,47 +384,83 @@ end
 # The streamed two-site contractions: as `_fold_sketch_closures` (Randomised/cbe.jl), but with no
 # final projection and Theta never formed, so every intermediate is thin in g.
 
-"`X Om` for `Om` in `V0`'s layout; `K0 = U0 S0`. Legs `(link_l, site_l, g)`."
-function _stream_left(K0, V0, mpo::MPO, i::Int, lenv::MPOLink, renv::MPOLink, Om)
-    W1, W2 = mpo[i], mpo[i+1]
+"""
+    _stream_left(left_amplitude, right_isometry, mpo, bond, lenv, renv, Om) -> TLArray
+
+`X Om`, with `X` the two-site action on the block `left_amplitude * right_isometry` and `Om` in
+`right_isometry`'s layout; `left_amplitude = U0 S0`, `right_isometry = V0` of the bond frame.
+Legs `(link_l, site_l, g)`.
+"""
+function _stream_left(
+    left_amplitude,
+    right_isometry,
+    mpo::MPO,
+    bond::Int,
+    lenv::MPOLink,
+    renv::MPOLink,
+    Om,
+)
+    left_mpo_tensor, right_mpo_tensor = mpo[bond], mpo[bond+1]
     Omd = Om'                                                 # (g, s_bra_r, bra_r)
-    C = if renv.E === nothing
-        X = to_concrete!(contract(Omd, (2,), W2, (3,)))       # (g, bra_r, w_mid, s_ket_r, w_r)
-        to_concrete(deleteSingleton(X, 5))                   # (g, bra_r, w_mid, s_ket_r)
+    # Close the sketch against the right environment and the right MPO tensor.
+    right_closure = if renv.E === nothing
+        # (g, bra_r, w_mid, s_ket_r, w_r)
+        partial = to_concrete!(contract(Omd, (2,), right_mpo_tensor, (3,)))
+        to_concrete(deleteSingleton(partial, 5))             # (g, bra_r, w_mid, s_ket_r)
     else
-        X = to_concrete!(contract(Omd, (3,), renv.E, (1,)))   # (g, s_bra_r, w, ket_r)
-        to_concrete!(contract(X, (2, 3), W2, (3, 4)))         # (g, ket_r, w_mid, s_ket_r)
+        partial = to_concrete!(contract(Omd, (3,), renv.E, (1,)))   # (g, s_bra_r, w, ket_r)
+        # (g, ket_r, w_mid, s_ket_r)
+        to_concrete!(contract(partial, (2, 3), right_mpo_tensor, (3, 4)))
     end
-    D1 = to_concrete!(contract(V0, (2, 3), C, (4, 2)))        # (bond, g, w_mid)
-    D = to_concrete!(contract(K0, (3,), D1, (1,)))            # (ℓ_l, s_l, g, w_mid)
-    E = to_concrete!(contract(D, (2, 4), W1, (2, 4)))         # (ℓ_l, g, w_l, s_bra_l)
+    # (bond, g, w_mid), then (ℓ_l, s_l, g, w_mid), then (ℓ_l, g, w_l, s_bra_l)
+    bond_partial = to_concrete!(contract(right_isometry, (2, 3), right_closure, (4, 2)))
+    site_partial = to_concrete!(contract(left_amplitude, (3,), bond_partial, (1,)))
+    with_left_mpo = to_concrete!(contract(site_partial, (2, 4), left_mpo_tensor, (2, 4)))
     if lenv.E === nothing
-        X = to_concrete(deleteSingleton(E, 3))               # (ℓ_l, g, s_bra_l)
-        return to_concrete(permutedims(X, (1, 3, 2)))        # (ℓ_l, s_bra_l, g)
+        partial = to_concrete(deleteSingleton(with_left_mpo, 3))   # (ℓ_l, g, s_bra_l)
+        return to_concrete(permutedims(partial, (1, 3, 2)))  # (ℓ_l, s_bra_l, g)
     end
-    X = to_concrete!(contract(E, (1, 3), lenv.E, (3, 2)))     # (g, s_bra_l, bra)
-    return _unprime(to_concrete(permutedims(X, (3, 2, 1))), 1)
+    partial = to_concrete!(contract(with_left_mpo, (1, 3), lenv.E, (3, 2)))  # (g, s_bra_l, bra)
+    return _unprime(to_concrete(permutedims(partial, (3, 2, 1))), 1)
 end
 
-"`X' Om` for `Om` in `U0`'s layout, as rows; `M0 = S0 V0`. Legs `(g, site_r, link_r)`."
-function _stream_right(U0, M0, mpo::MPO, i::Int, lenv::MPOLink, renv::MPOLink, Om)
-    W1, W2 = mpo[i], mpo[i+1]
+"""
+    _stream_right(left_isometry, right_amplitude, mpo, bond, lenv, renv, Om) -> TLArray
+
+`X' Om` as rows, with `X` the two-site action on the block `left_isometry * right_amplitude` and
+`Om` in `left_isometry`'s layout; `left_isometry = U0`, `right_amplitude = S0 V0` of the bond
+frame. Legs `(g, site_r, link_r)`.
+"""
+function _stream_right(
+    left_isometry,
+    right_amplitude,
+    mpo::MPO,
+    bond::Int,
+    lenv::MPOLink,
+    renv::MPOLink,
+    Om,
+)
+    left_mpo_tensor, right_mpo_tensor = mpo[bond], mpo[bond+1]
     Omd = Om'                                                 # (bra_l, s_bra_l, g)
-    C = if lenv.E === nothing
-        X = to_concrete!(contract(Omd, (2,), W1, (3,)))       # (bra_l, g, w_l, s_ket_l, w_mid)
-        to_concrete(deleteSingleton(X, 3))                   # (bra_l, g, s_ket_l, w_mid)
+    # Close the sketch against the left environment and the left MPO tensor.
+    left_closure = if lenv.E === nothing
+        # (bra_l, g, w_l, s_ket_l, w_mid)
+        partial = to_concrete!(contract(Omd, (2,), left_mpo_tensor, (3,)))
+        to_concrete(deleteSingleton(partial, 3))             # (bra_l, g, s_ket_l, w_mid)
     else
-        X = to_concrete!(contract(Omd, (1,), lenv.E, (1,)))   # (s_bra_l, g, w, ket_l)
-        Z = to_concrete!(contract(X, (1, 3), W1, (3, 1)))     # (g, ket_l, s_ket_l, w_mid)
-        to_concrete(permutedims(Z, (2, 1, 3, 4)))            # (ket_l, g, s_ket_l, w_mid)
+        partial = to_concrete!(contract(Omd, (1,), lenv.E, (1,)))   # (s_bra_l, g, w, ket_l)
+        # (g, ket_l, s_ket_l, w_mid)
+        g_first = to_concrete!(contract(partial, (1, 3), left_mpo_tensor, (3, 1)))
+        to_concrete(permutedims(g_first, (2, 1, 3, 4)))     # (ket_l, g, s_ket_l, w_mid)
     end
-    D1 = to_concrete!(contract(U0, (1, 2), C, (1, 3)))        # (bond, g, w_mid)
-    D = to_concrete!(contract(M0, (1,), D1, (1,)))            # (s_r, ℓ_r, g, w_mid)
-    E = to_concrete!(contract(D, (1, 4), W2, (2, 1)))         # (ℓ_r, g, s_bra_r, w_r)
+    # (bond, g, w_mid), then (s_r, ℓ_r, g, w_mid), then (ℓ_r, g, s_bra_r, w_r)
+    bond_partial = to_concrete!(contract(left_isometry, (1, 2), left_closure, (1, 3)))
+    site_partial = to_concrete!(contract(right_amplitude, (1,), bond_partial, (1,)))
+    with_right_mpo = to_concrete!(contract(site_partial, (1, 4), right_mpo_tensor, (2, 1)))
     if renv.E === nothing
-        X = to_concrete(deleteSingleton(E, 4))               # (ℓ_r, g, s_bra_r)
-        return to_concrete(permutedims(X, (2, 3, 1)))        # (g, s_bra_r, ℓ_r)
+        partial = to_concrete(deleteSingleton(with_right_mpo, 4))  # (ℓ_r, g, s_bra_r)
+        return to_concrete(permutedims(partial, (2, 3, 1)))  # (g, s_bra_r, ℓ_r)
     end
-    X = to_concrete!(contract(E, (1, 4), renv.E, (3, 2)))     # (g, s_bra_r, bra_r)
-    return _unprime(X, 3)
+    partial = to_concrete!(contract(with_right_mpo, (1, 4), renv.E, (3, 2)))  # (g, s_bra_r, bra_r)
+    return _unprime(partial, 3)
 end

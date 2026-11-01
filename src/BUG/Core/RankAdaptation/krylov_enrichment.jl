@@ -1,12 +1,13 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/bug/krylov_enrich.jl, src/RSVDCBEBondUpdate/bug/krylov_closure.jl, src/RSVDCBEBondUpdate/bug/krylov_closure_loop.jl.
-# krylov_enrichment.jl: the half-sweep Krylov stage -- weight estimate, frame extension, `_krylov_enrich`, and the frame merge / ledger fold around it.
-
-# ── from src/RSVDCBEBondUpdate/bug/krylov_enrich.jl ──
+# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/bug/krylov_enrich.jl.
+# The half-sweep Krylov stage: the Saad weight estimate, the frame extension, `_krylov_enrich`, and
+# the frame merge and ledger fold around it. The local recurrence it drives (`_krylov_basis`) is in
+# `krylov_recurrence.jl`, included right after this file.
 
 # ── THE HALF-SWEEP KRYLOV STAGE OF `cbe_bug_step!` (plan §4, Tests C and D) ─────────────────
 
-_tagW(i::Int) = "cbeW,$i"
-_tagZ(j::Int) = "cbeZ,$j"
+# Bond tags of the left (`W`) and right (`Z`) Krylov frames at bond `bond`.
+_tagW(bond::Int) = "cbeW,$bond"
+_tagZ(bond::Int) = "cbeZ,$bond"
 
 # The residual below which the Krylov space has genuinely CLOSED -- an invariant subspace, not a
 # convergence judgement.
@@ -15,8 +16,8 @@ const _KRY_BREAKDOWN = 1e-13
 # ── STAGE 3: residual-driven K/L Krylov enrichment (plan §4, Tests C and D) ──
 # Krylov vectors live on one-site tensors, but the plan's projector `I - QQ'` acts on the frame (an
 # isometry on `(link, site)`): a vector adds only through the part of its local range the frame
-# lacks. `Q0` is the CBE output `U_ex`, so old directions are kept verbatim; the seed `K_ex` already
-# lies in `U_old`.
+# lacks. `_krylov_enrich`'s `start_frame` is the CBE output `U_ex`, so old directions are kept
+# verbatim; the seed `K_ex` already lies in `U_old`.
 
 const _TAG_K, _TAG_KR = "cbeK,L", "cbeK,R"
 
@@ -33,12 +34,12 @@ const _ROOT_MAXITER = 30
 const _KRY_SKEW_TOL = 1e-12
 
 """
-    _kry_weight(Hm, k, tau; state_seed = true) -> Float64
+    _kry_weight(Hm, krylov_step, tau; state_seed = true) -> Float64
 
 The weight the newest Krylov vector `v_{k+1}` carries in `exp(tau*H) v_1`, from the Arnoldi
-Hessenberg after `k` steps: `|tau * beta_k * [phi_1(tau*H_k)]_{k,1}|`, read from one `(k+1)x(k+1)`
-exponential. This is Saad's a posteriori error of the `k`-dimensional approximation, so it is also
-the closure test: below the allowance, no later direction matters more.
+Hessenberg `Hm` after `k = krylov_step` steps: `|tau * beta_k * [phi_1(tau*H_k)]_{k,1}|`, read
+from one `(k+1)x(k+1)` exponential. This is Saad's a posteriori error of the `k`-dimensional
+approximation, so it is also the closure test: below the allowance, no later direction matters more.
 
 `state_seed` is false when `v_1` is a closure frontier rather than the state's own tensor; it
 matters only for a non-unitary propagator.
@@ -47,52 +48,63 @@ The propagator is unitary when `tau*H_k` is skew-Hermitian, not whenever `real(t
 no-jump generator `H - (i/2)Q` at `tau = -im*dt` contracts, and its weight must be relative to the
 decayed state, not to the start norm.
 """
-function _kry_weight(Hm::Matrix{ComplexF64}, k::Int, tau::ComplexF64; state_seed::Bool = true)
-    A = zeros(ComplexF64, k + 1, k + 1)
-    A[1:k, 1:k] .= tau .* @view Hm[1:k, 1:k]
-    A[k+1, k] = tau * Hm[k+1, k]
-    Ak = @view A[1:k, 1:k]
-    norm(Ak + Ak') <= _KRY_SKEW_TOL * norm(Ak) && return abs(exp(A)[k+1, 1])
+function _kry_weight(
+    Hm::Matrix{ComplexF64},
+    krylov_step::Int,
+    tau::ComplexF64;
+    state_seed::Bool = true,
+)
+    # `tau * H_k` bordered by the subdiagonal entry `tau * beta_k`: its exponential's first
+    # column carries both the approximation (rows 1..k) and the newest vector's weight (row k+1).
+    augmented = zeros(ComplexF64, krylov_step + 1, krylov_step + 1)
+    augmented[1:krylov_step, 1:krylov_step] .= tau .* @view Hm[1:krylov_step, 1:krylov_step]
+    augmented[krylov_step+1, krylov_step] = tau * Hm[krylov_step+1, krylov_step]
+    leading_block = @view augmented[1:krylov_step, 1:krylov_step]
+    norm(leading_block + leading_block') <= _KRY_SKEW_TOL * norm(leading_block) &&
+        return abs(exp(augmented)[krylov_step+1, 1])
     # Non-unitary (imaginary time, Lindblad, no-jump loss): weigh relative to the state's own
-    # growth `g = ||exp(tau*H_k) e_1||`, which is `exp(dbeta*|E|)` unshifted and overflows at large dbeta. The
-    # shift `s` cancels in that ratio exactly.
-    s = maximum(real, eigvals(A[1:k, 1:k]))
-    E = exp(A - s * I)
-    state_seed && return abs(E[k+1, 1]) / max(norm(@view E[1:k, 1]), floatmin(Float64))
+    # growth `g = ||exp(tau*H_k) e_1||`, which is `exp(dbeta*|E|)` unshifted and overflows at large
+    # dbeta. The `shift` cancels in that ratio exactly.
+    shift = maximum(real, eigvals(augmented[1:krylov_step, 1:krylov_step]))
+    shifted_exp = exp(augmented - shift * I)
+    state_seed && return abs(shifted_exp[krylov_step+1, 1]) /
+           max(norm(@view shifted_exp[1:krylov_step, 1]), floatmin(Float64))
     # A closure frontier is not the state: it decays under the shifted generator, so dividing by its
     # own growth inflated its directions by `e^{dbeta h11}`, enough to block a converged step. Its
-    # weight is the absolute one, `|E[k+1,1]| e^s`, in the shifted frame, which never under-weights
-    # in imaginary time (the shift is the energy there).
-    w = abs(E[k+1, 1])
-    return w == 0 ? 0.0 : exp(log(w) + s)
+    # weight is the absolute one, `|shifted_exp[k+1,1]| e^shift`, in the shifted frame, which never
+    # under-weights in imaginary time (the shift is the energy there).
+    frontier_weight = abs(shifted_exp[krylov_step+1, 1])
+    return frontier_weight == 0 ? 0.0 : exp(log(frontier_weight) + shift)
 end
 
 """
-    _extend_frame(Q, R, v, side, weight, allowance; room) -> (Q, n_added, fits)
+    _extend_frame(frame, residual, direction, side, weight, allowance; room)
+        -> (frame, n_added, fits)
 
-Append to the frame `Q` the local directions of the residual `R = (I - QQ') v` that the
-allowance requires: the smallest number whose weighted discarded tail `weight * sqrt(sum s^2)`
+Append to `frame` the local directions of `residual = (I - QQ') direction` (`Q` = `frame`) that
+the allowance requires: the smallest number whose weighted discarded tail `weight * sqrt(sum s^2)`
 fits (Test A's rule, `_tail_rank`). Orthogonalised within each charge sector by the block SVD,
-cut only at the numerical floor `_rank_cut`, re-orthogonalised against `Q` before the direct
+cut only at the numerical floor `_rank_cut`, re-orthogonalised against `frame` before the direct
 sum -- the same guard `cbe_expand` applies to its own appended block.
 
 `room` is what the work ceiling still allows on the frame leg (plan §5): at most that many are
 appended, and `fits = false` reports that the allowance needed more.
 """
 function _extend_frame(
-    Q,
-    R,
-    v,
+    frame,
+    residual,
+    direction,
     side::Symbol,
     weight::Float64,
     allowance::Float64;
     room::Int = typemax(Int),
 )
+    # The legs `svd` keeps on its `U`: the frame's (link, site) pair.
     legs = side === :left ? (1, 2) : (2, 3)
-    cut = _rank_cut(0.0, v, norm(R))
-    res = svd(R, legs, _TAG_K, _TAG_KR; cutoff = cut, get_lists = true)
+    cut = _rank_cut(0.0, direction, norm(residual))
+    res = svd(residual, legs, _TAG_K, _TAG_KR; cutoff = cut, get_lists = true)
     nk = length(res.kept_list)
-    k, tail = _tail_rank(
+    keep_rank, tail = _tail_rank(
         res.kept_list,
         weight,
         allowance,
@@ -100,41 +112,46 @@ function _extend_frame(
         base = _sq_weight(res.trunc_list),
     )
     fits = tail <= allowance
-    k == 0 && return (Q, 0, fits)
-    k < nk && (res = svd(R, legs, _TAG_K, _TAG_KR; Nkeep = k, cutoff = cut))
-    U =
-        side === :left ? _reortho_left(Q, to_concrete(res.U)) :
-        _reortho_right(Q, to_concrete(permutedims(res.U, (3, 1, 2))))
+    keep_rank == 0 && return (frame, 0, fits)
+    keep_rank < nk && (res = svd(residual, legs, _TAG_K, _TAG_KR; Nkeep = keep_rank, cutoff = cut))
+    # A right frame carries its bond leg first, so the SVD's new leg moves to the front.
+    new_block =
+        side === :left ? _reortho_left(frame, to_concrete(res.U)) :
+        _reortho_right(frame, to_concrete(permutedims(res.U, (3, 1, 2))))
     # roundoff in a saturated sector must not become a column (`_cap_to_local_room`)
-    U = _cap_to_local_room(Q, U, side)
-    U === nothing && return (Q, 0, fits)
+    new_block = _cap_to_local_room(frame, new_block, side)
+    new_block === nothing && return (frame, 0, fits)
     fl = side === :left ? 3 : 1
-    Qn = to_concrete(oplus([Q, to_concrete(setitag(U, fl, Q.inds[fl].itags))], (fl,)))
-    return (_check_frame(Qn, side, "_extend_frame"), leg_dim(U, fl), fits)
+    # Direct sum on the frame leg, the new block relabelled with the frame's own bond tag.
+    grown_frame = to_concrete(
+        oplus([frame, to_concrete(setitag(new_block, fl, frame.inds[fl].itags))], (fl,)),
+    )
+    return (_check_frame(grown_frame, side, "_extend_frame"), leg_dim(new_block, fl), fits)
 end
 
 """
-    _krylov_enrich(v0, applyH, Q0, side, tau, alloc; workcap = 0, maxdepth = _KRY_MAXDEPTH,
-                   amp = 1.0, state_seed = true, fixed_depth = 0, recycled = ())
-        -> (Q, stats)
+    _krylov_enrich(seed, applyH, start_frame, side, tau, alloc; workcap = 0,
+                   maxdepth = _KRY_MAXDEPTH, amp = 1.0, state_seed = true, fixed_depth = 0,
+                   recycled = ())
+        -> (frame, stats)
 
-Grow the frame `Q0` by the Krylov directions of `applyH` from seed `v0` that the step needs. Each
-direction is scored by `weight * ||(I - QQ') v_k||`: `eta_1` is Test C, `eta_{k>=2}` Test D. Scores
-above `alloc.krylov` are appended. A small `eta_1` is not a stop (`H e1 = e2`, `H e2 = e1 + e3` with
-`Q0 = [e1, e2]`). `capped` with `met = false` means the work ceiling or depth bound stopped the
-search with weight left. `amp` is the seed's norm relative to the state. `stats.basis` and
-`stats.weights` are the Arnoldi vectors and their weights, the last vector the active frontier: what
-a later round recycles. With `recycled` only the complement of the previous solve's input is
-extended ([`_krylov_basis`](@ref)).
+Grow the frame `start_frame` by the Krylov directions of `applyH` from `seed` that the step needs.
+Each direction is scored by `weight * ||(I - QQ') v_k||` (`Q` the frame so far): `eta_1` is Test C,
+`eta_{k>=2}` Test D. Scores above `alloc.krylov` are appended. A small `eta_1` is not a stop
+(`H e1 = e2`, `H e2 = e1 + e3` with `start_frame = [e1, e2]`). `capped` with `met = false` means
+the work ceiling or depth bound stopped the search with weight left. `amp` is the seed's norm
+relative to the state. `stats.basis` and `stats.weights` are the Arnoldi vectors and their
+weights, the last vector the active frontier: what a later round recycles. With `recycled` only
+the complement of the previous solve's input is extended ([`_krylov_basis`](@ref)).
 
 `fixed_depth = m > 0` is the conventional-control ablation (plan Figs. 2 and 4): exactly `m` steps,
 every new local direction appended (numerical floor only), no weight stop; `met` then reports
 whether the weight had fallen to the allowance by depth `m`.
 """
 function _krylov_enrich(
-    v0,
+    seed,
     applyH,
-    Q0,
+    start_frame,
     side::Symbol,
     tau::ComplexF64,
     alloc::BasisAllocation;
@@ -151,25 +168,27 @@ function _krylov_enrich(
     fixed = fixed_depth > 0
     fixed && (maxdepth = fixed_depth)
     allow = fixed ? 0.0 : alloc.krylov
-    Q = Q0
+    frame = start_frame
     eta_c, eta_d, added, added_d = 0.0, 0.0, 0, 0
-    function score(v, weight, first::Bool)          # Tests C/D on one direction; false = capped
-        R = to_concrete(perp(Q, v))
-        eta = weight * norm(R)
+    # Tests C/D on one direction, growing `frame` in place; false = capped.
+    function score(direction, weight, first::Bool)
+        residual = to_concrete(perp(frame, direction))
+        eta = weight * norm(residual)
         first ? (eta_c = eta) : (eta_d = max(eta_d, eta))
         eta > allow || return true
         # The ceiling bounds the frame WIDTH, not the number of extensions: a block may not carry
         # the frame past it either.
-        room = workcap > 0 ? workcap - leg_dim(Q, fl) : typemax(Int)
+        room = workcap > 0 ? workcap - leg_dim(frame, fl) : typemax(Int)
         room <= 0 && return false
-        Q, nadd, fits = _extend_frame(Q, R, v, side, weight, allow; room = room)
+        frame, nadd, fits =
+            _extend_frame(frame, residual, direction, side, weight, allow; room = room)
         added += nadd
         first || (added_d += nadd)
         # an allowance of 0 never "fits" (the floor's tail): only the adaptive stop caps here
         return fits || fixed
     end
     kb = _krylov_basis(
-        v0,
+        seed,
         applyH,
         tau,
         alloc.krylov,
@@ -181,7 +200,7 @@ function _krylov_enrich(
         fixed = fixed,
     )
     return (
-        Q,
+        frame,
         (
             eta_c = eta_c,
             eta_d = eta_d,
@@ -201,18 +220,21 @@ function _krylov_enrich(
 end
 
 """
-    _merge_frame(Q, U, side) -> Q'
+    _merge_frame(frame, other_frame, side) -> grown frame
 
-`Q` grown by the part of the frame `U` it does not span, cut only at the numerical floor (the
+`frame` grown by the part of `other_frame` it does not span, cut only at the numerical floor (the
 `krylov_reuse = false` ablation: the CBE directions join after the Krylov stage instead of
 seeding it).
 """
-function _merge_frame(Q, U, side::Symbol)
-    R = to_concrete(side === :left ? perp_component(Q, U) : perp_component_right(Q, U))
-    # `U` inside `Q` (no CBE direction this step): Telum drops the cancelled blocks and its SVD of
-    # a blockless tensor throws (hq34b 17436300)
-    norm(R) == 0 && return Q
-    return first(_extend_frame(Q, R, U, side, 1.0, 0.0))
+function _merge_frame(frame, other_frame, side::Symbol)
+    residual = to_concrete(
+        side === :left ? perp_component(frame, other_frame) :
+        perp_component_right(frame, other_frame),
+    )
+    # `other_frame` inside `frame` (no CBE direction this step): Telum drops the cancelled blocks
+    # and its SVD of a blockless tensor throws (hq34b 17436300)
+    norm(residual) == 0 && return frame
+    return first(_extend_frame(frame, residual, other_frame, side, 1.0, 0.0))
 end
 
 "Fold one `_krylov_enrich` verdict into the step ledger (plan §8 Krylov diagnostics)."

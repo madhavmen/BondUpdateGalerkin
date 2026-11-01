@@ -1,4 +1,8 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/expansion/cbe_options.jl, src/RSVDCBEBondUpdate/bug/cbe_bug_info.jl.
+# Step and run records: kernel counters, the typed step record, run and sweep infos, and the closing
+# assembly and compression of a step (`_assemble_and_compress!`).
+#
+# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/expansion/cbe_options.jl and
+# src/RSVDCBEBondUpdate/bug/cbe_bug_info.jl.
 
 # ── from BUG/Randomised/dd_cbe.jl: deterministic, used by the Core sweeps ──
 
@@ -38,29 +42,31 @@ mutable struct KernelCounters
     b_compress::Int        # the closing compression
 end
 
+# Every counter at zero.
 KernelCounters() =
     KernelCounters(0, 0, 0, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0, 0, 0, 0, 0, 0, 0)
 
-function merge_counters!(a::KernelCounters, b::KernelCounters)
-    for f in fieldnames(KernelCounters)
-        setfield!(a, f, getfield(a, f) + getfield(b, f))
+"Add every counter of `addend` into `total` (the join of concurrent half-sweeps); returns `total`."
+function merge_counters!(total::KernelCounters, addend::KernelCounters)
+    for field in fieldnames(KernelCounters)
+        setfield!(total, field, getfield(total, field) + getfield(addend, field))
     end
-    return a
+    return total
 end
 
-"Run `f()` and return `(result, seconds, bytes)`."
-@inline function _measure(f)
-    b0 = Base.gc_bytes()
-    t0 = time_ns()
-    r = f()
-    return r, (time_ns() - t0) / 1e9, Base.gc_bytes() - b0
+"Run `thunk()` and return `(result, seconds, bytes)`."
+@inline function _measure(thunk)
+    start_bytes = Base.gc_bytes()
+    start_time = time_ns()
+    result = thunk()
+    return result, (time_ns() - start_time) / 1e9, Base.gc_bytes() - start_bytes
 end
 
 """
     OneSiteOp(h, version, counters)
 
 A one-site effective Hamiltonian (`MPOOneSiteH`, possibly `shift_h`-ed) that counts its
-applications. `apply_one_site(op, A)` forwards, so every existing caller works unchanged.
+applications. `apply_one_site(op, site_tensor)` forwards, so every existing caller works unchanged.
 """
 struct OneSiteOp{H}
     h::H
@@ -68,12 +74,14 @@ struct OneSiteOp{H}
     counters::KernelCounters
 end
 
-function apply_one_site(op::OneSiteOp, A)
-    y, dt, db = _measure(() -> apply_one_site(op.h, A))
+# Apply the wrapped one-site operator to `site_tensor`, recording one application, its seconds and
+# its bytes; returns the image.
+function apply_one_site(op::OneSiteOp, site_tensor)
+    image, dt, db = _measure(() -> apply_one_site(op.h, site_tensor))
     op.counters.n_one_site += 1
     op.counters.t_one_site += dt
     op.counters.b_one_site += db
-    return y
+    return image
 end
 
 """
@@ -113,7 +121,7 @@ end
 "Plan invariant 4: the separate limit statuses, read off the ledger's failed checks."
 function _step_limits(ledger::AdaptiveLedger)
     lim = Symbol[]
-    any(u -> u in (:sample, :tail, :krylov, :closure, :projection), ledger.unmet) &&
+    any(check -> check in (:sample, :tail, :krylov, :closure, :projection), ledger.unmet) &&
         push!(lim, :basis_limited)
     :expv in ledger.unmet && push!(lim, :root_limited)
     :trunc in ledger.unmet && push!(lim, :truncation_limited)
@@ -154,6 +162,7 @@ struct CBEBugRunInfo
     energies::Vector{Float64}
 end
 
+# The record without `energies` (real time): that field starts empty.
 CBEBugRunInfo(
     times,
     norms,
@@ -187,6 +196,7 @@ CBEBugRunInfo(
     Float64[],
 )
 
+# The number of recorded steps.
 Base.length(info::CBEBugRunInfo) = length(info.times)
 
 # ── from src/RSVDCBEBondUpdate/bug/cbe_bug_info.jl ──
@@ -216,11 +226,11 @@ struct CBEBugSweepInfo
     # Extra CBE growth passes of the removed fixed-knob path; always 0, kept so the record's
     # layout (and every recorded run) is unchanged.
     n_grow::Int
-    # ⛔ THE ROOT'S **RIGHT** FRAME WIDTH, WHICH NOTHING ELSE RECORDED. `expanded[c]` is
-    # `leg_dim(W[c], 3)` -- the LEFT frame only -- and the right half-sweep skips the root
-    # (`j != c && (expanded[j] = ...)`), so `b_R` was invisible. That matters because the Galerkin
-    # space is `b_L x b_R`: judging completeness from `b_L` alone can call a basis complete when it
-    # is not, which is exactly the wrong way for a diagnostic to fail.
+    # ⛔ THE ROOT'S **RIGHT** FRAME WIDTH, WHICH NOTHING ELSE RECORDED. `expanded[root_link]` is
+    # `leg_dim(left_frames[root_link], 3)` -- the LEFT frame only -- and the right half-sweep skips
+    # the root (`bond != root_link && (expanded[bond] = ...)`), so `b_R` was invisible. That
+    # matters because the Galerkin space is `b_L x b_R`: judging completeness from `b_L` alone can
+    # call a basis complete when it is not, which is exactly the wrong way for a diagnostic to fail.
     root_right::Int
     # Seconds inside `cbe_expand`, the only phase the randomised sketch makes cheaper. Without this
     # timer an rSVD study cannot tell a slow sketch from a fast sketch inside a small expansion
@@ -252,20 +262,22 @@ struct CBEBugSweepInfo
 end
 
 """
-    _assemble_and_compress!(psi, W, Z, c, res, ledger, bwts, bd0; maxdim, tol_trunc, truncate)
-        -> (root_rank, discarded, t_trunc)
+    _assemble_and_compress!(psi, left_frames, right_frames, root_link, res, ledger, bwts, bd0;
+                            maxdim, tol_trunc, truncate) -> (root_rank, discarded, t_trunc)
 
-Stage 4 of [`cbe_bug_step!`](@ref): the frames become the new site tensors -- `W[1:c-1]`, the
-split root core `W[c] U` and `S Vd Z[c]`, `Z[c+1:L-1]` -- and then ONE compression of the evolved
-state (plan §5). `tol_trunc` is a budget on the CUMULATIVE discarded norm over all bonds, shared
-out by `truncate_recursive!` into `bwts`; the ledger records it and closes the per-bond log.
-`discarded` is the largest single relative weight the root split or the compression threw away.
+Stage 4 of [`cbe_bug_step!`](@ref): the frames become the new site tensors --
+`left_frames[1:root_link-1]`, the split root core `left_frames[root_link] U` and
+`S Vd right_frames[root_link]`, `right_frames[root_link+1:end]` -- and then ONE compression of the
+evolved state (plan §5). `res` is the SVD of the evolved root. `tol_trunc` is a budget on the
+CUMULATIVE discarded norm over all bonds, shared out by `truncate_recursive!` into `bwts`; the
+ledger records it and closes the per-bond log. `discarded` is the largest single relative weight
+the root split or the compression threw away.
 """
 function _assemble_and_compress!(
     psi,
-    W,
-    Z,
-    c::Int,
+    left_frames,
+    right_frames,
+    root_link::Int,
     res,
     ledger::AdaptiveLedger,
     bwts,
@@ -274,32 +286,37 @@ function _assemble_and_compress!(
     tol_trunc::Float64,
     truncate::Bool,
 )
-    L = length(psi)
+    site_count = length(psi)
     discarded = _trunc_weight(res)
-    for i = 1:(c-1)
-        psi[i] = _relink(W[i], psi[i].inds[1].itags, psi[i].inds[3].itags)
+    # Left of the root: the left frames, relinked onto the state's own link tags.
+    for site = 1:(root_link-1)
+        psi[site] = _relink(left_frames[site], psi[site].inds[1].itags, psi[site].inds[3].itags)
     end
-    t1c, t3c = psi[c].inds[1].itags, psi[c].inds[3].itags
-    t3r = psi[c+1].inds[3].itags
-    psi[c] = _relink(to_concrete(W[c] * res.U), t1c, t3c)
-    psi[c+1] = _relink(to_concrete((res.S * res.Vd) * Z[c]), t3c, t3r)
-    for j = (c+1):(L-1)
-        psi[j+1] = _relink(Z[j], psi[j+1].inds[1].itags, psi[j+1].inds[3].itags)
+    # The root bond: U joins the left frame, S Vd the right frame, so the centre lands on
+    # root_link + 1.
+    t1c, t3c = psi[root_link].inds[1].itags, psi[root_link].inds[3].itags
+    t3r = psi[root_link+1].inds[3].itags
+    psi[root_link] = _relink(to_concrete(left_frames[root_link] * res.U), t1c, t3c)
+    psi[root_link+1] = _relink(to_concrete((res.S * res.Vd) * right_frames[root_link]), t3c, t3r)
+    # Right of the root: right frame `bond` becomes site `bond + 1`.
+    for bond = (root_link+1):(site_count-1)
+        psi[bond+1] =
+            _relink(right_frames[bond], psi[bond+1].inds[1].itags, psi[bond+1].inds[3].itags)
     end
-    psi.center = c + 1
-    root_rank = leg_dim(psi[c], 3)
+    psi.center = root_link + 1
+    root_rank = leg_dim(psi[root_link], 3)
 
     ttr = 0.0
     if truncate
-        t0 = time_ns()
+        start_time = time_ns()
         _, wtr, cumw, capped = truncate_recursive!(
             psi,
-            c + 1;
+            root_link + 1;
             maxdim = maxdim,
             weight_tol = tol_trunc,
             bond_weights = bwts,
         )
-        ttr = (time_ns() - t0) / 1e9
+        ttr = (time_ns() - start_time) / 1e9
         discarded = max(discarded, wtr)
         ledger.n_compress += 1
         ledger.discarded = cumw
@@ -311,8 +328,10 @@ function _assemble_and_compress!(
     ledger.r_final = maximum(bd1; init = 0)
     # Close the per-bond log with what only exists after the root solve and compression.
     ledger.bond_log = Any[
-        merge(e, (r_old = bd0[e.bond], r_final = bd1[e.bond], discarded = bwts[e.bond])) for
-        e in ledger.bond_log
+        merge(
+            entry,
+            (r_old = bd0[entry.bond], r_final = bd1[entry.bond], discarded = bwts[entry.bond]),
+        ) for entry in ledger.bond_log
     ]
     return (root_rank, discarded, ttr)
 end
