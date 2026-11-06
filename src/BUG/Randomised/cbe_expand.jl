@@ -70,8 +70,9 @@ function cbe_expand(
         cap_l, cap_r = min(cap_l, lim_ex), min(cap_r, lim_ex)
     end
     # The work ceiling also bounds what is retained, not only how wide the sketch is.
-    # A frame of width `old_rank` may grow to `workcap` and no further; `workcap >= 2 old_rank`,
-    # so the augmented rank-`2 old_rank` basis always fits. Where this cap is the binding one and
+    # A frame of width `old_rank` may grow to `workcap` and no further; `work_ceiling` keeps
+    # `workcap >= 2 old_rank`, so the augmented rank-`2 old_rank` basis fits (the per-bond
+    # `bond_work_ceilings`, held to `maxdim`, does not above `maxdim/2`). Where this cap binds and
     # the candidates fill it, `workcap_reached` is set; whether accuracy suffered is Test A's call
     # (the directions it cut are in its tail), so a cap is reported, never silently accepted.
     wbind_l = wbind_r = false

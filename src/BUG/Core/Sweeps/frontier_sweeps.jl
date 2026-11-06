@@ -52,7 +52,7 @@ function _frontier_left(
     ckw::NamedTuple;
     enrich::Bool,
     gen::Int,
-    workcap::Int,
+    workcap::WorkCeiling,
     amp::Float64,
     rng::AbstractRNG,
     nsample::Int = 0,
@@ -161,7 +161,7 @@ function _frontier_left(
                 tau,
                 alloc;
                 round = gen + 1,
-                workcap = workcap,
+                workcap = _cap_at(workcap, bond),
                 amp = amp,
                 state_seed = false,
                 fixed_depth = get(ckw, :krylov_depth, 0),
@@ -230,7 +230,7 @@ function _frontier_right(
     ckw::NamedTuple;
     enrich::Bool,
     gen::Int,
-    workcap::Int,
+    workcap::WorkCeiling,
     amp::Float64,
     rng::AbstractRNG,
     nsample::Int = 0,
@@ -340,7 +340,7 @@ function _frontier_right(
                 tau,
                 alloc;
                 round = gen + 1,
-                workcap = workcap,
+                workcap = _cap_at(workcap, bond),
                 amp = amp,
                 state_seed = false,
                 fixed_depth = get(ckw, :krylov_depth, 0),

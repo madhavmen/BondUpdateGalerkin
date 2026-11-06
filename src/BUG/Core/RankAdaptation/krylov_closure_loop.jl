@@ -24,7 +24,7 @@ function _krylov_closure!(
     alloc::BasisAllocation,
     ckw::NamedTuple;
     order::Int,
-    workcap::Int = 0,
+    workcap::WorkCeiling = 0,
     nrm::Float64 = 1.0,
     parallel::Bool = false,
     rng::AbstractRNG = MersenneTwister(0x5EED),

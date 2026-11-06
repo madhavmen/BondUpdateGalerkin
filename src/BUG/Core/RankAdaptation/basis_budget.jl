@@ -455,6 +455,42 @@ work_ceiling(maxdim::Int, bond_rank::Int, site_dim::Int = 2) =
     max(site_dim * maxdim, site_dim * bond_rank, 1)
 
 """
+    bond_work_ceilings(bond_ranks, site_dim, maxdim; factor = 0) -> Vector{Int}
+
+The per-bond alternative to [`work_ceiling`](@ref) (`cbe_bug_step!`'s `work_ceiling_rule =
+:bond`): the trial space at bond `b` may reach `2*d*bond_ranks[b]`, twice the one-site space that
+bond's own frame reaches, but never more than `maxdim`. On a nonlocal generator the global ceiling
+`d*maxdim` lets the closure stage fill every bond towards it while the state's largest bond is far
+smaller (dissipative A2 at L = 24: towards 1024 against 378). A bond then grows by at most `2d` per
+step, which at `d = 2` is TDVP2's `d^2`. The ceiling bounds the whole frame, so a bond above
+`maxdim/2` cannot take its full rank-`2r` augmentation, and a bond at `maxdim` takes none
+(`workcap_reached` reports it).
+
+`factor > 0` (`cbe_bug_step!`'s `bond_ceiling_factor`) replaces `2*d` by a fraction of the bond
+itself, `ceil(factor*D_b)`: at `factor = 1.2` a bond's stage may widen by 20% of its own dimension
+per step (at least one direction, since `ceil(1.2 D) >= D + 1`), not to the `2D` one-site space
+every DD and Krylov stage was measured filling (XX L = 16: 65 -> 131). The product is rounded to 9
+digits first, so representation noise (`1.2 * 5 = 6.000...1`) cannot add a column.
+"""
+function bond_work_ceilings(
+    bond_ranks::AbstractVector{<:Integer},
+    site_dim::Int,
+    maxdim::Int;
+    factor::Real = 0.0,
+)
+    ceiling_of(bond_rank) =
+        factor > 0 ? ceil(Int, round(factor * bond_rank; digits = 9)) : 2 * site_dim * bond_rank
+    return [max(min(ceiling_of(bond_rank), maxdim), 1) for bond_rank in bond_ranks]
+end
+
+"A work ceiling: one for every bond (`work_ceiling`), or one per bond (`bond_work_ceilings`)."
+const WorkCeiling = Union{Int,Vector{Int}}
+
+"The ceiling the expansion at `bond` is held to."
+_cap_at(workcap::Int, bond::Int) = workcap
+_cap_at(workcap::Vector{Int}, bond::Int) = workcap[bond]
+
+"""
 The adaptive search's STARTING width schedule (`budget = ceil(growth*dmax) - r`, probe `1.2x` that).
 1.2, not 2.0: at 2.0 the first probe is ~1.2chi columns against a
 local space of 2chi, so the RSVD starts as wide as the space it sketches. Only a start: Test B

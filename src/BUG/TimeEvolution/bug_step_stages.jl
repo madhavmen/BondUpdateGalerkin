@@ -9,7 +9,8 @@
 Check `cbe_bug_step!`'s keywords against each other (in the order the step always checked them, so
 the first error raised is unchanged) and resolve their `nothing` defaults. Returns the site count,
 the root link, the parallel mode as a `Symbol` and as a `Bool`, the K/L/S schedule, the
-`AdaptiveBudget`, the leak-folding switch and the rank limit.
+`AdaptiveBudget`, the leak-folding switch, the rank limit and the step's work ceiling, read once
+before anything widens (one for every bond, or one per bond: `work_ceiling_rule`).
 """
 function _resolve_step_options(
     psi,
@@ -29,6 +30,8 @@ function _resolve_step_options(
     outside_residual,
     maxdim,
     frontier_tol,
+    work_ceiling_rule,
+    bond_ceiling_factor,
 )
     site_count = length(psi)
     length(mpo) == site_count ||
@@ -61,6 +64,17 @@ function _resolve_step_options(
             ),
         )
     frontier_tol >= 0 || throw(ArgumentError("frontier_tol must be >= 0, got $frontier_tol"))
+    work_ceiling_rule in (:maxdim, :bond) || throw(
+        ArgumentError("work_ceiling_rule must be :maxdim or :bond, got $work_ceiling_rule"),
+    )
+    bond_ceiling_factor == 0 ||
+        (bond_ceiling_factor > 1 && work_ceiling_rule === :bond) ||
+        throw(
+            ArgumentError(
+                "bond_ceiling_factor must be 0, or > 1 with work_ceiling_rule = :bond, got " *
+                "$bond_ceiling_factor with :$work_ceiling_rule",
+            ),
+        )
     closure_probe >= 0 ||
         throw(ArgumentError("closure_probe must be a non-negative count, got $closure_probe"))
     if kls !== nothing
@@ -75,6 +89,13 @@ function _resolve_step_options(
     end
     # Default `maxdim = 128`.
     maxdim = something(maxdim, 128)
+    # The work ceiling shared by the CBE sketch and the Krylov enrichment, from the bonds as they
+    # stand before the step.
+    bond_ranks = bond_dims(psi)
+    workcap =
+        work_ceiling_rule === :bond ?
+        bond_work_ceilings(bond_ranks, local_dim(psi), maxdim; factor = bond_ceiling_factor) :
+        work_ceiling(maxdim, maximum(bond_ranks; init = 0), local_dim(psi))
     return (
         site_count = site_count,
         root_link = root_link,
@@ -84,6 +105,7 @@ function _resolve_step_options(
         budget = budget,
         fold_omega = fold_omega,
         maxdim = maxdim,
+        workcap = workcap,
     )
 end
 

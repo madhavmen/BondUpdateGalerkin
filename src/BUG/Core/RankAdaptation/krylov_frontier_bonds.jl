@@ -239,7 +239,7 @@ function _frontier_expand(
         ledger = ledger,
         rng = rng,
         alloc = get(ckw, :alloc, nothing),
-        workcap = get(ckw, :workcap, 0),
+        workcap = _cap_at(get(ckw, :workcap, 0), bond),
         growth = get(ckw, :growth, ADAPTIVE_GROWTH),
         exact = get(ckw, :exact, false),
         version = bond,

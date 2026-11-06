@@ -48,7 +48,7 @@ function _frontier_sweep!(
     alloc::BasisAllocation,
     ckw::NamedTuple;
     enrich::Bool = true,
-    workcap::Int = 0,
+    workcap::WorkCeiling = 0,
     nrm::Float64 = 1.0,
     parallel::Bool = false,
     rng::AbstractRNG = MersenneTwister(0x5EED),
@@ -304,7 +304,7 @@ function _measure_frontiers(
     parallel::Bool = false,
     rng::AbstractRNG = MersenneTwister(0x5EED),
     pass::Int = 0,
-    workcap::Int = 0,
+    workcap::WorkCeiling = 0,
     fold::Bool = false,
 )
     root_operator = _root_generator(mpo, fr)

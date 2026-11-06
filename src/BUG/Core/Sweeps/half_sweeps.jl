@@ -58,7 +58,7 @@ struct _HalfSweepCtx{M,E,A,X<:BasisExpansion,K,S,R}
     alloc::A
     expansion::X
     exkw::K
-    wcap::Int
+    wcap::WorkCeiling
     krylov_reuse::Bool
     krylov_depth::Int
     keep_states::S
@@ -92,6 +92,7 @@ function _expand_bond!(
         rch,
         side;
         cx.exkw...,
+        workcap = _cap_at(cx.wcap, bond),
         ledger = ledger,
         rng = rng,
         kc = acc.kc,
@@ -249,7 +250,7 @@ function _half_left!(
             :left,
             cx.tau,
             cx.alloc;
-            workcap = cx.wcap,
+            workcap = _cap_at(cx.wcap, bond),
             fixed_depth = cx.krylov_depth,
         )
         cx.krylov_reuse || (Wkry = _merge_frame(Wkry, ex.U_ex, :left))
@@ -358,7 +359,7 @@ function _half_right!(
             :right,
             cx.tau,
             cx.alloc;
-            workcap = cx.wcap,
+            workcap = _cap_at(cx.wcap, bond),
             fixed_depth = cx.krylov_depth,
         )
         cx.krylov_reuse || (Zkry = _merge_frame(Zkry, ex.V_ex, :right))

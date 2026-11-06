@@ -56,6 +56,13 @@ function cbe_bug_step!(
     # `_append_ranked`); `0` appends them in chain order until the work ceiling. A cost setting on
     # the stage width; the `recycle_mode = :frame` seeding stays sequential.
     krylov_rank_tol::Float64 = 0.0,
+    # The working-rank ceiling of every DD-QR CBE and local Krylov stage. `:maxdim`: one ceiling
+    # `max(d*maxdim, d*D_max)` for every bond (`work_ceiling`). `:bond`: `min(2*d*D_b, maxdim)` at
+    # bond `b`, from its dimension at the start of the step (`bond_work_ceilings`); with
+    # `bond_ceiling_factor = f > 1`, `min(ceil(f*D_b), maxdim)` instead (the usual CBE stage
+    # ceiling is `f = 1.2`). A bond already at `maxdim` then gets no enrichment room that step.
+    work_ceiling_rule::Symbol = :maxdim,
+    bond_ceiling_factor::Real = 0.0,
     # Ablation, not a method choice. `true`: every local
     # Krylov stage (half-sweeps and frontier sweeps) grows from the CBE output
     # `[U0 | U_CBE]`, so it never regenerates a CBE direction. `false`: it grows
@@ -175,6 +182,8 @@ function cbe_bug_step!(
         outside_residual = outside_residual,
         maxdim = maxdim,
         frontier_tol = frontier_tol,
+        work_ceiling_rule = work_ceiling_rule,
+        bond_ceiling_factor = bond_ceiling_factor,
     )
     site_count, root_link, budget = options.site_count, options.root_link, options.budget
     parallel_sym, parallel, kls = options.parallel_mode, options.run_parallel, options.kls
@@ -213,9 +222,8 @@ function cbe_bug_step!(
     accL = _HalfAcc()
     accR = _HalfAcc()
 
-    # The ONE work ceiling, shared by the CBE sketch and the Krylov enrichment, read
-    # ONCE, globally, before anything widens.
-    wcap_step = work_ceiling(maxdim, maximum(bond_dims(psi); init = 0), local_dim(psi))
+    # The work ceiling, an `Int` for every bond or one per bond (`_cap_at`).
+    wcap_step = options.workcap
     # The expansion settings every DD-QR CBE of the step takes, half-sweeps and frontier sweeps.
     exkw = (
         growth = ADAPTIVE_GROWTH,
@@ -545,7 +553,7 @@ function cbe_bug_step!(
         max(maximum(expanded; init = 0), leg_dim(right_frames[root_link], 1)),
         maximum(bond_dims(psi); init = 0),
         maxdim,
-        wcap_step,
+        maximum(wcap_step),
         nroot[],
         t_step,
         Base.gc_bytes() - _b0step,
