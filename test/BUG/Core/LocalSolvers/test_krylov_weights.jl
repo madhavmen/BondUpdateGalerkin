@@ -2,6 +2,7 @@
 #   - the local stage's weight is the residual integral `|tau| beta_k int_0^1 |f(s)| ds`: Saad's
 #     scalar cancels on a 2x2 with an O(1) error, the integral does not, and it bounds the error of
 #     random Hermitian generators;
+#   - the recycled stage's block weight reduces to it with nothing recycled, damped steps included;
 #   - the root's tail is guarded over the step (`_tail_sup`): the endpoint entry vanishes on a
 #     gapped 3-site chain, the guarded tail does not; imaginary time keeps the endpoint value;
 #   - `_tridiag_eigen` is exact on finite input and names non-finite input.
@@ -9,7 +10,13 @@
 using Test, LinearAlgebra
 import Random
 import BondUpdateGalerkin.BUG:
-    _kry_weight, _arnoldi_chain, _tail, _tail_sup, _tridiag_eigen, _coeffs_from_eigen
+    _kry_weight,
+    _block_weight,
+    _arnoldi_chain,
+    _tail,
+    _tail_sup,
+    _tridiag_eigen,
+    _coeffs_from_eigen
 
 # Plain Arnoldi with two Gram-Schmidt passes, `H basis[:, 1:k] = basis[:, 1:k+1] hessenberg[1:k+1,
 # 1:k]`: the test's own decomposition, so the weights are graded against a recurrence they do not
@@ -76,6 +83,33 @@ end
             end
         end
         @test checked > 30
+    end
+
+    @testset "the recycled block weight is the fresh chain's with nothing recycled" begin
+        # one residual column beta_k v_{k+1}: Gram = beta_k^2 e_k e_k', so the block weight must
+        # equal `_kry_weight` in every normalisation, real time damped or not and imaginary time
+        rng = Random.MersenneTwister(5)
+        dimension, depth = 20, 6
+        raw = randn(rng, ComplexF64, dimension, dimension)
+        generator = (raw + raw') / 2
+        seed = normalize(randn(rng, ComplexF64, dimension))
+        _, hessenberg = arnoldi_decomposition(generator, seed, depth)
+        residual_gram = zeros(ComplexF64, depth, depth)
+        residual_gram[depth, depth] = abs2(hessenberg[depth+1, depth])
+        for damping in (0.0, 0.1, 1.0, 10.0), state_seed in (true, false)
+            tau = ComplexF64(-damping * 0.1 - 0.1im)
+            fresh = _kry_weight(hessenberg, depth, tau; state_seed = state_seed)
+            block = _block_weight(
+                hessenberg[1:depth, 1:depth],
+                residual_gram,
+                tau;
+                state_seed = state_seed,
+            )
+            @test block ≈ fresh rtol = 1e-10
+        end
+        imaginary = ComplexF64(-0.5)
+        @test _block_weight(hessenberg[1:depth, 1:depth], residual_gram, imaginary) ≈
+              _kry_weight(hessenberg, depth, imaginary) rtol = 1e-10
     end
 
     @testset "the root's tail is guarded over the step" begin

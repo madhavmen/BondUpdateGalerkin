@@ -1,6 +1,6 @@
 # The half-sweep Krylov stage: the Krylov weight (a residual integral), the frame extension,
-# `_krylov_enrich`, and the frame merge and ledger fold around it. The local recurrence it drives (`_krylov_basis`) is in
-# `krylov_recurrence.jl`, included right after this file.
+# `_krylov_enrich`, and the frame merge and ledger fold around it. The local recurrence it
+# drives (`_krylov_basis`) is in `krylov_recurrence.jl`, included right after this file.
 
 # ── THE HALF-SWEEP KRYLOV STAGE OF `cbe_bug_step!` (Tests C and D) ───────────────────────────
 
@@ -53,9 +53,7 @@ no-jump generator `H - (i/2)Q` at `tau = -im*dt` contracts, and its weight must 
 decayed state, not to the start norm. A closure frontier is not the state: it decays under the
 shifted generator, so dividing by its own growth would inflate its directions by `e^{dbeta h11}`.
 
-Composite Simpson on an even number of intervals with `||M - sigma||_1 / intervals <= 1/4`
-(`M = tau H_k`), so the phase of `f` is resolved; `sigma` is the largest real part of `M`'s
-spectrum (0 when unitary), so no exponential overflows, and the sum is taken in log space.
+The integral is [`_residual_integral`](@ref)'s.
 """
 function _kry_weight(
     Hm::Matrix{ComplexF64},
@@ -65,29 +63,56 @@ function _kry_weight(
 )
     beta = abs(Hm[krylov_step+1, krylov_step])
     beta == 0 && return 0.0
-    generator = tau .* Hm[1:krylov_step, 1:krylov_step]
+    # |f(s)| is the last entry of exp(s tau H_k) e_1; the defect it leaves carries beta_k
+    return beta * _residual_integral(
+        column -> abs(column[krylov_step]),
+        tau .* Hm[1:krylov_step, 1:krylov_step],
+        tau;
+        state_seed = state_seed,
+    )
+end
+
+"""
+    _residual_integral(defect_norm, generator, tau; state_seed = true) -> Float64
+
+`|tau| int_0^1 defect_norm(exp(s M) e_1) ds` for `M = generator` (`tau` times a projected
+operator), in the normalisations of [`_kry_weight`](@ref): absolute for a unitary propagator and
+for a closure frontier, relative to the state's own growth `||exp(M) e_1||` for the state's seed.
+`defect_norm` maps the coefficient column `c(s) = exp(s M) e_1` to the norm of the defect it
+leaves, and must be homogeneous of degree one (`defect_norm(a c) = |a| defect_norm(c)`).
+
+Composite Simpson on an even number of intervals with `||M - sigma||_1 / intervals <= 1/4`, so the
+phase is resolved; `sigma` is the largest real part of `M`'s spectrum (0 when unitary), the
+integrand is evaluated on `exp(s (M - sigma))` so no exponential overflows, and the sum is taken
+in log space.
+"""
+function _residual_integral(
+    defect_norm,
+    generator::AbstractMatrix,
+    tau::ComplexF64;
+    state_seed::Bool = true,
+)
     unitary = norm(generator + generator') <= _KRY_SKEW_TOL * norm(generator)
     sigma = unitary ? 0.0 : maximum(real, eigvals(generator))
     shifted = generator - sigma * I
     intervals = 2 * clamp(ceil(Int, 2 * opnorm(shifted, 1)), 8, _RESIDUAL_MAX_PANELS)
     spacing = 1.0 / intervals
     propagator = exp(spacing .* shifted)
-    column = zeros(ComplexF64, krylov_step)          # exp(s * shifted) e_1, from s = 0
+    column = zeros(ComplexF64, size(generator, 1))   # exp(s * shifted) e_1, from s = 0
     column[1] = 1
     log_terms = Vector{Float64}(undef, intervals + 1)
     for node = 0:intervals
         node > 0 && (column = propagator * column)
         simpson_weight = node == 0 || node == intervals ? 1.0 : (isodd(node) ? 4.0 : 2.0)
-        magnitude = abs(column[krylov_step])
-        # |f(s)| = e^{s sigma} |[exp(s shifted)]_{k,1}|, weighted by Simpson's rule
+        magnitude = defect_norm(column)
+        # the defect at s: e^{s sigma} defect_norm(exp(s shifted) e_1), weighted by Simpson's rule
         log_terms[node+1] =
             magnitude == 0 ? -Inf :
             log(simpson_weight * spacing / 3 * magnitude) + node * spacing * sigma
     end
     peak = maximum(log_terms)
     peak == -Inf && return 0.0
-    log_integral = peak + log(sum(exp(term - peak) for term in log_terms))
-    log_weight = log(abs(tau)) + log(beta) + log_integral
+    log_weight = log(abs(tau)) + peak + log(sum(exp(term - peak) for term in log_terms))
     (unitary || !state_seed) && return exp(log_weight)
     # the state's own seed: relative to its growth ||exp(M) e_1|| = e^sigma ||exp(shifted) e_1||,
     # and `column` now holds exp(shifted) e_1

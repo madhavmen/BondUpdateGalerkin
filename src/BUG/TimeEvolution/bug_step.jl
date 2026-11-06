@@ -71,7 +71,8 @@ function cbe_bug_step!(
     krylov_reuse::Bool = true,
     # Ablation, not a method choice. `true`: each order-p round's local Krylov stage reuses the
     # previous round's vectors at that bond, transported into its gauge
-    # (`krylov_recycle.jl`); real-time and no-jump steps only. Off by default:
+    # (`krylov_recycle.jl`); real-time steps, damped (`tau = (-i - gamma) h`) or not, and
+    # no-jump steps; never imaginary time. Off by default:
     # neither the XX nor the dissipative study found a gain. A
     # `Ref` in `recycle_report` receives the per-bond log.
     krylov_recycle::Bool = false,

@@ -195,17 +195,40 @@ end
 _phi1_e1(generator::AbstractMatrix) = last(_exp_phi1_e1(generator))
 
 """
+    _block_weight(projection, residual_gram, tau; state_seed = true) -> Float64
+
+The weight of the defect a block recurrence leaves, in the normalisation [`_kry_weight`](@ref)
+gives the fresh Arnoldi chain. `projection` is `G = B'HB` of the block `B`, `residual_gram` the
+Gram matrix `[<R_j, R_k>]` of its residual block `R = HB - BG`. With `c(s) = exp(s tau G) e_1` the
+defect at time `s` has norm `||R c(s)|| = sqrt(c(s)' Gram c(s))`, and the weight is
+`|tau| int_0^1 ||R c(s)|| ds` ([`_residual_integral`](@ref)). With nothing recycled the block IS
+the Arnoldi basis and `R` has one column, `beta_k v_{k+1}`, so this reduces to `_kry_weight`.
+"""
+function _block_weight(
+    projection::AbstractMatrix,
+    residual_gram::AbstractMatrix,
+    tau::ComplexF64;
+    state_seed::Bool = true,
+)
+    defect_norm(coefficients) =
+        sqrt(max(real(dot(coefficients, residual_gram * coefficients)), 0.0))
+    return _residual_integral(defect_norm, tau .* projection, tau; state_seed = state_seed)
+end
+
+"""
     _krylov_enrich_recycled(seed, applyH, frame_start, side, tau, alloc, recycled_vectors;
-                            workcap, maxdepth, amp) -> (frame, stats)
+                            workcap, maxdepth, amp, state_seed = true) -> (frame, stats)
 
 `_krylov_enrich` started from the block `block_basis = orth[seed, recycled_vectors]` instead of
 `seed` alone. Every column of the block gets a FRESH image (`n_refresh` applications); the
 residual block `Rs = H B - B (B'HB)` (`B` the block) then plays the role of the Arnoldi
-remainder: the time-weighted defect `defect = tau Rs phi_1(tau B'HB) e_1` has norm
-`|tau beta_k [phi_1]_{k1}|` -- Saad's weight -- when `recycled_vectors` is empty, so the stop is
-the production one. While `amp ||defect||` exceeds `alloc.krylov` the recurrence continues along
-`defect` (one new application each). Block vectors are scored by their Galerkin coefficient,
-defect directions by the defect weight, and appended to the frame by the same rule
+remainder, and the defect it leaves is weighed by [`_block_weight`](@ref), which with
+`recycled_vectors` empty IS `_kry_weight`: the stop is the production one on every generator,
+damped and non-unitary normalisations included. While `amp` times that weight exceeds
+`alloc.krylov` the recurrence continues along the defect `tau Rs phi_1(tau B'HB) e_1` (one new
+application each). Block vectors are scored by their Galerkin coefficient (relative to the
+state's growth when the propagator is not unitary), defect directions by the defect weight, and
+appended to the frame by the same rule
 (`_extend_frame`), or collected and ranked at the end when `alloc.krylov_rank > 0`
 ([`_append_ranked`](@ref)).
 """
@@ -220,6 +243,7 @@ function _krylov_enrich_recycled(
     workcap::Int = 0,
     maxdepth::Int = _KRY_MAXDEPTH,
     amp::Float64 = 1.0,
+    state_seed::Bool = true,
 )
     perp = side === :left ? perp_component : perp_component_right
     fl = side === :left ? 3 : 1
@@ -285,14 +309,23 @@ function _krylov_enrich_recycled(
     basis_count = length(block_basis)
     if nrec > 0
         # Galerkin coefficients of the block over the step score the recycled vectors
-        cG = exp(teff .* Hm[1:basis_count, 1:basis_count])[:, 1]
+        generator = teff .* Hm[1:basis_count, 1:basis_count]
+        cG = exp(generator)[:, 1]
+        # relative to the state's growth when the propagator is not unitary, as the defect weight
+        unitary = norm(generator + generator') <= _KRY_SKEW_TOL * norm(generator)
+        growth = unitary || !state_seed ? 1.0 : max(norm(cG), floatmin(Float64))
         for column = 2:basis_count
-            coeff_weight = amp * abs(cG[column])
+            coeff_weight = amp * abs(cG[column]) / growth
             push!(ws, coeff_weight)
             score!(block_basis[column], coeff_weight, column == 2) || (capped = true)
         end
     end
     while !capped
+        # invariant: the residual block vanishes (the fresh chain's `beta_k` breakdown)
+        residual_gram = ComplexF64[
+            tensor_inner(Rs[row], Rs[column]) for row = 1:basis_count, column = 1:basis_count
+        ]
+        sqrt(max(real(tr(residual_gram)), 0.0)) <= _KRY_BREAKDOWN && (closed = true; break)
         # time-weighted defect: the residuals combined with tau * phi_1(tau Hm) e_1
         ph = _phi1_e1(teff .* Hm[1:basis_count, 1:basis_count])
         defect = nothing
@@ -302,8 +335,19 @@ function _krylov_enrich_recycled(
         end
         defect = to_concrete(defect)
         nd = norm(defect)
-        weight = amp * nd
-        nd <= _KRY_BREAKDOWN && (closed = true; break)          # invariant: nothing further
+        # Saad's defect can cancel while the residual does not: continue then along the heaviest
+        # residual column instead
+        if nd <= _KRY_BREAKDOWN
+            defect = Rs[argmax([norm(residual) for residual in Rs])]
+            nd = norm(defect)
+        end
+        weight =
+            amp * _block_weight(
+                Hm[1:basis_count, 1:basis_count],
+                residual_gram,
+                teff;
+                state_seed = state_seed,
+            )
         if weight <= alloc.krylov
             # kept, never applied: the active frontier a next round would continue from (as
             # `_krylov_enrich` keeps its last vector)
@@ -356,7 +400,9 @@ end
                        kw...)
 
 The bond's local Krylov stage: recycled from the entry `entry` (transported by `transport()`)
-when there is one and the step is unitary, `_krylov_enrich` otherwise. Logs the visit.
+when there is one and the step is not imaginary time, `_krylov_enrich` otherwise. Logs the visit.
+Real time recycles damped or not (`tau = (-i - gamma) h`); a gate on `real(tau) != 0` sent every
+damped step to a fresh solve silently, so a damped "recycled" run was the fresh one.
 """
 function _recycled_or_fresh(
     rec,
@@ -372,7 +418,8 @@ function _recycled_or_fresh(
     round::Int,
     kw...,
 )
-    if rec === nothing || entry === nothing || real(tau) != 0 || get(kw, :fixed_depth, 0) > 0
+    imaginary_time = imag(tau) == 0 && real(tau) != 0
+    if rec === nothing || entry === nothing || imaginary_time || get(kw, :fixed_depth, 0) > 0
         return _krylov_enrich(seed, applyH, frame_start, side, tau, alloc; kw...)
     end
     start_time = time_ns()
@@ -445,6 +492,7 @@ function _recycled_or_fresh(
         recycled_vectors;
         workcap = get(kw, :workcap, 0),
         amp = get(kw, :amp, 1.0),
+        state_seed = get(kw, :state_seed, true),
     )
     push!(
         rec.log[side],
