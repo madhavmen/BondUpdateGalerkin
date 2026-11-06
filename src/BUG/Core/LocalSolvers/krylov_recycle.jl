@@ -1,7 +1,5 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/bug/krylov_recycle.jl.
-
 # ── RECYCLED LOCAL KRYLOV ACROSS AUGMENTATION ROUNDS (`krylov_recycle`, an ABLATION) ──────────
-# xx-efficiency plan Fig. 3 / S5. An order-p step runs p augmentation rounds: the half-sweeps
+# An order-p step runs p augmentation rounds: the half-sweeps
 # (round 1, frontier j = 0) and one enriching frontier sweep per j = 1..p-1. Each round's local
 # Krylov basis at a bond is cached; the next round transports it into its own gauge -- the frame
 # leg by the map `Pm` the frontier sweep already carries the frames with, the opposite leg by the
@@ -11,11 +9,11 @@
 # `mode = :frame` is the image-free variant: the transported vectors only join the starting frame
 # (each by its own weighted residual, as `_extend_frame` admits Krylov directions) and a FRESH
 # `_krylov_enrich` runs on top -- no image refresh, no continued recurrence.
-# `mode = :complement` is the dissipative plan's §1.2 variant: the entry keeps the solve's input
+# `mode = :complement`: the entry keeps the solve's input
 # first, and the next round reuses the transported block only where it certifies that input's
 # evolution under its own `H1`, extending only the complement of the input (`_rk_complement`).
 
-"`:complement` vectors kept per bond besides the input (plan §1.2 work caps: a bounded set)."
+"`:complement` vectors kept per bond besides the input (a bounded set, so the work stays capped)."
 const _RECYCLE_KEEP = 8
 
 """

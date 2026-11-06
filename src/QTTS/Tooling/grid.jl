@@ -1,7 +1,7 @@
 # Quantics bit orderings and uniform 2D grids.
 #
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/qtt/qtt_grid.jl. The site map is split out of
-# `QTTGrid` into `QTTOrdering` (implementation plan WP2), which also covers one axis or more than two.
+# The site map is `QTTOrdering`, kept separate from `QTTGrid`; it also covers one axis or more than
+# two.
 #
 # A field on a grid of `2^n_1 x ... x 2^n_N` points is a tensor train of `sum n_a` sites, one site per
 # bit; bit value `b` of a site is its local index `b + 1`. The default ordering is GROUPED (every bit

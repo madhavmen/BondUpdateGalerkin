@@ -1,9 +1,9 @@
-# The Gross-Pitaevskii nonlinear right-hand side on QTT (implementation plan WP5, GPE second).
+# The Gross-Pitaevskii nonlinear right-hand side on QTT.
 #
-# From BUG-Julia@b155550:tests/sweeps/test_qtt_task1.jl U06 and U02's GP part: the density and the
+# The density and the
 # zip-up products against dense, H[psi, t] and F(psi) against dense, the density rebuilt from the
 # trial state, the real-linear JVP against finite differences, and H0 against the dense stencils.
-# The frozen-density step of U06 (`gp_bug_step!`) is not moved; `frozen_flow` replaces it.
+# The frozen-density step is `frozen_flow`.
 
 using Test, LinearAlgebra, Random
 using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QTTS

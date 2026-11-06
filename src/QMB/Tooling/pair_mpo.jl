@@ -1,7 +1,3 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/models/pair_mpo.jl.
-
-# ── from src/RSVDCBEBondUpdate/models/pair_mpo.jl ──
-
 # An exact MPO for an arbitrary two-body coupling matrix `J[i,j]`, charged (rank-3) operators
 # included: one channel per opening site, virtual dimension `2 + n * (live openings)`.
 
@@ -199,8 +195,8 @@ end
 
 A nearest-neighbour THREE-site term `sum_j w[j] A_j B_{j+1} C_{j+2}` (`j = 1..L-2`), with
 `pair = PairVertex(B, C, coeff)` an ordinary (charged or neutral) two-body vertex and `A` a
-charge-NEUTRAL rank-2 operator: the facilitation factor `n_{j-1}` of the U(1) East model (plan
-OS-3), `n_{j-1} (c'_j c_{j+1} + h.c.)`, which `pair_mpo`'s two-body automaton cannot express.
+charge-NEUTRAL rank-2 operator: the facilitation factor `n_{j-1}` of the U(1) East model,
+`n_{j-1} (c'_j c_{j+1} + h.c.)`, which `pair_mpo`'s two-body automaton cannot express.
 
 Because `A` is neutral the term needs no new tensor: in the automaton it is `id -(A)-> pre ->(B
 opens, as a pair's left half)-> mid -(C closes)-> done`, and `pre` carries the vacuum virtual space.
@@ -372,7 +368,7 @@ function _pair_mpo(
         # Boundaries: site 1 can only be in `id`, site `L` can only end `done`.
         if i == 1
             mat = reshape(mat[1, :], 1, ncol)
-            # ⛔ `mat[1, ncol]` IS THE FIELD'S SLOT. Blanking it unconditionally drops `h_1` here
+            # `mat[1, ncol]` is the field's slot. Blanking it unconditionally drops `h_1` here
             # and `h_L` below -- an error that shrinks like 1/L and therefore reads as a
             # convergence artefact rather than a wrong Hamiltonian. Same trap
             # `field_mpo_from_terms` documents; the guard is why it is not repeated here.

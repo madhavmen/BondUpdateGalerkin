@@ -1,4 +1,5 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/bug/cbe_bug_midpoint.jl.
+# The midpoint CBE-BUG step: a half step supplies the midpoint bases, in which the full step is
+# integrated from the start state.
 
 """
     cbe_bug_midpoint_step!(psi, mpo, tau; kwargs...) -> CBEBugSweepInfo

@@ -20,7 +20,3 @@ julia --project examples/QTTS/gp_ground_state.jl [OUTPUT_DIR]
 
 Run times have not been measured yet. `julia --project examples/run_all.jl` runs every script at
 small sizes (the manual pre-commit hook `julia-examples`); run it before a pull request.
-
-The BUG-Julia examples `oat_z2.jl`, `tfim_z2.jl` and `observables_demo.jl`, their shared `common.jl`
-and the plotting script `plot_examples.py` are not ported: their models are covered by the tests in
-`test/QMB/ClosedSystem`, and they wrote CSVs into the source tree.

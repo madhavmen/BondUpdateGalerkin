@@ -1,9 +1,7 @@
 # Two-site TDVP on dense QTT cores (lagged and stage-consistent nonlinear density), the split-
 # dissipation TDVP control of the damped GP equation, and the Krylov exponentials they use.
 #
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/qtt/qtt_flows.jl (`qtt_tdvp2_step!`,
-# `qtt_split_tdvp_step!`, `tt_expv`, `_dense_expv`, `_eff1`, `_eff2`). The flows and the dense
-# contractions come from BUG and QTTS; `fl isa GPFlow && fl.normalized` is `flow_normalized(fl)`.
+# The flows and the dense contractions come from BUG and QTTS.
 
 # ── dense effective actions ──
 
@@ -153,7 +151,7 @@ of the flow `fl`, with the explicitly BACKWARD one-site centre substeps `exp(-h/
   substep time) from the TRIAL state, by the self-consistent midpoint iteration
   `x' = exp(dt F[(x + x')/2]) x` to `tol_sc`, environments rebuilt at every iterate.
 
-Records `A_back = ||M_after|| / ||M_before||` for every backward substep (plan §2.5), the
+Records `A_back = ||M_after|| / ||M_before||` for every backward substep, the
 self-consistency iterations and the discarded weight. "TDVP2" names the two-site update, not a
 temporal order; the order is measured (V07).
 """
@@ -289,7 +287,7 @@ end
 """
     qtt_split_tdvp_step!(psi, m::GPModel, t, h; kwargs...) -> NamedTuple
 
-The stabilized / split-dissipation TDVP control of plan §2.5: Strang splitting of
+The stabilized / split-dissipation TDVP control: Strang splitting of
 `F = -i H - gamma H` into the conservative half `-i H` (two-site TDVP, whose backward substeps are
 norm-preserving) between two dissipative half-steps `exp(-gamma h/2 H)` taken by the global TT
 Krylov exponential (no backward substep). `H` is `H[psi, t]` at the start of each sub-flow

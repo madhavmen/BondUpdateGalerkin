@@ -1,6 +1,4 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/bug/imaginary_time.jl.
-
-# ── NORMALISED IMAGINARY-TIME CBE-BUG (imaginary-time plan, Task 1) ──
+# ── normalised imaginary-time CBE-BUG ──
 # One step is `cbe_bug_step!` at `tau = -dbeta` plus renormalisation, with energy shift `Eshift`.
 # Outside defect `dbeta ||(I-P) H psi_1||` is charged to `tol_basis`; failures are never silent.
 # This file holds the step-size schedules; the step itself is in `ite_step.jl`.
@@ -39,8 +37,6 @@ end
 
 "The grid points `0, b_1, ..., beta_max` a step list reaches (`cumsum` with the origin)."
 beta_grid(steps::AbstractVector{<:Real}) = vcat(0.0, cumsum(Float64.(steps)))
-
-# From BUG-Julia@b155550:src/RSVDCBEBondUpdate/qtt/qtt_imaginary.jl (the ground-state schedules).
 
 "`step_count` steps of `step_size` (the uniform policy)."
 uniform_schedule(step_size::Real, step_count::Int) = fill(Float64(step_size), step_count)

@@ -1,5 +1,3 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/expansion/cbe_sketch.jl.
-
 # sketch.jl: the sector-graded Gaussian sketch, the range-finder pass and the residual tests
 # (Test A, Test B) of controlled bond expansion. The column helpers it calls (`_alloc_columns`,
 # `_boost!`, `_randomize_like`) live in `cbe.jl`, included after it; function bodies resolve

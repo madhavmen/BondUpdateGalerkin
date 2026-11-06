@@ -1,7 +1,3 @@
-# Moved from BUG-Julia@b155550:src/BondUpdateBUG/z2_ising.jl.
-
-# ── from src/BondUpdateBUG/z2_ising.jl ──
-
 # H = -J Σ Z Z - h Σ X made block-sparse in the sigma^x basis: |+> is Z2 charge 0, |-> charge 1.
 # The Z2 local space (`ising_local_space`) is in QMB/Tooling/local_spaces.jl: Telum cannot derive
 # Z2 operators, so its blocks come from private `Telum._localspace_cgt_fields`.

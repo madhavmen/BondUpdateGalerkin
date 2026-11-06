@@ -1,8 +1,5 @@
 # Channel environments of a nearest-neighbour term list (`XXZChain`) and their stacks.
 #
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/operators/henv.jl, src/RSVDCBEBondUpdate/operators/henv_stacks.jl.
-
-# ── from src/RSVDCBEBondUpdate/operators/henv.jl ──
 
 # Channel environments for a nearest-neighbour XXZ chain: the MPO contraction with the virtual leg
 # named, so each channel's charge rides on the op-leg of Telum's Sp/Sm.
@@ -246,8 +243,6 @@ function _left_close(environment, site_tensor, operator, site::Int)
     scalar = to_concrete!(contract(tmp, (1, 2, 3), _bra_right_boundary(site_tensor), (2, 3, 1)))
     return ComplexF64(scalar[])
 end
-
-# ── from src/RSVDCBEBondUpdate/operators/henv_stacks.jl ──
 
 # The left and right environment stacks and the two-site effective action, built on the channel
 # steps above.

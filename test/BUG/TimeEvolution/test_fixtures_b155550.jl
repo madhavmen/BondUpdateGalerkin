@@ -1,6 +1,5 @@
-# Regression against the WP0 fixtures frozen from BUG-Julia b155550 (test/fixtures/b155550): the
-# moved engine must give the same scientific answers as the legacy one (implementation plan, WP3
-# exit gate and PR 4 proof "unchanged QMB numerical results").
+# Regression against the frozen reference runs in test/fixtures/b155550: the engine must give the
+# same scientific answers as the runs the fixtures were made from.
 #
 # Each case reruns the fixture script's own calls (docs/dev/tools/make_fixtures_b155550.jl) with the
 # same seed. The randomised sketches and the thread count make the runs differ at the truncation

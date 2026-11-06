@@ -1,7 +1,5 @@
 # One-dimensional quantics shift and finite-difference operators.
 #
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/qtt/qtt_ops1d.jl.
-#
 # Matrix-free MPOs on `n` bits in logical order (bit 0 first), built from the binary carry
 # automaton: the shift `(S+ psi)_i = psi_{i+1}` carries from the least significant bit up, so its
 # bond is the carry (dimension 2) and no object of size `2^n` is ever formed. Finite differences are

@@ -1,4 +1,4 @@
-# Grouped against interleaved QTT ordering on a small nonlinear GP run (implementation plan WP5:
+# Grouped against interleaved QTT ordering on a small nonlinear GP run (
 # the shedding study uses grouped ordering; interleaved is measured on small setups).
 #
 # The same rank-rich start (an oscillator superposition) is evolved by the order-2 nonlinear BUG

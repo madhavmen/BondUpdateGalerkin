@@ -6,7 +6,6 @@ product states and quantics tensor trains, with one shared numerical engine.
 
 Modules: [`BUG`](@ref) (the engine), [`QMB`](@ref) (quantum many-body models),
 [`QTTS`](@ref) (quantics tensor trains for PDEs), [`Baselines`](@ref) (comparison methods).
-The layout and migration status are in `docs/dev/implementation_plan.md`.
 """
 module BondUpdateGalerkin
 
@@ -16,7 +15,7 @@ include("QMB/QMB.jl")
 include("QTTS/QTTS.jl")
 include("Baselines/Baselines.jl")
 
-# ── precompile workload (rebuilt from BUG-Julia@b155550:src/BUGJulia.jl, plan Section 8) ──
+# ── precompile workload ──
 # Loading the package is cheap; the cost is specialising Telum's block-sparse kernels the first
 # time each entry point runs, and a plain `using` caches none of it. Without this every process
 # paid it again: on the cluster the test suite took 28 min warm, the same as cold, with 4 min in a

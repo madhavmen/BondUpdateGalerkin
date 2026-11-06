@@ -1,4 +1,4 @@
-# Package hygiene: undefined exports, ambiguities, compat entries, type piracy (plan Section 7).
+# Package hygiene: undefined exports, ambiguities, compat entries, type piracy.
 #
 # Aqua runs `ambiguities`, `stale_deps` and `persistent_tasks` each in a fresh Julia process, which
 # cost 152 s, 160 s and ~140 s of a ~20 min suite on the cluster (17634349, 17632492). On every

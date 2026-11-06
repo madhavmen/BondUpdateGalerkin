@@ -1,7 +1,3 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/models/oat.jl.
-
-# ── from src/RSVDCBEBondUpdate/models/oat.jl ──
-
 # ── the one-axis twisting model (arXiv:2208.10972, Fig. 2) ──
 # H = (sum_l S^z_l)^2 / 2 couples every pair equally, so there is no decay or locality to exploit. Since
 # (S^z)^2 = I/4 on a spin-1/2 site, H = sum_{l<l'} S^z_l S^z_l' + (L/8) I. The square is never formed,
@@ -141,7 +137,7 @@ function sx_operator()
         # block per Z2 charge, charge-neutral and rank 2 -- exactly what `site_expval` wants.
         # Nothing here needs Telum's Sp/Sm normalisation, so nothing here can be caught by it.
         Sx = to_concrete(0.5 * ising_local_space(:Z2).X)
-        # ⛔ DO NOT REACH FOR `Matrix` HERE. `_z2_diag_op` builds each sector block as
+        # Do not reach for `Matrix` here. `_z2_diag_op` builds each sector block as
         # `reshape([v], 1, 1, 1)`, so the RMTs are 1x1x1 THREE-dimensional arrays and
         # `Matrix(R)` throws `MethodError: no method matching Matrix(::Array{Float64, 3})`
         # -- measured. Every Z2 irrep is one-dimensional, so each block holds exactly one

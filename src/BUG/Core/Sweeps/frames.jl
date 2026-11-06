@@ -2,8 +2,6 @@
 # stands in: the U of svd(A) is the QR's left isometry, and S*Vd its R factor. These are exact,
 # truncation-free moves, so `cutoff=0.0` is passed explicitly; all rank adaptation belongs to
 # the K/L/S step.
-#
-# Moved from BUG-Julia@b155550:src/BondUpdateBUG/frame.jl.
 
 """
     BondFrame

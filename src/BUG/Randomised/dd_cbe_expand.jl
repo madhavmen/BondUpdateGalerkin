@@ -1,10 +1,7 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/expansion/dd_cbe.jl,
-# src/RSVDCBEBondUpdate/expansion/dd_cbe_controller.jl.
-
 # DD-QR CBE bond expansion: `dd_cbe_expand` grows one side of a bond on top of the controllers in
 # `dd_cbe_controller.jl`; `_resolve_parallel` reads the `parallel` option of the step.
 
-# ── T2.5: one side of the bond expansion ──────────────────────────────────────────────────
+# ── one side of the bond expansion ───────────────────────────────────────────────────────
 
 const _TAG_W, _TAG_WR = "cbeW,L", "cbeW,R"
 
@@ -16,10 +13,9 @@ most of the DD action `M = P^D X P^D`, given `projected_action = directions' M` 
 `(g, site_r, link_r)` for `:left`, columns `(link_l, site_l, g)` for `:right`, `g` = the
 directions' leg): Telum's SVD ranks them across ALL sectors (`Nkeep`), as the final selection of
 `cbe_expand` does. `_trim_total` instead fills sectors in storage order, so at a binding work
-ceiling whole charge sectors lose their expansion (the latent trap of PLAN-tolerance-control.md
-§1). MEASURED (dissipative A1 L = 12, dt 0.1, rank probe rp7f): frame cut at 1024 against 1679
-needed, obs error 2.2e-4 against 1.3e-12 uncut, the spurious components then forcing the
-compressed rank to maxdim off the root.
+ceiling whole charge sectors lose their expansion. Measured (dissipative A1, L = 12, dt 0.1): frame
+cut at 1024 against 1679 needed, obs error 2.2e-4 against 1.3e-12 uncut, the spurious components
+then forcing the compressed rank to maxdim off the root.
 """
 function _trim_by_weight(directions, projected_action, side::Symbol, keep_count::Int)
     keep_count <= 0 && return nothing
@@ -49,9 +45,9 @@ width from [`_dd_controller`](@ref), or from the numerical rank alone when `allo
 `cap_order = :weight` keeps the heaviest ([`_trim_by_weight`](@ref)), `:sector` the first sectors
 in storage order (`_trim_total`).
 
-`dd_width = l > 0` is the fixed-oversampling ablation (xx-efficiency plan Figs. 1A and 4): one
+`dd_width = l > 0` is the fixed-oversampling ablation: one
 probe of width `l` through the same DD projection, streamed kernel and QR, no holdout.
-`dd_policy = :hybrid` is the QTT plan's arm D3 ([`_dd_hybrid`](@ref)), its predictor read from and
+`dd_policy = :hybrid` is arm D3 ([`_dd_hybrid`](@ref)), its predictor read from and
 written to `dd_memory` (a [`DDMemory`](@ref); `nothing` = no predictor); `:adaptive` is D1; `:off`
 adds nothing (the no-CBE control).
 """
@@ -82,7 +78,7 @@ function dd_cbe_expand(
         throw(ArgumentError("cap_order must be :sector or :weight, got $cap_order"))
     dd_policy in (:adaptive, :hybrid, :off) ||
         throw(ArgumentError("dd_policy must be :adaptive, :hybrid or :off, got $dd_policy"))
-    # `:off` -- the no-CBE control of plan §1.2A (the frame then grows by local Krylov alone)
+    # `:off` -- the no-CBE control (the frame then grows by local Krylov alone)
     dd_policy === :off && return CBEExpansion(frame_pair.U0, frame_pair.V0, 0, 0, 0.0, 0.0)
     left = side === :left
     left_basis, right_basis = frame_pair.U0, frame_pair.V0
@@ -137,7 +133,7 @@ function dd_cbe_expand(
         (block -> perp_component_right(right_basis, block))
     select(Om) = (first(_dd_select(frame, sketch(Om), side, kc)), 0.0)
 
-    # Plan T3.1: with an allocation the incremental controller decides the width (it is always
+    # With an allocation the incremental controller decides the width (it is always
     # thin); without one, or for the exact reference, the numerical-rank stop of `_range_find`
     # alone.
     directions, direction_count = if dd_width > 0 && !exact
@@ -285,9 +281,9 @@ end
 """
     _resolve_parallel(parallel) -> Bool
 
-`parallel` of the plan's API: `:serial`/`false`, `:half_sweeps`/`true`. `:full` also runs the
-half-sweeps concurrently; `cbe_bug_step!` then takes the separate parallel K/L/S integrator of
-plan Task 6 (`parallel_kls_step!`).
+`parallel`: `:serial`/`false`, `:half_sweeps`/`true`. `:full` also runs the
+half-sweeps concurrently; `cbe_bug_step!` then takes the separate parallel K/L/S integrator
+(`parallel_kls_step!`).
 """
 function _resolve_parallel(parallel)
     parallel isa Bool && return parallel

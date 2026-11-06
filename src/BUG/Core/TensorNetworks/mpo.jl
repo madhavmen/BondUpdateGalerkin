@@ -2,11 +2,8 @@
 # term-list MPOs and MPO sums; the exact MPO-MPS product, its compressed form and the global Krylov
 # states; and two-site bond gates.
 #
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/operators/mpo.jl (`MPO`, the automaton blocks,
-# `onsite_mpo`, `mpo_from_terms`, `mpo_sum`), operators/mpo_apply.jl (`mpo_product`,
-# `apply_factor`, `apply_mpo`) and src/BondUpdateBUG/gates.jl (`apply_gate`). `onsite_mpo` takes the
-# local identity `Iloc` as a required keyword: the spin-1/2 default lived in a model's local space,
-# which BUG may not reference.
+# `onsite_mpo` takes the local identity `Iloc` as a required keyword, since local spaces belong to
+# the models, which BUG may not reference.
 # The leg and prime conventions are load-bearing: a wrong prime does not throw, it traces the wrong
 # pair.
 
@@ -160,8 +157,6 @@ function mpo_product(mpo::MPO, psi::SymMPS)
     return SymMPS(out, site_count)
 end
 
-# ── from BUG-Julia@b155550:src/RSVDCBEBondUpdate/operators/mpo.jl ──
-
 "`side` for one half of a term: rank-3 operators put their op-leg on the virtual leg."
 _side(operator, half::Symbol) = length(operator.inds) == 3 ? half : :none
 
@@ -267,10 +262,8 @@ caller's MPO, positive semidefinite). Not Hermitian: pass `hermitian = false` to
 """
 no_jump_mpo(hamiltonian::MPO, loss_operator::MPO) = mpo_sum(hamiltonian, loss_operator; b = -0.5im)
 
-# ── from BUG-Julia@b155550:src/RSVDCBEBondUpdate/operators/mpo_apply.jl ──
-
 "`factor psi`, exact and not canonical: an `MPO` ([`mpo_product`](@ref)). The `SiteOp` method
-moves with the jump channels (QMB, PR 6)."
+is with the jump channels (QMB)."
 factor_product(factor::MPO, psi::SymMPS) = mpo_product(factor, psi)
 
 """
@@ -312,7 +305,7 @@ apply_mpo(mpo::MPO, psi::SymMPS; kw...) = apply_factor(mpo, psi; kw...)
 `mpo^j psi` for `j = 1..krylov_count`, each by [`apply_mpo`](@ref) from the previous one and
 normalised: the global Krylov vectors, to pass as `cbe_bug_step!(...; keep_states)`. From a U(1)
 product state an order-`p` step's closure cannot see the long-range terms of a nonlocal generator
-(dissipative plan U10: both legs of `S⁺_a S⁻_b` leave their frames' sectors, and every two-site
+(both legs of `S⁺_a S⁻_b` leave their frames' sectors, and every two-site
 window projects that away), so `mpo^p psi` is missing from the root space unless it is kept (dt5m:
 one-step slope 2.7 -> 3.7, global error /2.7-18; keeping them on later steps changes nothing).
 """
@@ -333,8 +326,6 @@ function global_krylov_states(
     end
     return ks
 end
-
-# ── from BUG-Julia@b155550:src/BondUpdateBUG/gates.jl ──
 
 # Two-site bond gates, mirroring bond.py::kernel_gate. Legs are (ket_l '+', ket_r '+', bra_l '-',
 # bra_r '-'), as in Python's einsum, so the result drops back into the site legs. Telum separates

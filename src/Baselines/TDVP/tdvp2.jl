@@ -1,7 +1,7 @@
 # Two-site TDVP, the memory and accuracy baseline for CBE-BUG.
 #
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/baselines/tdvp2.jl. `OneSiteH`, `one_site_h`,
-# `apply_one_site` and `tensor_elements` moved to BUG/Core in PR 4+5 (the sweeps use them).
+# `OneSiteH`, `one_site_h`, `apply_one_site` and `tensor_elements` live in BUG/Core, which the
+# sweeps share.
 
 """
     TDVP2Info
@@ -195,7 +195,7 @@ function tdvp2_step!(
     # ignored: both `_tdvp2_bond!` calls hard-coded `hermitian = true`, so
     # non-Hermitian runs used Lanczos until it was wired through.
     hermitian::Bool = true,
-    # See `BondUpdateBUG/expv.jl`: a real convergence test, and splitting `tau`
+    # See `lanczos_expv`: a real convergence test, and splitting `tau`
     # so a large step does not need a larger `maxiter`. Both integrators take
     # them, because handing one arm a better exponential than the other would
     # make the comparison meaningless.
@@ -211,13 +211,13 @@ function tdvp2_step!(
     # unnormalised step grows by e^(dbeta |E|) and its squared Schmidt weights
     # overflow Float64 near dbeta |E| ~ 350 (L = 100 Heisenberg, panel dbeta = 8).
     eshift::Real = 0.0,
-    # `Ref`: receives the plan's transient backward-substep amplification, the
+    # `Ref`: receives the transient backward-substep amplification, the
     # largest over the BACKWARD one-site substeps `exp(-tau/2 H1) M` of their
     # norm growth beyond the mean-energy drift (`_tdvp2_backward`): how strongly
     # the backward stage amplifies components above the mean energy, the
     # projector-splitting instability in imaginary time. `nothing` skips it.
     backward_report::Union{Nothing,Base.RefValue} = nothing,
-    # QTT plan §2.5: every backward substep's RAW amplification
+    # Every backward substep's raw amplification
     # `||M_after|| / ||M_before||` is pushed here (`A_back(n, i)`); `nothing` skips.
     backward_norms::Union{Nothing,Vector{Float64}} = nothing,
 )

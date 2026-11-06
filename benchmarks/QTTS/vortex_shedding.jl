@@ -1,5 +1,5 @@
 # Damped nonlinear Gross-Pitaevskii vortex shedding behind a moving paddle: the research-grade QTT
-# benchmark (implementation plan WP5). Not a validated example and not a prerequisite for usability.
+# benchmark. Not a validated example and not a prerequisite for usability.
 #
 # A homogeneous condensate (g = 1, gamma = 0.1, mu = 1) in a periodic box, relaxed in imaginary time
 # around the paddle, then the paddle is swept at v_sweep and ramped down. The time reference is
@@ -18,7 +18,6 @@
 #      VS_RELAX (2.0, imaginary-time relaxation of the start with the paddle in place).
 # Resource needs at the defaults are not yet measured (the dense reference alone is 65536 unknowns).
 #
-# Ported from BUG-Julia@b155550:benchmarks/qtt/vortex_shedding.jl (ENV prefix T3V_ -> VS_).
 
 include(joinpath(@__DIR__, "common.jl"))
 

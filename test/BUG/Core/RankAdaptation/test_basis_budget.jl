@@ -1,12 +1,10 @@
-# Moved from BUG-Julia@b155550:tests/sweeps/test_adaptive_api.jl, UT01 (the budget object, the
-# allocation rule, the work ceiling, the ledger, and the public step refusing a retired knob).
-# Not moved: the refusals of the DMRG/TDVP baselines (they move with Baselines) and UT02 (needs the
-# adaptive bond fixtures).
+# The tolerance budget: the budget object, the allocation rule, the work ceiling, the ledger, and
+# the public step refusing a retired knob.
 
 using Test
 using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
 
-@testset "UT01: public API cleanup and knob migration" begin
+@testset "public API: the budget and the retired knobs" begin
     @testset "the PUBLIC entry refuses the mixture before touching the state" begin
         # What a caller meets is `cbe_bug_step!`, and the refusal must happen there, before
         # any evolution.

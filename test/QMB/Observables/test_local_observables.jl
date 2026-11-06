@@ -1,6 +1,4 @@
-# Moved from BUG-Julia@b155550:tests/BondUpdateBUG/test_symmetric_mps.jl (observable testsets).
-# Not yet moved: the dimer-state case (dimer_state moves with QMB/Tooling/gates.jl) and the
-# sz_overlaps testset, which evolves its states with xxz_mpo and tdvp2_step!.
+# Site expectation values and the S^z observables.
 
 using Test, LinearAlgebra, LurCGT, Telum
 using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
@@ -55,7 +53,7 @@ clear_fusion_cache!()
         for (name, psi0) in (
             ("neel", neel_state(6)),
             ("domain wall", domain_wall_state(6)),
-            # ⛔ ASYMMETRIC on purpose: Neel, the dimer and the domain wall are all
+            # Asymmetric on purpose: Neel, the dimer and the domain wall are all
             # invariant under reversal-composed-with-flip, so a convention error
             # that reverses the chain passes on every one of them.
             ("asymmetric product", product_state([:up, :up, :down, :up, :down, :down])),

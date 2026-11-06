@@ -1,10 +1,6 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/bug/krylov_enrich.jl,
-# src/RSVDCBEBondUpdate/bug/krylov_closure.jl, src/RSVDCBEBondUpdate/bug/krylov_closure_loop.jl.
-# krylov_closure_loop.jl: the order-p closure drivers `_krylov_closure!` and
+# The order-p closure drivers `_krylov_closure!` and
 # `_single_pass_closure!`, on the frames of `krylov_closure_frames.jl` (included before it); the
 # frontier sweeps they call live in `Sweeps/frontier_sweeps.jl` and `Sweeps/frontier_closure.jl`.
-
-# ── from src/RSVDCBEBondUpdate/bug/krylov_closure_loop.jl ──
 
 """
     _krylov_closure!(fr, psi, mpo, root_start, tau, alloc, ckw; order, workcap, nrm, parallel,
@@ -81,7 +77,7 @@ function _krylov_closure!(
                 degree,
                 fr.gen,
             )
-        # ⚠ SPECULATIVE FINAL MEASUREMENT (>= _FRONTIER_THREADS threads). A later pass usually
+        # Speculative final measurement (>= _FRONTIER_THREADS threads). A later pass usually
         # adds nothing and is then the last; its last sweep cannot change the frames unless it
         # adds. So degree 0 is measured CONCURRENTLY on a snapshot of the frames, and kept only
         # if the loop ends in that generation -- otherwise it is discarded and redone below.

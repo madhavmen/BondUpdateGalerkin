@@ -1,6 +1,4 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/bug/parallel_kls.jl.
-
-# ── fully parallel K/L/S integrator (Task 6) ──
+# ── fully parallel K/L/S integrator ──
 # Not a schedule of the standard step: K, L and the root core S are projected equations at bond `c`,
 # run from `Y_n` at once. The new directions `U_+`, `V_+` are the parts of K(h) and L(h) outside the
 # root frames. The zero block of the core is O(h^2), measured every step; above `tol_basis` the step

@@ -1,6 +1,4 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/models/liouville.jl.
-
-# ── from src/RSVDCBEBondUpdate/models/liouville.jl ──
+# The Lindblad generator in Liouville space: the dissipator superoperator and the Lindblad MPO.
 
 "`D[J] rho = J rho J' - {J'J, rho}/2`."
 function dissipator_super(J::AbstractMatrix)

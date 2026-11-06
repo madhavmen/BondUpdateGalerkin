@@ -1,5 +1,3 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/bug/frontier_sweeps.jl.
-
 # frontier_closure.jl: one frontier's sweep on both sides (`_frontier_sweep!`), the measurements
 # built on it and the closure's termination loop (split from `frontier_sweeps.jl`).
 
@@ -14,7 +12,7 @@ _frame_width(fr::KLFrames, site_count::Int) = max(
                      rng, pass, nsample) -> NamedTuple
 
 Test one frontier's outside-space action on both half-sweeps and, when `enrich`, grow `fr` by the
-validated directions (plan: `enrich_KL_from_frontiers!`). The frames are replaced -- and their
+validated directions. The frames are replaced -- and their
 generation advanced -- only if something was added, so frontiers built in them stay valid
 otherwise. `leak` is the time-weighted outside-space action `|tau| sqrt(left^2 + right^2) /
 ||psi||` of the frontier BEFORE this sweep enriched; `met` is whether every bond ended within

@@ -1,5 +1,3 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/expansion/cbe_options.jl.
-
 # ── shared run configuration ──────────────────────────────────────────────────
 #
 # Lives here, not in a mode submodule, because all three modes and both paths (gate,

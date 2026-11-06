@@ -1,7 +1,5 @@
 # The Heston pricing generator on a log-price x variance grid.
 #
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/qtt/qtt_models.jl (Heston part).
-#
 # Backward formulation in time to maturity tau, u_tau = A_H u with
 #   A_H = v/2 d_xx + rho sigma v d_xv + sigma^2 v/2 d_vv + (r - q - v/2) d_x + kappa (theta - v) d_v - r,
 # x = log S, v the variance on [0, v_max]. The forward density uses the discrete transpose of A_H

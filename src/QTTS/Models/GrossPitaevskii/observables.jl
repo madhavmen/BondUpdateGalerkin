@@ -1,7 +1,6 @@
 # Gross-Pitaevskii observables: energies, chemical potential, stationarity residual, vortex count.
 #
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/qtt/qtt_observables.jl (`gp_parts`,
-# `gp_observables`, `vortex_count`). Physical quantities use the discrete L2 inner product with the
+# Physical quantities use the discrete L2 inner product with the
 # weight `dx dy` outside the cores.
 
 const _GP_PARTS = IdDict{Any,Any}()

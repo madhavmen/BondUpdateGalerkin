@@ -1,4 +1,4 @@
-# Moved from BUG-Julia@b155550:tests/sweeps/test_imaginary_time.jl, IT-U1 (the grids).
+# The imaginary-time schedules (uniform, log-panel and geometric grids).
 
 using Test
 using BondUpdateGalerkin.BUG

@@ -1,14 +1,13 @@
-# Moved from BUG-Julia@b155550:tests/sweeps/test_tfim_mpo.jl: the operator against a dense TFIM,
-# the two symmetries, and the refusals. The legacy file pinned the ZZ coupling with a tdvp2 quench
-# (a Baseline, not moved yet); here it is pinned with no integrator, by the MPO's off-diagonal
-# matrix elements between sigma^x product states (`mpo_matrix_element`).
+# The TFIM operator against a dense TFIM, the two symmetries, and the refusals. The ZZ coupling is
+# pinned with no integrator, by the MPO's off-diagonal matrix elements between sigma^x product
+# states (`mpo_matrix_element`).
 #
 #     H = -J Σ Z_i Z_{i+1} - h Σ X_i
 #
-# THE REFERENCE IS A DENSE `2^L` TFIM BUILT FROM THE PAULI ALGEBRA, sharing no code with the
+# The reference is a dense `2^L` TFIM built from the Pauli algebra, sharing no code with the
 # tensor stack.
 #
-# ⛔ THE BASIS IS σˣ: `X` is DIAGONAL and `Z` is the FLIP. Reading it the usual way describes a
+# The basis is σˣ: `X` is DIAGONAL and `Z` is the FLIP. Reading it the usual way describes a
 # different Hamiltonian -- see the header of `src/QMB/Models/ClosedSystem/tfim.jl`.
 
 using Test, LinearAlgebra
@@ -51,7 +50,7 @@ _flip_pair(dirs, i) =
     L, J, h = 6, 1.0, 0.7
     HD = _tfim_dense_ref(L; J = J, h = h)
 
-    # ⛔ ASYMMETRIC STATES ARE THE POINT. A state symmetric under reversal is a fixed point of a
+    # Asymmetric states are the point. A state symmetric under reversal is a fixed point of a
     # MIRRORED site convention, so it passes whether or not the two orderings agree.
     cases = [
         "polarised" => fill(:plus, L),

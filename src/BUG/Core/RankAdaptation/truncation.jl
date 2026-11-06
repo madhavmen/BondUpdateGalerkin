@@ -1,4 +1,3 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/operators/zero_site_core.jl.
 # The final rank truncation of a step, and the deterministic rank and frame helpers the Core
 # sweeps share with `BUG/Randomised` (preselection, Test A tail, per-sector room,
 # reorthonormalisation).
@@ -43,7 +42,7 @@ end
 
 `weight_tol ||psi|| / _cut_divisor(site_count, root)` is the absolute allowance of EVERY Schmidt
 cut under the budgeted rule: what [`truncate_recursive!`](@ref) gives each bond of the BUG's S-step
-result, and -- USER 2026-10-17, the singular values discarded must be the same for both -- what
+result, and -- since the singular values discarded must be the same for both -- what
 `tdvp2_step!(...; weight_tol)` gives each two-site update, at the BUG's default root
 `_bug_root_link(site_count) + 1`. One function, so the two rules cannot drift apart.
 """

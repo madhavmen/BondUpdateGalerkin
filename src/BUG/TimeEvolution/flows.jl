@@ -1,8 +1,5 @@
 # Flows: the vector fields a nonlinear BUG step integrates.
 #
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/qtt/qtt_flows.jl (`QTTFlow`, `LinearFlow`,
-# `flow_op`, `flow_jac_ops`, `frozen_flow`).
-#
 # A flow is d_t psi = F(t, psi) = pref * (H[psi, t] psi - mu[psi] psi). H[psi, t] is rebuilt from
 # the state it acts on at every evaluation. The real-linear Jacobian is
 #   DF[d] = pref * ((J1 - mu) d + J2 conj(d)),

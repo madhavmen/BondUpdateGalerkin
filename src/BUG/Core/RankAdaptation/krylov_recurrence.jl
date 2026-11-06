@@ -1,4 +1,3 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/bug/krylov_enrich.jl.
 # The local Krylov recurrence behind `_krylov_enrich` (`krylov_enrichment.jl`, which also holds the
 # constants used here): the Arnoldi chain, the recycled-block complement solve, and their small
 # linear-algebra helpers.
@@ -120,7 +119,7 @@ function _arnoldi_chain(
     for krylov_step = 1:maxdepth
         image = applyH(vs[end])
         nh += 1
-        # ⛔ CGS2 against EVERY previous vector, the correction accumulated lazily and subtracted
+        # CGS2 against EVERY previous vector, the correction accumulated lazily and subtracted
         # ONCE per pass: `2m` materialisations per solve instead of `m^2` (a per-vector update
         # allocated 28.6 GiB per step at L=20, chi=32, d=4). Classical Gram-Schmidt repeated
         # twice is as stable as modified ("twice is enough"); the coefficients accumulate
@@ -152,11 +151,11 @@ end
 """
     _rk_complement(unit_seed, recycled, applyH, tau, allowance, score; maxdepth, amp, state_seed)
 
-The recycled solve (plan §1.2: "transport/reorthogonalize old useful directions into the new gauge,
-and extend only from active frontiers"; §1.3: `tol_basis` carries "the recycled local Krylov basis
-defect"). `recycled[1]` is the previous solve's input `p`, the rest its kept Krylov vectors. By
-linearity `exp(tau H) unit_seed = alpha exp(tau H) p + exp(tau H) v_c` with
-`alpha = <p, unit_seed>` and the complement `v_c = unit_seed - alpha p`: the previous block
+The recycled solve transports and reorthogonalizes old useful directions into the new gauge and
+extends only from active frontiers; `tol_basis` carries the recycled local Krylov basis defect.
+`recycled[1]` is the previous solve's input `p`, the rest its kept Krylov vectors. By linearity
+`exp(tau H) unit_seed = alpha exp(tau H) p + exp(tau H) v_c` with `alpha = <p, unit_seed>` and the
+complement `v_c = unit_seed - alpha p`: the previous block
 `B = orth[p, recycled...]` already spans the first term if its defect for `p` under THIS round's
 `H1`, `d = tau (HB - BA) phi_1(tau A) e1` with `A = B'HB`, is small, and only `v_c` is new.
 In the code `p` is `previous_input`, `B` is `block` and `A` is `block_operator`.

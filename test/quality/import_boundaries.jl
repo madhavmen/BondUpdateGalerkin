@@ -1,4 +1,4 @@
-# Module-boundary check (implementation plan, Section 2.2). A module may reference only the
+# Module-boundary check. A module may reference only the
 # modules it is allowed to depend on. Inside BUG the layers are include directories, not modules,
 # so the second testset checks names instead: `BUG/Core` never uses a name that only
 # `Randomised`, `TimeEvolution`, `ITE` or `solve.jl` define (the sweeps reach the randomised

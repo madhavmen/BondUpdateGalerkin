@@ -1,6 +1,3 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/expansion/cbe_core.jl (the sketch helpers);
-# the strategy section at the end is this package's.
-
 # cbe.jl: the shared sketch closures and sector-graded probe helpers of controlled bond
 # expansion, and the `DDQRExpansion` strategy the Core sweeps call. The probe and the residual
 # tests (`sketch.jl`) and the range finder (`range_finder.jl`) are included before it; the
@@ -24,7 +21,7 @@ function _sketch_closures(frames::BondFrame, buildHT; share::Bool = true)
     HT = Ref{Any}(nothing)
     AL = Ref{Any}(nothing)          # P_perp^L (H Theta) -- wanted by BOTH `skl` calls
     AR = Ref{Any}(nothing)          # (H Theta) P_perp^R
-    # ⚠ `share = false` IS THE OLD BEHAVIOUR, KEPT AS AN A/B AND NOTHING ELSE. A performance claim
+    # `share = false` is the old behaviour, kept as an A/B and nothing else. A performance claim
     # that can only be reproduced by checking out an old commit is not reproducible in practice;
     # this makes "how much did sharing buy?" a switch that `benchmarks/rsvd_parallel.jl` can flip
     # inside ONE process -- which matters here, because a cold Julia process spends ~10 minutes

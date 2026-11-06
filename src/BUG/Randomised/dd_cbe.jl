@@ -1,9 +1,5 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/expansion/dd_cbe.jl (its kernels).
-
 # DD-QR CBE kernels: the sketch operators, discarded-space probes and the sectorwise thin QR
 # (controller in `dd_cbe_controller.jl`, the bond expansion in `dd_cbe_expand.jl`).
-
-# ── from src/RSVDCBEBondUpdate/expansion/dd_cbe.jl ──
 
 # ── implicit DD-projected, MPO-streamed, QR-only CBE ──
 # The frame grows by Om~ = P^D Om, Z = X Om~ streamed through the MPO, and Y = Q R: neither X nor
@@ -123,7 +119,7 @@ apply_root!(result_ref::Base.RefValue, core, op::RootOp) =
 """
     dd_reference_sketch(frame, mpo, bond, lenv, renv, Om, side) -> TLArray
 
-TEST/DEBUG ONLY (plan T2.5 "full-DD exact tiny reference"): `P_L^D X P_R^D Om` (`side = :left`)
+Test/debug only (the full-DD exact tiny reference): `P_L^D X P_R^D Om` (`side = :left`)
 or `P_R^D X' P_L^D Om` (`:right`) through the MATERIALISED `H Theta` and the project-first
 closures of `_sketch_closures`. Never on the production path.
 """
@@ -142,7 +138,7 @@ function dd_reference_sketch(
            skr(perp_component(frame.U0, Om))
 end
 
-# ── T2.3: probes in the discarded space only ──────────────────────────────────────────────
+# ── probes in the discarded space only ───────────────────────────────────────────────────
 
 """
     _dd_probe(frame, side, column_budget; rng, boost, exact, kc) -> P^D Om, or nothing
@@ -186,7 +182,7 @@ function _dd_probe(
     return norm(projected) > 0 ? projected : nothing
 end
 
-# ── T2.4: sectorwise thin Householder QR ──────────────────────────────────────────────────
+# ── sectorwise thin Householder QR ───────────────────────────────────────────────────────
 
 const _TAG_DD_L, _TAG_DD_R = "cbeQ,L", "cbeQ,R"
 
@@ -280,7 +276,7 @@ function _thin_qr(sketch, fl::Int, ref::TLIndex, tag::AbstractString, thr::Float
 end
 
 """
-Plan T2.4 "twice is enough", read as the DGKS/Kahan-Parlett acceptance test: a unit column of the
+"Twice is enough", read as the DGKS/Kahan-Parlett acceptance test: a unit column of the
 first-pass basis is a direction only if it keeps at least this fraction of its norm through the
 second `P^D`. A genuine direction keeps ~1. Roundoff that cleared the first floor collapses to the
 frame's own orthogonality level, which an absolute `100 eps` floor does not reject: in a sector the
@@ -296,7 +292,7 @@ const _REORTH_KEEP = 1 / sqrt(2)
 """
     _dd_select(frame, sketch, side, kc) -> (orthonormal_basis, backend)
 
-Output DD projection and the two-pass thin QR of plan T2.4: `projected = P^D sketch`,
+Output DD projection and the two-pass thin QR: `projected = P^D sketch`,
 `first_pass = qr(projected)` at the floor `100 eps max(||sketch||, ||projected||)` (the
 cancellation noise `P^D` leaves when most of `sketch` lies in the frame), then
 `orthonormal_basis = qr(P^D first_pass)` -- reorthogonalisation against the old frame, "twice is

@@ -1,11 +1,10 @@
-# Moved from BUG-Julia@b155550:tests/BondUpdateBUG/test_expv.jl; the stability-function testset
-# from IT-U2 of tests/sweeps/test_imaginary_time.jl (the root methods live in LocalSolvers).
+# The local Krylov exponential and the root methods' stability functions.
 
 using Test, LinearAlgebra, LurCGT, Telum
 using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
 
 # Direct-sum two product states of equal total Sz to get a bond that carries
-# more than one charge sector (see tests/BondUpdateBUG/test_frame.jl).
+# more than one charge sector (as in test/BUG/Core/Sweeps/test_frames.jl).
 function mps_sum(a::SymMPS, b::SymMPS)
     L = length(a)
     ts = Any[]

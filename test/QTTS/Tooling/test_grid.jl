@@ -1,5 +1,5 @@
 # Bit orderings and grids: every bit pattern round-trips exactly, in every layout, for one, two and
-# three axes (implementation plan WP2: "ordering is round-trip exact for indexing").
+# three axes.
 
 using Test
 using BondUpdateGalerkin.QTTS

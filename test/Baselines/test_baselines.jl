@@ -1,9 +1,7 @@
-# The comparison methods (implementation plan WP6): each baseline against an independent reference
-# on the same problem the BUG tests use.
-#
-# From BUG-Julia@b155550: the `baseline_tdvp2_xx` fixture (TDVP2 on the XX chain), the CBE-DMRG
-# chain case of tests/sweeps/test_adaptive_dmrg.jl, the unitarity check of the one-site TDVP-CBE
-# in tests/sweeps/test_sweeps.jl, and a QTT TDVP2 step against the dense exponential.
+# The comparison methods: each baseline against an independent reference on the same problem the
+# BUG tests use -- TDVP2 on the XX chain against its frozen run and free fermions, CBE-DMRG on a
+# chain, the unitarity of the one-site TDVP-CBE, and a QTT TDVP2 step against the dense
+# exponential.
 
 using Test, LinearAlgebra
 import JSON, Random

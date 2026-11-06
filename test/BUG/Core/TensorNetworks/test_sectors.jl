@@ -1,6 +1,4 @@
-# Moved from BUG-Julia@b155550:tests/BondUpdateBUG/test_sectors.jl. Its six sector_report testsets
-# were not moved with the dropped sector_report (docs/dev/migration-map.md); the P_perp check of
-# the "K1 inside U0's range" testset is kept.
+# Reachable sectors, and the P_perp check that K1 lies inside U0's range.
 
 using Test, LinearAlgebra, LurCGT, Telum
 using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB

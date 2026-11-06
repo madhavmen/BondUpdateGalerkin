@@ -1,7 +1,3 @@
-# Moved from BUG-Julia@b155550:src/BondUpdateBUG/observables.jl, src/BondUpdateBUG/sweep.jl.
-
-# ── from src/BondUpdateBUG/observables.jl ──
-
 # Read-out of physical and entanglement observables. None of it changes the represented vector, but
 # it moves the orthogonality centre (`canonical!`, which preserves norm and state). Pass `copy(psi)`
 # if the centre must stay put; the driver records from a copy for this reason.
@@ -100,8 +96,6 @@ function bond_energies(psi::SymMPS, gates)
     end
     return out
 end
-
-# ── from src/BondUpdateBUG/sweep.jl ──
 
 # Odd/even Trotter sweep over the bonds, mirroring two_site_bug/scheme.py::parity_bonds / kls_bond /
 # parity_sweep. Bonds of one parity act on disjoint site pairs, so each group is an exact factor of

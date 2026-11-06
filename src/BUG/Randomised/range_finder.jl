@@ -1,5 +1,3 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/expansion/cbe_range.jl.
-
 # range_finder.jl: the certified range finder, the expansion record `CBEExpansion` and the
 # term-list (`XXZChain`) method of `cbe_expand`. Builds on the range-finder pass and Test B of
 # `sketch.jl`, included right before it; the selection itself is in `cbe_expand.jl`.
@@ -30,7 +28,7 @@ function _certified_range(
     ncap::Int,
     alloc::Union{Nothing,BasisAllocation},
     ledger::Union{Nothing,AdaptiveLedger};
-    # A SEPARATE DISTRIBUTION ONLY IN TESTS: UT06 cripples the sketch to
+    # A separate distribution only in tests: a test cripples the sketch to
     # miss a sector, and the audit must not share the crippling.
     holdout = width -> draw(width, nothing),
     # Thin search: Test B, not the numerical rank, decides the width.
@@ -136,7 +134,7 @@ function cbe_expand(
     lch::ChannelSet,
     rch::ChannelSet;
     share_ht::Union{Nothing,Bool} = nothing,
-    # ⛔ ACCEPTED ONLY TO REFUSE IT WITH A SENTENCE THAT SAYS WHY. `fold_omega`
+    # Accepted only to refuse it with a sentence that says why. `fold_omega`
     # is implemented for the MPO path only; without this the term-list caller
     # gets a `MethodError: no method matching cbe_expand(::BondFrame, ::Function,
     # ::Function; fold_omega=true)` raised inside the two-argument method, which

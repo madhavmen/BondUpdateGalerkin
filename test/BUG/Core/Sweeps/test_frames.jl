@@ -1,4 +1,4 @@
-# Moved from BUG-Julia@b155550:tests/BondUpdateBUG/test_frame.jl.
+# The canonical two-site bond snapshot (`BondFrame`).
 
 using Test, LinearAlgebra, LurCGT, Telum
 using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB

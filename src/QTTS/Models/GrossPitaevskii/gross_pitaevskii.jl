@@ -1,8 +1,6 @@
 # The damped Gross-Pitaevskii equation on a periodic 2D grid.
 #
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/qtt/qtt_models.jl (GP model, Hamiltonian,
-# vector field, JVP) and `GPFlow` of qtt_flows.jl. `gp_bug_step!` (the frozen-density step) is not
-# moved: the frozen density is `frozen_flow`, stepped by `qtt_bug_step!`.
+# The frozen-density step is `frozen_flow`, stepped by `qtt_bug_step!`.
 #
 # The equation is never linearised:
 #   d_t psi = F(t, psi) = (-i - gamma) H[psi, t] psi,

@@ -1,9 +1,8 @@
 # Dense core algebra for quantics fields: construction, compression, contraction, evaluation, and
 # placing 1D chains on a grid.
 #
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/qtt/qtt_cores.jl (the TT basics and the grid
-# placement; operators are in `mpo_algebra.jl`, pointwise operations in `Elementwise/`). `qtt_embed`
-# takes a `QTTOrdering` of any number of axes; the `QTTGrid` method is its 2D case.
+# Operators are in `mpo_algebra.jl`, pointwise operations in `Elementwise/`. `qtt_embed` takes a
+# `QTTOrdering` of any number of axes; the `QTTGrid` method is its 2D case.
 #
 # Fields and operators are built as plain Julia arrays and only then wrapped as Telum tensors
 # (`state_adapter.jl`): under `:none` a Telum tensor is ONE dense block, so nothing is lost, and the

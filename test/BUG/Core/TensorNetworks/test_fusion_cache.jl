@@ -1,7 +1,3 @@
-# Moved from BUG-Julia@b155550:tests/BondUpdateBUG/test_fusion_cache.jl. Its regression guard "a
-# d=4 step stays inside its allocation budget" needs the Hubbard d=4 model and cbe_bug_step!, and
-# moves with them.
-
 using Test, LinearAlgebra, LurCGT, Telum
 import BondUpdateGalerkin
 using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
@@ -19,7 +15,7 @@ const BUGCORE = BondUpdateGalerkin.BUG
 # depends only on the legs' spaces, arrows, tags and prime levels, never on the tensor's data, so
 # it is now memoised.
 #
-# ⛔⛔ THE DEFECT WAS INVISIBLE FOR A WHOLE CAMPAIGN, AND THAT IS WHAT THESE TESTS GUARD. Nothing
+# The defect was invisible for a whole campaign, and that is what these tests guard. Nothing
 # measured allocation or call counts, so a step that churned 28.5 GiB at bond dimension 32 looked
 # exactly like a step that was simply "slow", and the L=40 production runs were written off as
 # expensive rather than broken. Correctness gates alone would never have caught it -- every number
@@ -28,7 +24,7 @@ const BUGCORE = BondUpdateGalerkin.BUG
 norm_diff(a, b) = sqrt(abs(tensor_inner(to_concrete(a - b), to_concrete(a - b))))
 
 # Bond frames spanning several states, deliberately including links that carry a NON-ZERO charge.
-# ⚠ A vacuum link is a FALSE PASS here: its reachable set {+q,-q} is its own dual, so a wrong
+# A vacuum link is a FALSE PASS here: its reachable set {+q,-q} is its own dual, so a wrong
 # arrow or a key that drops the itag still agrees. That exact false pass hid a real sign bug
 # (jobs 93413, 93458), and it would equally hide a colliding cache key.
 function sample_frames()
@@ -65,7 +61,7 @@ end
         warm = map(t -> fusion_basis(t, 1, 2; tag = "cbeG"), frames)
 
         st = fusion_stats()
-        # ⛔ THE CACHE MUST ACTUALLY HAVE HIT, or everything below passes for the wrong reason.
+        # The cache must actually have hit, or everything below passes for the wrong reason.
         @test st.calls == length(frames)
         @test st.misses < st.calls
 

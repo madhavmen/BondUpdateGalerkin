@@ -1,4 +1,4 @@
-# The basis-selection strategy the Core sweeps call (implementation plan, Sections 2.2 and 3.4).
+# The basis-selection strategy the Core sweeps call.
 #
 # Core never names a sketch. The half-sweeps and the frontier sweeps receive a `BasisExpansion` and
 # call only the four functions below on it; `BUG/Randomised` defines the strategies and adds their

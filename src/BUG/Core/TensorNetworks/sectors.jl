@@ -1,10 +1,6 @@
 # Reachable-sector enumeration and the fusion-basis memo. Under U(1) with the opposite frame
 # frozen, `orth([U0 | K1])` cannot open a new charge sector, so empty reachable sectors are
 # detected explicitly instead of padding every sector to full dimension.
-#
-# Moved from BUG-Julia@b155550:src/BondUpdateBUG/sectors.jl. `SectorReport`, `sector_report`,
-# `sector_report_right` and `missing_charges` were not moved: they called `_complement_basis`,
-# removed in BUG-Julia 3024066, so they threw at b155550 (docs/dev/migration-map.md).
 
 # ── charge arithmetic ───────────────────────────────────────────────────────
 
@@ -228,8 +224,6 @@ function perp_component_right(frame_basis, new_directions)
     proj = contract(ov, (2,), frame_basis, (1,))                 # (directions bond, site, link)
     return to_concrete(new_directions - proj)
 end
-
-# ── from BUG-Julia@b155550:src/RSVDCBEBondUpdate/budget/multiplets.jl ──
 
 # ── MULTIPLETS VERSUS STATES ──
 # Under SU(2) `leg_dim` and `Nkeep` count multiplets, so `maxdim` cuts differently than under `:U1`.

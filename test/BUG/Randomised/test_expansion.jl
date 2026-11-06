@@ -1,6 +1,5 @@
-# Moved from BUG-Julia@b155550:tests/sweeps/test_adaptive_rsvd.jl, UT05 (Test A, the retained-rank
-# tail test, on plain singular-value lists), and tests/sweeps/test_dd_cbe.jl (the two-spin
-# entangling step). Not moved: the testsets that need the adaptive and DD bond fixtures.
+# Test A, the retained-rank tail test, on plain singular-value lists, and the two-spin entangling
+# step of the DD-QR expansion.
 
 using Test, LinearAlgebra
 import BondUpdateGalerkin
@@ -13,10 +12,9 @@ const RC = BondUpdateGalerkin.BUG
 _mklist(sigmas, degs = ones(Int, length(sigmas))) =
     [(sigmas[i], degs[i], nothing, nothing) for i in eachindex(sigmas)]
 
+@testset "Test A, the retained-rank tail test" begin
 
-@testset "UT05: Test A, the retained-rank tail test" begin
-
-    @testset "the plan's spectrum (10, 9, 3, 0.1): the smallest k that fits" begin
+    @testset "spectrum (10, 9, 3, 0.1): the smallest k that fits" begin
         list = _mklist([10.0, 9.0, 3.0, 0.1])
         # tails: k=3 -> 0.1, k=2 -> sqrt(9.01) = 3.0017, k=1 -> sqrt(90.01) = 9.487
         @test first(RC._tail_rank(list, 1.0, 1.0, 4)) == 3
@@ -57,7 +55,7 @@ _mklist(sigmas, degs = ones(Int, length(sigmas))) =
     end
 
     @testset "weight the SVD already cut is part of the tail" begin
-        # ⛔ THE REGRESSION THIS GUARDS: measuring only the surviving list reports a rank as
+        # The regression this guards: measuring only the surviving list reports a rank as
         # certified while the weight below the SVD's own cutoff has already breached the
         # budget. The tail must be read against the WHOLE spectrum.
         list = _mklist([1.0, 1e-3])

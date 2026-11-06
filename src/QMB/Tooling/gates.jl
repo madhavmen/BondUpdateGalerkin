@@ -1,10 +1,6 @@
 # Two-site Heisenberg-type gates and the dimer state built from them.
 #
-# Moved from BUG-Julia@b155550:src/BondUpdateBUG/gates.jl (all but `apply_gate` and `_site_tag`,
-# which went to BUG/Core/TensorNetworks/mpo.jl) and src/BondUpdateBUG/symmetric_mps.jl
-# (`dimer_state`). `_tagging_identity` is gone: `_site_tag` now normalises a string with `Itag`.
-
-# ── from src/BondUpdateBUG/gates.jl ──
+# `apply_gate` and `_site_tag` are in BUG/Core/TensorNetworks/mpo.jl.
 
 "Retag both physical legs of a local operator, leaving any operator leg alone."
 _retag_site(O, tag) = to_concrete(setitag(setitag(O, 1, tag), 2, tag))
@@ -84,8 +80,6 @@ function magnetisation_gate(site_l, site_r)
     )
     return to_concrete((outer(q.Sz, q.I) + outer(q.I, q.Sz)) * (1.0 + 0.0im))
 end
-
-# ── from src/BondUpdateBUG/symmetric_mps.jl ──
 
 """
     dimer_state(L) -> SymMPS

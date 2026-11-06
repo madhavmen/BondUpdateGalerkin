@@ -1,7 +1,3 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/models/liouville_blocks.jl.
-
-# ── from src/RSVDCBEBondUpdate/models/liouville_blocks.jl ──
-
 # liouville_blocks.jl: MPDO contractions by walking the abelian blocks (from `liouville.jl`, included right after it).
 
 # ── contractions by walking the abelian blocks ─────────────────────────────────────────────────

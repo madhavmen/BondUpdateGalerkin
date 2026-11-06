@@ -1,4 +1,4 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/bug/imaginary_time.jl.
+# One imaginary-time step: the normalised CBE-BUG step with its step splitting on a failed budget.
 
 "`<psi|H|psi> / <psi|psi>`, any gauge (`mpo_energy` is exact in every gauge)."
 _ite_energy(psi::SymMPS, mpo::MPO) =
@@ -30,7 +30,7 @@ How many sub-steps a rejected `attempt` is split into. The outside defect of an 
 slopes ~3 for p = 2, ~2 for p = 1 from the domain wall). So the split that brings it within
 `tol_basis` is `(resid / tol_basis)^(1/(p+1))`, with a 20% margin. Other reasons halve.
 
-⛔ A FIXED HALVING WAS THE FIRST-STEP "FAILURE". From a product state the energy fluctuation is
+A fixed halving was the first-step "failure". From a product state the energy fluctuation is
 maximal, so the defect's constant is 400-1000x the second step's (fp1): the panel's first step from
 Neel (dbeta 0.0625, tol_basis 1e-7) needed ~dbeta/7, and two halvings (`retries = 2`) reach only
 dbeta/4 -- the step was flagged although the method meets the tolerance at a smaller step.

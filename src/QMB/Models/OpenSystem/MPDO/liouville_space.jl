@@ -1,8 +1,4 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/models/liouville.jl.
-
-# ── from src/RSVDCBEBondUpdate/models/liouville.jl ──
-
-# ── symmetry-aware vectorised density matrices (open-system plan, Task 2) ──
+# ── symmetry-aware vectorised density matrices ──
 # The stored tensor is the transpose of the applied matrix: `liouville_op(ls, M)` returns the tensor
 # that the MPO and `mpdo_apply!` apply as `M`.
 # Charges: `:weak` uses q[a] - q[b], `:strong` uses (q[a], q[b]) per (N, N) block, `:none` is one dense
@@ -206,7 +202,7 @@ function mpdo_product_state(ls::LiouvilleSpace, rhos::AbstractVector)
     for i = 1:L
         F = to_concrete(getIdentity(prev, (ls.I, 1); itag = "L,$(i + 1)"))
         F = to_concrete(setitag(F, 2, "S,$i"))
-        # ⚠ Telum refuses `preserve_space = true` with a slice INSIDE a sector, so the physical leg
+        # Telum refuses `preserve_space = true` with a slice INSIDE a sector, so the physical leg
         # keeps the whole sector (and its full space) and the OUTGOING link is cut to one
         # component instead -- which leaves exactly one basis state of the sector, amplitude 1.
         B = to_concrete(getsub(F, 2, s -> s == secs[i] ? Colon() : nothing; preserve_space = true))

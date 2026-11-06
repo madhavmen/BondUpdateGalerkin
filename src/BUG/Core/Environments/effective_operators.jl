@@ -1,6 +1,5 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/operators/mpo_fold.jl, src/RSVDCBEBondUpdate/operators/zero_site_core.jl, src/RSVDCBEBondUpdate/baselines/tdvp2.jl.
-
-# ── from src/RSVDCBEBondUpdate/operators/mpo_fold.jl ──
+# The one- and zero-site effective operators of an MPO in its environments, and the shifted
+# operator the root solves use.
 
 """
     MPOOneSiteH
@@ -130,8 +129,6 @@ apply_one_site(shifted::ShiftedH, site_tensor) =
     to_concrete(apply_one_site(shifted.h, site_tensor) - shifted.s * site_tensor)
 apply_zero_site(shifted::ShiftedH, core) =
     to_concrete(apply_zero_site(shifted.h, core) - shifted.s * core)
-
-# ── from src/RSVDCBEBondUpdate/operators/zero_site_core.jl ──
 
 # ── zero-site generator, frame construction and truncation sweeps ──
 # The Lubich sweep that used to sit here was removed. Its re-ranking growth passes do not carry over
@@ -337,8 +334,6 @@ _bug_root_link(site_count::Int) = max(1, min(site_count - 1, site_count ÷ 2))
 "Total stored elements of every tensor in the state -- block-sparse, so the honest size.
 (`tensor_elements` lives in baselines/tdvp2.jl; both callers resolve it at run time.)"
 _state_stored(psi::SymMPS) = sum(tensor_elements(psi[site]) for site = 1:length(psi); init = 0)
-
-# ── from src/RSVDCBEBondUpdate/baselines/tdvp2.jl ──
 
 """
     OneSiteH

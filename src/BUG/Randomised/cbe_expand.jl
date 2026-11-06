@@ -1,5 +1,3 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/expansion/cbe_expand.jl.
-
 # cbe_expand.jl: `cbe_expand`, the two-sided SVD selection (DMRG / TDVP-CBE), and the guard and
 # trim applied to the selected blocks. Uses the probes and Test A of `sketch.jl`, the certified
 # range finder of `range_finder.jl` and the sketch helpers of `cbe.jl`, all included before it.
@@ -71,7 +69,7 @@ function cbe_expand(
         lim_ex = max(2 * rm - old_rank, 0)
         cap_l, cap_r = min(cap_l, lim_ex), min(cap_r, lim_ex)
     end
-    # PLAN §5: THE WORK CEILING ALSO BOUNDS WHAT IS RETAINED, not only how wide the sketch is.
+    # The work ceiling also bounds what is retained, not only how wide the sketch is.
     # A frame of width `old_rank` may grow to `workcap` and no further; `workcap >= 2 old_rank`,
     # so the augmented rank-`2 old_rank` basis always fits. Where this cap is the binding one and
     # the candidates fill it, `workcap_reached` is set; whether accuracy suffered is Test A's call

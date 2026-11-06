@@ -1,9 +1,7 @@
 # Gross-Pitaevskii ground states: imaginary-time BUG and QTT gradient descent.
 #
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/qtt/qtt_imaginary.jl (`gp_ground_state!`,
-# `gp_gradient_descent!`; the schedules are in `BUG/ITE/schedules.jl`). The `:tdvp` method of
-# `gp_ground_state!` called the QTT TDVP2 baseline, which belongs to `Baselines` and is not reachable
-# from QTTS; only the BUG method is kept here.
+# The schedules are in `BUG/ITE/schedules.jl`. Only the BUG method is here: the QTT TDVP2 baseline
+# belongs to `Baselines`, which QTTS may not reference.
 #
 # Imaginary time d_tau psi = -(H0 + g|psi|^2) psi with the density rebuilt at every stage (or the
 # normalised gradient flow with mu[psi], `normalized_flow`). Every method renormalises in the

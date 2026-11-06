@@ -1,7 +1,3 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/models/mbl_scars.jl.
-
-# ── from src/RSVDCBEBondUpdate/models/mbl_scars.jl ──
-
 # Ergodicity-breaking models: disordered / quasiperiodic XXZ (MBL, arXiv:1804.11065) and PXP scars
 # (arXiv:2011.09486). Both quench from a product state and are graded against exact diagonalisation.
 
@@ -77,7 +73,7 @@ function field_mpo_from_terms(h::XXZChain, hz::Vector{Float64})
     n = length(terms)
     length(hz) == L ||
         throw(DimensionMismatch("field_mpo_from_terms got $(length(hz)) fields for $L sites"))
-    # ⛔ NO SU(2) FORM, AND THE REASON IS PHYSICS RATHER THAN PLUMBING. `S^z_i` singles out an
+    # No SU(2) form, and the reason is physics rather than plumbing. `S^z_i` singles out an
     # axis, so a random longitudinal field breaks the non-abelian symmetry outright; under `:SU2`
     # `local_space` has no rank-2 `S^z` to place here either. The model is `:U1`/`:none` only,
     # which is also what the Néel start requires (a definite-`S^z` product state has weight in

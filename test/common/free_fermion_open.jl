@@ -2,7 +2,7 @@
 
 # ── THE TIME-DEPENDENT ANALYTIC SOLUTION: an N x N LYAPUNOV EQUATION, never a 4^L object ──────
 #
-# ⛔ THIS REPLACES THE DENSE LIOUVILLIAN AS THE REFERENCE. The spectrum above is exact but says
+# This replaces the dense Liouvillian as the reference. The spectrum above is exact but says
 # nothing about `<S^z_j(t)>`, so the only time-dependent reference this model had was a dense
 # `4^L x 4^L` superoperator -- which caps the check at L = 3..5 and cannot certify anything at a
 # benchmark size. Third quantization does better: the model is quadratic, so the TWO-POINT FUNCTION
@@ -19,7 +19,7 @@
 #
 # so with `X = i*h - D/2`,   dC/dt = X C + C X' + G.
 #
-# ⛔ THE JORDAN-WIGNER STRING AT SITE N DOES NOT SPOIL THIS, AND THAT IS NOT AN APPROXIMATION.
+# The Jordan-Wigner string at site N does not spoil this, and that is not an approximation.
 # `sigma^+_N = P c^dag_N` with `P = prod_{j<N}(1 - 2 n_j)` is NOT linear in fermions, so the
 # Lindbladian is not obviously quadratic and the whole reference would be void if the string
 # survived. It does not. In `L^dag A L = c_N P (c^dag_j c_k) P c^dag_N`:
@@ -33,7 +33,7 @@
 # model have the SAME closed ODE for `C`. This is why the reference may be compared against an MPS
 # built from `sigma^+`/`sigma^-` (`fused_boundary_lindblad`) rather than from `c`/`c^dag`.
 #
-# ⚠ THE ANTICOMMUTATOR RATE IS `eps`, NOT `eps/4`. `D_1 = g_1 + l_1 = eps_L(1+mu)/2 +
+# The anticommutator rate is `eps`, not `eps/4`. `D_1 = g_1 + l_1 = eps_L(1+mu)/2 +
 # eps_L(1-mu)/2 = eps_L` -- the `mu` dependence cancels in the DAMPING and survives only in the
 # SOURCE `G`. The `-i*eps/4` of `xx_boundary_structure_matrix` is a different object in a different
 # (Majorana) basis; the two must NOT be conflated, and mixing them silently changes the relaxation
@@ -80,7 +80,7 @@ end
 
 The EXACT non-equilibrium steady-state covariance `C_ss`, from `X C + C X' + G = 0`.
 
-⚠ `lyap(A, C)` solves `A X + X A' + C = 0`, which is this equation with `C = G` -- no sign flip.
+`lyap(A, C)` solves `A X + X A' + C = 0`, which is this equation with `C = G` -- no sign flip.
 Getting that backwards returns a matrix that is still Hermitian and still has plausible entries, so
 the mistake shows up only as a profile with the wrong sign of the current.
 """
@@ -96,7 +96,7 @@ EXACT `C_jk(t) = Tr(rho(t) c^dag_j c_k)` at any `t`, for any initial covariance 
 `I/2`, the MAXIMALLY MIXED state -- which is a `chi = 1` PRODUCT state in the fused superket
 layout, so the MPS run starts from exactly this).
 
-⛔ SOLVED AROUND THE STEADY STATE, NOT BY EXPONENTIATING THE AFFINE SYSTEM. Subtracting `C_ss`
+Solved around the steady state, not by exponentiating the affine system. Subtracting `C_ss`
 makes the ODE HOMOGENEOUS, `d(C - C_ss)/dt = X (C - C_ss) + (C - C_ss) X'`, whose solution is
 `exp(Xt) (C0 - C_ss) exp(Xt)'`. That is two `N x N` exponentials per time point. The direct route
 -- vectorising to an `N^2` affine system and exponentiating -- is `N^2 x N^2`, which at N = 32 is a
@@ -124,7 +124,7 @@ xx_boundary_sz(N::Int, t::Real; kwargs...) =
 
 Bond currents `j_k = -2 J Im C_{k,k+1}` from a covariance matrix, `k = 1..N-1`.
 
-⛔ THE SIGN IS DERIVED FROM THE CONTINUITY EQUATION, AND THE OTHER ONE WAS MEASURED WRONG. With
+The sign is derived from the continuity equation, and the other one was measured wrong. With
 `H = J sum_k (c^dag_k c_{k+1} + h.c.)`, the Heisenberg equation gives
 `dn_k/dt = j_{k-1} - j_k` with `j_k = i J (c^dag_k c_{k+1} - c^dag_{k+1} c_k)`, and since
 `C_{k+1,k} = conj(C_{k,k+1})` that is `-2 J Im C_{k,k+1}`.
@@ -155,7 +155,7 @@ end
 """
     xx_open_generator(N; gamma = 0.0, kwargs...) -> (M, g)
 
-The boundary-driven XX chain WITH BULK DEPHASING `L_j = sqrt(gamma) n_j` on every site (plan OS-1),
+The boundary-driven XX chain WITH BULK DEPHASING `L_j = sqrt(gamma) n_j` on every site,
 as the vectorised affine ODE `d vec(C)/dt = M vec(C) + g`. The two-point function still closes:
 dephasing damps every OFF-diagonal `C_jk` at rate `gamma` and leaves the diagonal alone
 (`xx_dephasing_correlation`), so `dC/dt = X C + C X' + G - gamma (C - Diagonal(C))` with `X, G` of
@@ -208,25 +208,25 @@ The CLOSED-FORM non-equilibrium steady-state current of the boundary-driven XX c
 
     j = (mu_L - mu_R) * eps * J^2 / (4 J^2 + eps^2)
 
-⛔ INDEPENDENT OF `N`. That is the ballistic signature stated as a formula, and it is the strongest
+Independent of `N`. That is the ballistic signature stated as a formula, and it is the strongest
 possible reference for this model: a single expression that the MPS run must reproduce at ANY chain
 length, with no fitting, no extrapolation and no dense object.
 
-⛔ THIS IS A REAL CLOSED FORM, NOT A FIT. MEASURED against `xx_boundary_ness` at `N = 32`, over
+This is a real closed form, not a fit. MEASURED against `xx_boundary_ness` at `N = 32`, over
 `eps` spanning four decades, the agreement is EXACT to machine precision at every point:
 
     eps      0.01      0.03      0.1       0.3       1        2      4      10        30        100
     lyap     0.0049999 0.0149966 0.0498753 0.1466993 0.400000 0.5    0.4    0.1923077 0.0663717 0.0199920
     formula  identical to the last printed digit at every eps
 
-⚠ IT CONTAINS THE QUANTUM ZENO TURNOVER, which is the published qualitative statement about this
+It contains the quantum Zeno turnover, which is the published qualitative statement about this
 model and a genuine constraint on the shape rather than the scale. The current RISES linearly in
 the drive (`j -> (Delta mu) eps / 4J^2` as `eps -> 0`), PEAKS at `eps = 2J` (where `j = Delta mu /
 4`), then FALLS as `1/eps` -- a strongly measured boundary decouples from the chain. A reference
 that got only the small-`eps` slope right would still fail past the peak, so matching across the
 turnover tests far more than a normalisation.
 
-⚠ EQUAL COUPLINGS ONLY. `eps_L != eps_R` has a different (and here underived) closed form, so this
+Equal couplings only. `eps_L != eps_R` has a different (and here underived) closed form, so this
 throws rather than silently returning the symmetric answer -- the failure mode would be a plausible
 number that is wrong by an O(1) factor.
 """
@@ -247,8 +247,8 @@ end
 # tests can then run at the L where a defect is actually LARGE rather than at whatever L a dense
 # propagator happens to fit in.
 #
-# ⛔ THE BASIS IS σˣ: `X` is DIAGONAL and `Z` is the FLIP. Reading it the usual way describes a
-# different Hamiltonian -- see the header of `src/RSVDCBEBondUpdate/models/tfim.jl`.
+# The basis is σˣ: `X` is DIAGONAL and `Z` is the FLIP. Reading it the usual way describes a
+# different Hamiltonian -- see the header of `src/QMB/Models/ClosedSystem/tfim.jl`.
 
 """
     tfim_majorana_generator(L; J=1.0, h=1.0) -> Matrix{Float64}

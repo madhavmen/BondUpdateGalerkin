@@ -1,10 +1,5 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/expansion/cbe_options.jl (the prebuilt-stack
-# wrappers and the gate-path sketches) and src/RSVDCBEBondUpdate/expansion/cbe_bond_update.jl.
-
 # cbe_bond_update.jl: the prebuilt-stack wrappers, the gate-path sketches, `cbe_expand_bond`, and
 # the gate-based CBE bond update with its expanding-basis Krylov (included after `cbe_expand.jl`).
-
-# ── from src/RSVDCBEBondUpdate/expansion/cbe_options.jl ──
 
 # ── prebuilt-stack convenience wrappers ──────────────────────────────────────
 #
@@ -112,15 +107,13 @@ cbe_expand_bond(frame::BondFrame, gate; kwargs...) = cbe_expand(
     kwargs...,
 )
 
-# ── from src/RSVDCBEBondUpdate/expansion/cbe_bond_update.jl ──
-
 # ── the bond update ──────────────────────────────────────────────────────────
 
 """
     cbe_bond_update(frame::BondFrame, gate, tau; kwargs...) -> NamedTuple
 
 One CBE-basis Galerkin update on the bond `frame` snapshots, a drop-in for
-`BondUpdateBUG.kls_bond_update` (same fields, plus `err_pre` / `err_fnl`). `maxdim`,
+the K/L/S bond update (same fields, plus `err_pre` / `err_fnl`). `maxdim`,
 `trunc_thresh`, `s_tau`, `maxiter`, `tol` as there; `expand = false` freezes the frames; other
 keywords forward to `cbe_expand`. `s_iters = 1` is one expansion then Lanczos, `s_iters > 1`
 repeats the expansion, `-g <= 0` uses [`_expanding_krylov`](@ref) with `g` growth passes.

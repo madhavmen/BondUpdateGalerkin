@@ -1,10 +1,8 @@
-# Moved from BUG-Julia@b155550:src/BondUpdateBUG/expv_root_methods.jl.
-
 # root_methods.jl: the root integrators other than the exponential, the scaled-Krylov helpers
 # `krylov.jl` uses (`_tail`, `_pick_tau`, `_hess_coeffs`) and the public `expv` dispatcher.
 # Included right after `krylov.jl`.
 
-# ── root integrators other than `:exp` (imaginary-time plan, Task 1) ──
+# ── root integrators other than `:exp` ──
 # `:trapezoid`, `:radau2`, `:radau3` are the rational stability functions of one implicit RK step,
 # solved on the Krylov basis. The spectrum is always shifted to the extreme Ritz value: R is not
 # shift-covariant, and an unshifted imaginary-time step hits R's pole. The global order is the
@@ -126,7 +124,7 @@ function _hess_rational(Hm::Matrix{ComplexF64}, tau::ComplexF64, root_method::Sy
     return _rational_apply(root_method, tau * (Hm - sigma * I), unit_vector), zero(ComplexF64)
 end
 
-# ── `:radau2_gmres`: Radau IIA(2) coupled stages by matrix-free GMRES (dissipative plan §1.2) ──
+# ── `:radau2_gmres`: Radau IIA(2) coupled stages by matrix-free GMRES ──
 # The stages solve `(I - tau A ⊗ B) Y = 1 ⊗ x`. Under `A = P Λ P^{-1}` they decouple into the
 # shifted systems `(I - tau λ_k B) Z_k = d_k x`, `d = P^{-1} 1`, `Y = (P ⊗ I) Z`. A Krylov space is
 # shift invariant and both right-hand sides are multiples of `x`, so ONE Arnoldi basis of `B` is
@@ -204,7 +202,7 @@ end
 
 One Radau IIA(2) step (order 3, L-stable) of `dx/dt = B x` over `tau` from `x = vector`, the
 coupled stages solved matrix-free by GMRES (block above) to the relative stage residual `conv_tol`
-(the plan's `tol_root`; `0` runs one cycle to breakdown or `maxiter`), restarted at most
+(`tol_root`; `0` runs one cycle to breakdown or `maxiter`), restarted at most
 `_RADAU_MAXCYCLE` times. `report` receives `(iterations, substeps = 1, err, cycles, stages)`: `err`
 is the TRUE relative stage residual `‖1 ⊗ x - (I - tau A ⊗ (B - sigma)) Y‖ / ‖x‖`, recomputed with
 two actions rather than read off the recurrence, and `stages = (Y_1, Y_2)`. As for `:radau2` the

@@ -1,7 +1,7 @@
 # Shared pieces of the QTT benchmark drivers: environment parameters, CSV output, and independent
 # sparse-grid references written from the finite-difference stencils (no QTT code).
 #
-# Ported from BUG-Julia@b155550:benchmarks/qtt/common.jl. The stencils are written here instead of
+# The stencils are written here instead of
 # being taken from the tests, whose dense matrices are small-grid only.
 
 using LinearAlgebra, SparseArrays, Random

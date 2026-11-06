@@ -49,7 +49,7 @@ end
 """
     xx_open_propagator(L, t; J=1.0) -> Matrix{ComplexF64}
 
-The open-chain one-body propagator in closed form (HQ plan T7.1),
+The open-chain one-body propagator in closed form,
 
     u_ij(t) = 2/(L+1) sum_m sin(pi m i/(L+1)) sin(pi m j/(L+1)) exp(-i J t cos(pi m/(L+1))),
 
@@ -66,7 +66,7 @@ end
 """
     xx_open_correlation(L, t; J=1.0, occupied=1:(L÷2)) -> Matrix{ComplexF64}
 
-`C(t) = u(t) C(0) u(t)'` with `C_ij = <c_j^dag c_i>` (plan T7.1's convention), from the Slater
+`C(t) = u(t) C(0) u(t)'` with `C_ij = <c_j^dag c_i>`, from the Slater
 determinant occupying `occupied`: `<S^z_i> = C_ii - 1/2`.
 """
 function xx_open_correlation(L::Int, t::Real; J::Real = 1.0, occupied = 1:(L÷2))
@@ -91,7 +91,7 @@ The exact many-body state of the evolved Slater determinant, amplitude by amplit
 (`spin_xx_sector`'s: `basis[k][i] = 2 m_i`, up = occupied): `det V[I, :]` with
 `V = u(t)[:, occupied]` and `I` the up sites in ascending order. With the string on the sites left
 of `j`, `c'_{I_1} ... c'_{I_N} |0>` IS `S^+_{I_1} ... S^+_{I_N} |down...>`, so no sign enters
-(checked against sector ED, xx-efficiency plan S1). A state-fidelity oracle for an arbitrary MPS,
+(checked against sector ED). A state-fidelity oracle for an arbitrary MPS,
 which the correlation matrix alone is not.
 """
 function xx_slater_amplitudes(L::Int, t::Real, basis; J::Real = 1.0, occupied = 1:(L÷2))
@@ -104,7 +104,7 @@ end
 
 `C_ij(t) = <c_i^dag c_j>` for the XX chain under ONSITE DEPHASING, EXACTLY.
 
-⛔ THE OPEN XX CHAIN HAS A CLOSED FORM AND IT IS NOT WIDELY EXPLOITED. For dephasing jump
+The open XX chain has a closed form and it is not widely exploited. For dephasing jump
 operators the equation of motion for the single-particle correlation matrix CLOSES -- the
 dissipator maps `c_i^dag c_j` to a multiple of itself, so no higher correlator is generated:
 
@@ -116,7 +116,7 @@ the reference is an `L x L` linear ODE -- 18x18 at our size -- and NOTHING of si
 built. This gives `xx_open` the same status as `xx`: a TRUE ERROR, not a deviation from another
 arm and not a published trend.
 
-⛔ AND OUR `L_j = S^z_j` IS THE SAME CHANNEL AS `L_j = n_j`, which is why this applies unchanged.
+And our `L_j = S^z_j` is the same channel as `L_j = n_j`, which is why this applies unchanged.
 For Hermitian `L` and real `c`, `D[L + c*I] = D[L]` identically:
 
     D[L+cI]rho = (L+cI)rho(L+cI) - (1/2){(L+cI)^2, rho}
@@ -127,11 +127,11 @@ For Hermitian `L` and real `c`, `D[L + c*I] = D[L]` identically:
 `S^z = n - 1/2`, so the `-1/2` is exactly such a shift and drops out. Reading the two as different
 channels -- and hunting a discrepancy that is not there -- is the trap this note exists to close.
 
-⚠ `gamma` IS THE RATE IN `gamma*(Z rho Z - (1/2){Z^2, rho})`, matching `fused_lindblad` and
+`gamma` is the rate in `gamma*(Z rho Z - (1/2){Z^2, rho})`, matching `fused_lindblad` and
 `dense_super` in `benchmarks/trace_preservation.jl`. It is NOT an amplitude: passing `sqrt(gamma)`
 gives a different, silently plausible curve.
 
-⚠ COLUMN-MAJOR `vec`. Julia's `vec` stacks COLUMNS, so `vec(hC) = kron(I,h)vec(C)` and
+Column-major `vec`. Julia's `vec` stacks COLUMNS, so `vec(hC) = kron(I,h)vec(C)` and
 `vec(Ch) = kron(transpose(h),I)vec(C)`, and `C[i,j]` sits at linear index `(j-1)*L + i`. Getting
 that backwards transposes the generator, which for a SYMMETRIC `h` and a DIAGONAL initial `C`
 still produces a smooth, wrong-looking-right curve.
@@ -171,14 +171,14 @@ xx_dephasing_sz(L::Int, t::Real; kwargs...) =
 
 # ── NON-HERMITIAN free fermions: the Hatano-Nelson chain, EXACTLY ─────────────────────────────
 #
-# ⛔ WHY THIS EXISTS. Nothing in the suite currently certifies the NON-HERMITIAN path. `hermitian
+# Why this exists. Nothing in the suite currently certifies the NON-HERMITIAN path. `hermitian
 # = false` selects Arnoldi and a full Hessenberg projection -- a genuinely different code path
 # from Lanczos -- and every open-system and no-click driver takes it, but every non-Hermitian
 # benchmark so far has been scored against ANOTHER RUN OF OUR OWN CODE on a finer grid. That is a
 # GRID control, not an accuracy control: it cannot distinguish "the log grid is too coarse" from
 # "Arnoldi is wrong", because both arms would be wrong together.
 #
-# ⛔ THE MODEL IS CHOSEN SO THAT NO NEW MPO MACHINERY IS NEEDED. `xxz_chain` pushes the XY term as
+# The model is chosen so that no new MPO machinery is needed. `xxz_chain` pushes the XY term as
 # TWO separate channels -- `pair(Sp, Sp')` and `pair(Sm, Sm')` -- each with its own coefficient.
 # Giving those two channels DIFFERENT coefficients `J_r != J_l` is
 #
@@ -189,13 +189,13 @@ xx_dephasing_sz(L::Int, t::Real; kwargs...) =
 # chain. So it is `pair_mpo(L, AbstractMatrix[Jr*xy, Jl*xy, zz], spin_vertices(L))` -- the
 # existing builder, two different entries.
 #
-# ⚠ AND THIS DOES **NOT** CONTRADICT the "the complex matrix must be THIRD" warning in
+# And this does not contradict the "the complex matrix must be THIRD" warning in
 # `logtime_suite.jl`'s model 3. That warning is about giving BOTH XY channels the SAME complex
 # factor, which is a complex RESCALING of H (an imaginary-time evolution in disguise). Two
 # DIFFERENT real coefficients are a different object entirely, and non-Hermitian for a reason
 # that survives any rescaling: `h != h'`.
 #
-# ⛔ THE STATE IS STILL GAUSSIAN, BUT THE ORBITALS STOP BEING ORTHONORMAL. That is the whole
+# The state is still Gaussian, but the orbitals stop being orthonormal. That is the whole
 # subtlety, and getting it wrong produces a smooth, plausible, wrong curve. Under a quadratic
 # generator a Slater determinant stays a Slater determinant, and the orbital matrix evolves
 # LINEARLY, `U(t) = exp(-i h t) U(0)` -- but for `h != h'` that propagator is not unitary, so
@@ -219,15 +219,15 @@ in that limit, so a sign or transpose error cannot hide.
 and either may be COMPLEX. The two knobs generate two different kinds of non-Hermiticity, and
 only one of them has a complex spectrum -- see below.
 
-⛔ AN OPEN ASYMMETRIC CHAIN HAS A **REAL** SPECTRUM, so `J_r != J_l` alone CANNOT make a
+An open asymmetric chain has a real spectrum, so `J_r != J_l` alone CANNOT make a
 logarithmic grid fail. With open ends it is similar to a HERMITIAN matrix by the diagonal gauge
 `S = diag(r^j)`, `r = sqrt(J_l / J_r)`: `S^-1 h S` is the symmetric hopping matrix with
 `sqrt(J_r J_l)`. MEASURED `max|Im E| = 1.5e-16` at `J_r = 0.65, J_l = 0.35, L = 12`. The chain is
 still NON-NORMAL -- eigenvectors non-orthogonal, norm not conserved, Arnoldi mandatory -- so it is
 an excellent ACCURACY certificate for the non-Hermitian path. It is just not an aliasing test.
 
-⛔ AND CLOSING THE RING DOES NOT FIX IT, BECAUSE THE JORDAN-WIGNER STRING DOES NOT CANCEL ACROSS
-THE WRAP. For adjacent sites the string between `S^+_j S^-_{j+1}` cancels and the term IS
+And closing the ring does not fix it, because the Jordan-Wigner string does not cancel across
+the wrap. For adjacent sites the string between `S^+_j S^-_{j+1}` cancels and the term IS
 `c^dag_j c_{j+1}`; across the bond `(1, L)` the operators are `L-2` sites apart and the string
 `prod_{k=2}^{L-1} (1 - 2 n_k)` survives, so the spin ring maps to a fermion ring whose boundary
 condition is TWISTED BY THE PARTICLE-NUMBER PARITY (antiperiodic at even filling). A `periodic`
@@ -235,7 +235,7 @@ single-particle matrix would therefore describe a DIFFERENT model from the MPO -
 plausibly wrong. `periodic` is kept only so the spectrum argument above can be demonstrated; it
 must NOT be paired with a `pair_mpo` that carries a `J[1, L]` entry.
 
-✅ THE WAY TO GET A COMPLEX SPECTRUM WITH OPEN ENDS is a COMPLEX SYMMETRIC hopping instead of an
+The way to get a complex spectrum with open ends is a COMPLEX SYMMETRIC hopping instead of an
 asymmetric real one: `J_r == J_l == w_j` with `w_j` complex and NOT all of the same phase. A
 uniform complex `w` is only `e^{i theta}` times a real matrix -- a complex rescaling of `H`, i.e.
 mixed real/imaginary time in disguise, which is the trap `logtime_suite.jl` already warns about.
@@ -261,7 +261,7 @@ function nh_hopping_matrix(L::Int; J_r = 1.0, J_l = 1.0, periodic::Bool = false)
                 "IS the chain bond and adding both doubles it",
             ),
         )
-        # ⛔ SPECTRUM DEMONSTRATION ONLY -- see the Jordan-Wigner warning above. This does NOT
+        # Spectrum demonstration only -- see the Jordan-Wigner warning above. This does NOT
         # correspond to any `pair_mpo` this repo can build.
         h[L, 1] = _bond(J_r, L - 1)
         h[1, L] = _bond(J_l, L - 1)
@@ -286,7 +286,7 @@ nh_staggered_couplings(L::Int; J::Number = 1.0, g::Real = 0.0) =
 
 `U(t) = exp(-i h t) U(0)`, the `L x N` orbital matrix of the evolved Slater determinant.
 
-⛔ THE PROPAGATOR IS NOT UNITARY. `exp(-i h t)` for `h != h'` grows or shrinks directions, so the
+The propagator is not unitary. `exp(-i h t)` for `h != h'` grows or shrinks directions, so the
 columns of `U(t)` are neither normalised nor mutually orthogonal. Every quantity below therefore
 goes through the Gram matrix; none of them may use `U'` alone.
 """
@@ -311,7 +311,7 @@ end
 
 `<psi(t)|psi(t)>` for the non-Hermitian chain, exactly: the Gram determinant `det(U' U)`.
 
-⛔ THIS IS A FIRST-CLASS REFERENCE, NOT A DIAGNOSTIC. A non-Hermitian generator does not conserve
+This is a first-class reference, not a diagnostic. A non-Hermitian generator does not conserve
 the norm -- that is the entire point of the model -- so `||psi||` is a physical prediction with a
 closed form, and an integrator that gets the observable right while getting the norm wrong is
 still wrong. It is also the quantity that decides REPRESENTABILITY: the imaginary-time overflow
@@ -363,13 +363,13 @@ nh_free_fermion_sz(L::Int, t::Real; kwargs...) =
 #     L_1,2 = sqrt(eps_L (1 +- mu_L)/2) * sigma^{+,-}_1        (left boundary)
 #     L_3,4 = sqrt(eps_R (1 +- mu_R)/2) * sigma^{+,-}_N        (right boundary)
 #
-# ⛔ WHY THIS MODEL EXISTS HERE: ITS FREQUENCIES ARE GENUINELY COMPLEX. `lambda = B + 2J cos(theta)`
+# Why this model exists here: its frequencies are genuinely complex. `lambda = B + 2J cos(theta)`
 # with `theta` COMPLEX, so each mode is `exp(-i Re(lambda) t) * exp(-|Im(lambda)| t)` -- an
 # oscillation TIMES a decay. That is what a Hermitian real-time quench cannot supply (real
 # spectrum, no decay) and what an imaginary-time Hermitian generator cannot supply either
 # (completely monotone, no oscillation).
 #
-# ⛔ AND IT IS WHY A LOGARITHMIC GRID CANNOT BE RESCUED HERE BY MORE STEPS. MEASURED from the
+# And it is why a logarithmic grid cannot be rescued here by more steps. MEASURED from the
 # spectrum below at `N=30, J=1, eps=1`: the oscillation frequency is `max|Re lambda| = 1.9897`
 # (essentially `2J`, nearly independent of N and eps) while the Liouvillian gap CLOSES as
 # `O(N^-3)` -- `3.14e-04`, i.e. a relaxation time of ~3181. So the run must reach `t ~ 1e4` while
@@ -385,8 +385,8 @@ The `N x N` non-Hermitian matrix whose eigenvalues are the rapidities `lambda = 
 of the boundary-dissipated XX chain: tridiagonal with hopping `J` and diagonal `B`, plus
 `-i*eps_L/4` on site 1 and `-i*eps_R/4` on site `N`.
 
-⛔ THE BOUNDARY NORMALISATION IS PINNED AGAINST THE PAPER'S OWN TRANSCENDENTAL EQUATION, NOT
-GUESSED. The paper states that `theta_m` solves
+The boundary normalisation is pinned against the paper's own transcendental equation, not
+guessed. The paper states that `theta_m` solves
 
     {2 cos(theta) + i(l + r)} sin(N theta) - (1 + l r) sin((N-1) theta) = 0,
     l = eps_L / 4J,   r = eps_R / 4J
@@ -435,7 +435,7 @@ xx_boundary_rapidities(N::Int; kwargs...) = eigvals(xx_boundary_structure_matrix
 
 The Liouvillian gap as `2 * min|Im lambda|`.
 
-✅ PINNED AGAINST THE PAPER'S CLOSED FORM, which is the headline result of arXiv:2104.11479:
+Pinned against the paper's closed form, which is the headline result of arXiv:2104.11479:
 
     Delta = 4J pi^2 * (l+r)(l r + 1) / [ (l+r)^2 + (l r - 1)^2 ] / N^3
 

@@ -1,7 +1,6 @@
 # Product and sector-product initial states.
 #
-# Moved from BUG-Julia@b155550:src/BondUpdateBUG/symmetric_mps.jl. `dimer_state` moves with the
-# Heisenberg gates it is built from (QMB/Tooling/gates.jl).
+# `dimer_state` is in QMB/Tooling/gates.jl, with the Heisenberg gates it is built from.
 
 """
     product_state(spins; eltype = ComplexF64) -> SymMPS

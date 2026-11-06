@@ -3,9 +3,7 @@
 # long-range or site-dependent H). Each bond: expand, forward one-site update, backward zero-site
 # update (the -tau step removes the double count of the bond between two forward updates).
 #
-# Merged from BUG-Julia@b155550:src/RSVDCBEBondUpdate/baselines/{tdvp1_cbe,tdvp1_cbe_variants,
-# tdvp_cbe1s}.jl. Not moved: the `XXZChain` method of `tdvp_cbe1s_step!` (`mpo_from_terms` now
-# takes the local identity `Iloc`; build the MPO with QMB's `xxz_mpo`).
+# `tdvp_cbe1s_step!` takes an `MPO`; build it with QMB's `xxz_mpo`.
 
 """
     TDVP1CBEInfo
@@ -66,7 +64,6 @@ function _tdvp1_cbe_bond!(
     if dir === :right
         _absorb_right!(psi, i, ex.V_ex)              # psi[i+1] = V_ex, centre stays at i
         tag = psi[i].inds[3].itags
-
 
         rch1 = push_right_channels(rch, h, psi[i+1], i + 1)
 
@@ -187,7 +184,6 @@ function tdvp1_cbe_step!(
     # `rmax` read once, before either sweep widens anything, so it is a statement about the
     # state rather than a per-bond one. The expansion runs at `cbe_expand`'s own settings.
     exkw = (rmax = maximum(bond_dims(psi); init = 0), exact = exact, rng = rng)
-
 
     onesite!(j, lc, rc) = begin
         acc[6] += 1

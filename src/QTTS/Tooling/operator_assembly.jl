@@ -1,7 +1,6 @@
 # Two-dimensional operators assembled from one-dimensional chains on a grid.
 #
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/qtt/qtt_models.jl (`qtt_d`, `qtt_coord_diag`,
-# `qtt_op` and their grid helpers). Every model operator is a sum of Kronecker products of 1D chains
+# Every model operator is a sum of Kronecker products of 1D chains
 # (`derivatives.jl`) placed by `qtt_embed`, as operator cores; it becomes a solver MPO only through
 # `qtt_to_mpo`.
 

@@ -1,9 +1,6 @@
-# Heston 2D on QTT (implementation plan WP5, Heston first): the generator against a dense
+# Heston 2D on QTT: the generator against a dense
 # reference, the forward adjoint's mass conservation, the degenerate v = 0 rows, a manufactured
 # affine solution at second order, the BUG step against the dense exponential, and the references.
-#
-# From BUG-Julia@b155550:tests/sweeps/test_qtt_task1.jl (U02 Heston part, U05 Heston part). The
-# manufactured-solution and reference checks are new.
 
 using Test, LinearAlgebra, Random
 using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QTTS

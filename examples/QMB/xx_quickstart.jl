@@ -8,7 +8,6 @@
 #
 # Expected output: three summary lines and `QUICKSTART-OK` (exit code 0). With OUTPUT_DIR, the
 # final profiles are written to OUTPUT_DIR/xx_quickstart.csv. Defaults: L = 20, t = 1, dt = 0.05.
-# Ported from BUG-Julia@b155550:examples/adaptive_quickstart.jl.
 
 using LinearAlgebra
 using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB

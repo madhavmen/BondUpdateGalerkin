@@ -34,6 +34,5 @@ shares tensors safely.
 ## Tests
 
 `Pkg.test()` runs one file per behaviour, each in its own module (`test/runtests.jl`). The frozen
-BUG-Julia `b155550` runs in `test/fixtures/b155550` pin the moved code to the legacy answers; the
-other tests compare against independent dense, free-fermion, closed-form or manufactured
-references. `docs/dev/migration-map.md` records where every legacy file went.
+reference runs in `test/fixtures/b155550` pin the engine's answers; the other tests compare against
+independent dense, free-fermion, closed-form or manufactured references.

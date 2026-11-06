@@ -2,9 +2,8 @@
 # driver, and the two-site `GroundState` module (RSVD-CBE expansion with the expanding Krylov
 # local solve of the time-evolution modes, then a clean Lanczos in the fixed frames).
 #
-# Merged from BUG-Julia@b155550:src/RSVDCBEBondUpdate/baselines/{dmrg_cbe1s,dmrg_cbe1s_driver,
-# ground_state}.jl. The one-site paths take an `MPO` only (`mpo_from_terms` now takes the local
-# identity `Iloc`; build the MPO with QMB's `xxz_mpo`); `GroundState` keeps `XXZChain` and `MPO`.
+# The one-site paths take an `MPO` only (build it with QMB's `xxz_mpo`); `GroundState` accepts an
+# `XXZChain` or an `MPO`.
 
 """
     DMRGCBEInfo
@@ -36,7 +35,7 @@ Default `tol_basis` / `tol_trunc` of the ADAPTIVE CBE-DMRG -- medium-loose, NOT 
 re-solved on the next sweep, so a direction a loose sweep skips is offered again, and a tight
 per-sweep budget mostly buys rank and matvecs the next sweep throws away. PROVISIONAL until
 `benchmarks/ground_state/adaptive_dmrg_tolerance.jl` measures how loose each may be at a given
-energy accuracy (results: `ADAPTIVE_DMRG_TOLERANCE_RESULTS.md`).
+energy accuracy.
 """
 const DMRG_TOL_DEFAULTS = (basis = 1e-3, trunc = 1e-4)
 
@@ -44,7 +43,7 @@ const DMRG_TOL_DEFAULTS = (basis = 1e-3, trunc = 1e-4)
     dmrg_etol(tol_basis, tol_trunc, N) -> Float64
 
 The adaptive CBE-DMRG's sweep-to-sweep stopping threshold, DERIVED from its two tolerances
-rather than set as a fourth accuracy knob. MEASURED (ADAPTIVE_DMRG_TOLERANCE_RESULTS.md, N = 20
+rather than set as a fourth accuracy knob. Measured (N = 20
 Heisenberg / XX chains and 5x4 square cylinder): the returned state's energy error obeys
 `dE/N <~ 2.5e-3 tol_basis^2 + 0.2 tol_trunc^2` (largest coefficients seen). The run stops once a
 sweep changes the energy by less than a tenth of that, since further sweeps cannot buy more than
@@ -110,7 +109,7 @@ function dmrg_cbe1s_sweep!(
 
     # `rmax` read ONCE, before anything widens, so the work ceiling is a statement about the
     # state rather than about whichever bond is being looked at. The preselection cuts only at
-    # the numerical rank floor (`stol_pre = 0`, plan §1); Tests A/B against `tol_basis` decide
+    # the numerical rank floor (`stol_pre = 0`); Tests A/B against `tol_basis` decide
     # what matters.
     exkw = (
         growth = ADAPTIVE_GROWTH,
@@ -186,7 +185,7 @@ function dmrg_cbe1s_sweep!(
     rstack = right_env_stack(psi, mpo; downto = 3)
     lch = boundary_channels(mpo)
     for i = 1:(L-1)
-        bondlg = AdaptiveLedger()                           # this bond's Tests A/B (§8)
+        bondlg = AdaptiveLedger()                           # this bond's Tests A/B
         rch1, info = expand_bond!(
             psi,
             mpo,

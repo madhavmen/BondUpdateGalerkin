@@ -1,7 +1,5 @@
-# Canonical form of `SymMPS`: exact (truncation-free) centre moves and isometry checks.
-#
-# Moved from BUG-Julia@b155550:src/BondUpdateBUG/symmetric_mps_canonical.jl. Its spin observables
-# (`site_expval`, `apply_sz!`, `sz_overlaps`) moved to QMB/Observables/local_observables.jl.
+# Canonical form of `SymMPS`: exact (truncation-free) centre moves and isometry checks. Spin
+# observables (`site_expval`, `apply_sz!`, `sz_overlaps`) are in QMB/Observables.
 
 """
     move_right!(psi, site)

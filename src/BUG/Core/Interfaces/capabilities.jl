@@ -1,4 +1,4 @@
-# Capability traits (implementation plan, Sections 3.2 and 3.4). Kernels choose their path from
+# Capability traits. Kernels choose their path from
 # these traits, never from which domain built the state.
 
 """

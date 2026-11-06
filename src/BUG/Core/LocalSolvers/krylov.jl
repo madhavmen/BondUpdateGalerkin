@@ -1,7 +1,3 @@
-# Moved from BUG-Julia@b155550:src/BondUpdateBUG/expv.jl, src/BondUpdateBUG/expv_root_methods.jl.
-
-# ── from src/BondUpdateBUG/expv.jl ──
-
 # Matrix-free exp(tau*A)*x for Telum tensors, ported from Alice's tensor_lanczos_expv for
 # trace-by-trace parity. Arnoldi serves the non-Hermitian K and L generators, where P_perp breaks
 # Hermiticity. The breakdown-only exit is not a convergence test: a generic A never breaks down, so
@@ -14,7 +10,7 @@
 # matrix-free applications it actually performed).
 const KRYLOV_LOG = Int[]
 const _KRYLOV_RECORD = Ref(false)
-# The parallel K/L/S step (plan Task 6) runs three `expv` solves at once; a racy `push!` would
+# The parallel K/L/S step runs three `expv` solves at once; a racy `push!` would
 # silently drop entries rather than fail.
 const _KRYLOV_LOCK = ReentrantLock()
 
@@ -97,7 +93,7 @@ end
 factored out, `logscale = tau*sigma`. Keeping them apart is what lets the caller carry a huge
 imaginary-time scale in log space rather than overflowing it into the vector.
 
-⛔ THE LOG IS RETURNED, NOT THE SCALAR, and that is the whole point. Returning `exp(tau*sigma)`
+The log is returned, not the scalar, and that is the whole point. Returning `exp(tau*sigma)`
 for the caller to `log` again would overflow to `Inf` FIRST -- at exactly the large `tau` the
 shift exists to survive -- and `log(Inf)` is `Inf`, so the accumulated scale would be destroyed
 by the very round trip meant to preserve it.
@@ -108,8 +104,6 @@ function _coeffs_from_eigen(vals, vecs, tau::ComplexF64)
     eigen_weights = exp.(tau .* (ComplexF64.(vals) .- sigma)) .* ComplexF64.(vecs[1, :])
     return ComplexF64.(vecs) * eigen_weights, tau * sigma
 end
-
-# ── from src/BondUpdateBUG/expv_root_methods.jl ──
 
 """
     lanczos_expv(apply, tau, vector; tol=1e-13, maxiter=60, reorth=false,
@@ -259,7 +253,7 @@ Hand a solve's own account back to a caller that passed `report = Ref{Any}()`:
 `(iterations, substeps, err)`. `err` is Saad's a-posteriori estimate summed over the substeps,
 relative to `||x||` -- exact bookkeeping in REAL time, where every substep's propagator is
 unitary so the local errors cannot grow; in imaginary time the shift makes it a per-substep
-relative figure. It is what `tol_expv` is checked against (plan §4, UT15).
+relative figure. It is what `tol_expv` is checked against.
 """
 _report!(::Nothing, ::Int, ::Int, ::Float64) = nothing
 _report!(report::Base.RefValue, total::Int, nsub::Int, err::Float64) =
@@ -278,7 +272,7 @@ const _EXPV_MAX_NORM = 1e150
 
 Put the factored scale back, unless doing so would push the state past [`_EXPV_MAX_NORM`].
 
-⚠ WHEN IT IS DROPPED THE DIRECTION IS RIGHT AND THE NORM IS NOT. That is safe for IMAGINARY
+When it is dropped the direction is right and the norm is not. That is safe for IMAGINARY
 time, where the norm grows like `exp(-tau*E_0)`, is not physical, and every caller renormalises.
 In REAL time `logscale` is imaginary, `|sc| = 1` exactly, and this can never trigger -- so a
 real-time norm, which IS physics, is never silently rescaled.

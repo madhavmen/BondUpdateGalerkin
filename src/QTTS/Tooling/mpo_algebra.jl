@@ -2,8 +2,7 @@
 # operator-state product. An operator core is `(w_l, out, in, w_r)`, `(O psi)[out] = sum_in
 # O[out, in] psi[in]`.
 #
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/qtt/qtt_cores.jl. `op_zipup` follows with the
-# zip-up products (`Elementwise/products.jl`) it is built on.
+# `op_zipup` is in `Elementwise/products.jl`, with the zip-up products it is built on.
 
 "The `L`-site identity, bond dimension 1."
 op_identity(L::Int; T::Type = Float64) = [reshape(Matrix{T}(I, 2, 2), 1, 2, 2, 1) for _ = 1:L]

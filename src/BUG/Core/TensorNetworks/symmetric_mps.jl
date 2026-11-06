@@ -1,10 +1,7 @@
 # Symmetry-native MPS container backed by Telum TLArrays. Site tensors are (link_l, site, link_r)
 # with itags "L,i" / "S,i" / "L,i+1". Only the invariant that the two legs of a bond carry
 # opposite arrows is kept, since svd's arrows depend on sweep direction. Contractions pair legs
-# explicitly, so no code assumes which side is '+'.
-#
-# Moved from BUG-Julia@b155550:src/BondUpdateBUG/symmetric_mps.jl (container, symmetry mode,
-# overlap) and src/BondUpdateBUG/expv.jl (tensor_inner). Local spaces and product states moved to
+# explicitly, so no code assumes which side is '+'. Local spaces and product states are in
 # QMB/Tooling.
 
 # ── symmetry mode ──
@@ -162,8 +159,6 @@ orthogonality_center(psi::SymMPS) = psi.center
 canonicalize!(psi::SymMPS, site::Int) = canonical!(psi, site)
 inner_product(bra::SymMPS, ket::SymMPS) = overlap(bra, ket)
 symmetry(psi::SymMPS) = symmetry_trait(symm(psi[1]))
-
-# ── from BUG-Julia@b155550:src/RSVDCBEBondUpdate/baselines/tdvp2.jl ──
 
 "Total stored elements of a TLArray -- the honest size of the object, block-sparse."
 tensor_elements(tensor) = sum(length(reduced_block) for reduced_block in tensor.RMTs; init = 0)

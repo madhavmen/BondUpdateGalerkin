@@ -1,7 +1,3 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/models/pxp_scars.jl.
-
-# ── from src/RSVDCBEBondUpdate/models/pxp_scars.jl ──
-
 # pxp_scars.jl: scars: the PXP model of a Rydberg blockade chain (from `mbl_scars.jl`, included right after it).
 
 # ── SCARS: the PXP model of a Rydberg blockade chain ──

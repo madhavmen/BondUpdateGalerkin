@@ -1,10 +1,6 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/models/dissipative.jl, src/RSVDCBEBondUpdate/models/hubbard_d4.jl, src/RSVDCBEBondUpdate/operators/mpo_apply.jl.
-
-# ── from src/RSVDCBEBondUpdate/models/dissipative.jl ──
-
-# The loss operators of dissipative_cbe_bug_implementation_plan.md (A1/B1 pair loss, A2/B2
+# The loss operators of the dissipative benchmarks (A1/B1 pair loss, A2/B2
 # collective emission): `Q = Σ_μ L_μ' L_μ` as a compact MPO, to pass to `no_jump_mpo(H, Q)`, and the
-# jumps `L_μ` themselves as charged MPOs for the trajectory engine (Task 4, `quantum_jumps.jl`).
+# jumps `L_μ` themselves as charged MPOs for the trajectory engine (`quantum_jumps.jl`).
 
 """
     doublon_loss_mpo(L; kappa) -> MPO
@@ -30,7 +26,7 @@ end
     collective_emission_mpo(L; gamma_plus, gamma_minus = gamma_plus, k, x = 1:L) -> MPO
 
 `Q = L₊'L₊ + L₋'L₋` for the collective jumps `L_± = √Γ_± Σ_j e^{±i k x_j} S⁻_j` on a spin-1/2
-chain (plan A2):
+chain (model A2):
 
     Q = (Γ₊ + Γ₋) Σ_j n_j + Σ_{i<j} (c_ij S⁺_i S⁻_j + conj(c_ij) S⁻_i S⁺_j),
     c_ij = Γ₊ e^{ik(x_j - x_i)} + Γ₋ e^{-ik(x_j - x_i)},   n = S^z + 1/2.
@@ -57,10 +53,10 @@ function collective_emission_mpo(
     )
     q = local_space()
     n = to_concrete(q.Sz + 0.5 * q.I)
-    # `xxz_chain(J = 2)` gives each hop vertex unit weight. ⛔ The MPO APPLIES a vertex as its
-    # transpose (`spin_xx.jl`, the `liouville.jl` header): vertex 1 `(Sp, Sp')` is `S⁻_i S⁺_j`
+    # `xxz_chain(J = 2)` gives each hop vertex unit weight. The MPO applies a vertex as its
+    # transpose (see the `liouville_space.jl` header): vertex 1 `(Sp, Sp')` is `S⁻_i S⁺_j`
     # and vertex 2 `(Sm, Sm')` is `S⁺_i S⁻_j`. Only complex couplings see it: with c_ij on
-    # vertex 1 this built Q(-k) exactly (dt2a, test_dissipative_t2 U02).
+    # vertex 1 this built Q(-k) exactly.
     v = pair_vertices(xxz_chain(L; J = 2.0, delta = 0.0))
     length(v) == 2 ||
         error("xxz_chain(delta = 0) gave $(length(v)) vertices, expected the two hops")
@@ -109,7 +105,7 @@ end
 # ── the jumps ───────────────────────────────────────────────────────────────────────────────
 # A jump changes the sector, so its MPO is a pair-MPO channel that opens and never closes: `id`
 # up to the opening site, the CHARGED channel after it, and the right boundary leg carries the
-# jump's charge (`mpo_product` fuses it into the state's). ⛔ The MPO applies a stored block as
+# jump's charge (`mpo_product` fuses it into the state's). The MPO applies a stored block as
 # its transpose (`spin_xx.jl`): the stored `Sp` applies `S⁻`, the stored `f'` applies `f`.
 
 """
@@ -214,7 +210,7 @@ end
 """
     collective_emission_channels(L; gamma_plus, gamma_minus = gamma_plus, k, x = 1:L)
 
-`L_± = √Γ_± Σ_j e^{±i k x_j} S⁻_j` (plan A2/B2), the jumps whose `L₊'L₊ + L₋'L₋` is
+`L_± = √Γ_± Σ_j e^{±i k x_j} S⁻_j` (models A2/B2), the jumps whose `L₊'L₊ + L₋'L₋` is
 `collective_emission_mpo` with the same arguments; each a charged [`jump_mpo`](@ref) on the stored
 `Sp` (applied as `S⁻`), scaled to unit `S⁻` matrix elements. Zero rates give no channel.
 """
@@ -268,12 +264,10 @@ function site_emission_channels(L::Int; gamma)
     return [JumpChannel("site$j", Any[SiteOp(j, q.Sp, sqrt(g[j]) * s)]) for j = 1:L if g[j] > 0]
 end
 
-# ── from src/RSVDCBEBondUpdate/models/hubbard_d4.jl ──
-
 """
     pair_loss_junction(L; J = 1.0, J_link = 1.0, U = 0.0, kappa, j0 = L ÷ 2) -> NamedTuple
 
-The plan's B1 model: a Hubbard chain of hopping `J` whose sink site `j0` is joined to both leads by
+Model B1: a Hubbard chain of hopping `J` whose sink site `j0` is joined to both leads by
 `J_link` (bonds `(j0-1, j0)` and `(j0, j0+1)`), on-site `U`, and ONE jump channel, the pair loss
 `L_0 = √κ c_{j0↓} c_{j0↑}`. Returns `(; H, Q, G, channels, j0, Jb)`; `Jb` are the bond hoppings.
 `J_link = 0` decouples the leads, for the preparation.
@@ -294,8 +288,6 @@ function pair_loss_junction(
     Q = doublon_loss_mpo(L; kappa = k)
     return (; H, Q, G = no_jump_mpo(H, Q), channels = pair_loss_channels(L; kappa = k), j0, Jb)
 end
-
-# ── from src/RSVDCBEBondUpdate/operators/mpo_apply.jl ──
 
 """
     site_op_product(f::SiteOp, psi) -> SymMPS

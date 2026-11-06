@@ -1,7 +1,3 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/models/spin_xx.jl.
-
-# ── from src/RSVDCBEBondUpdate/models/spin_xx.jl ──
-
 # ── the U(1) XX chain, H = J sum (S^x S^x + S^y S^y), from a domain wall ──
 # Spins are `twoS = 2s` (s = 1/2 or 3, d = 2s + 1). Telum's Clebsch-Gordan convention gives the same J
 # at every s, pinned by test_spin_xx.jl.
@@ -46,7 +42,7 @@ function spin_current_mpo(L::Int, twoS::Int, b::Int; J::Float64 = 1.0)
     1 <= b <= L - 1 || throw(ArgumentError("bond must be in 1:$(L - 1), got $b"))
     q = spin_space(twoS)
     w = ComplexF64(0, J)
-    # ⛔ `j_b` is imaginary ANTISYMMETRIC, so the transpose `pair_mpo` applies is `-j_b`: `+w` goes
+    # `j_b` is imaginary ANTISYMMETRIC, so the transpose `pair_mpo` applies is `-j_b`: `+w` goes
     # on the vertex that APPLIES `S^+_b S^-_{b+1}`, which is `(Sm, Sm')`. Measured (hq24a, L = 4
     # against dense): `+w` on `(Sp, Sp')` gave `-j_b` exactly, and evolved as `exp(+i tau j_b)`.
     return pair_mpo(

@@ -1,9 +1,8 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/bug/krylov_enrich.jl.
 # The half-sweep Krylov stage: the Saad weight estimate, the frame extension, `_krylov_enrich`, and
 # the frame merge and ledger fold around it. The local recurrence it drives (`_krylov_basis`) is in
 # `krylov_recurrence.jl`, included right after this file.
 
-# ── THE HALF-SWEEP KRYLOV STAGE OF `cbe_bug_step!` (plan §4, Tests C and D) ─────────────────
+# ── THE HALF-SWEEP KRYLOV STAGE OF `cbe_bug_step!` (Tests C and D) ───────────────────────────
 
 # Bond tags of the left (`W`) and right (`Z`) Krylov frames at bond `bond`.
 _tagW(bond::Int) = "cbeW,$bond"
@@ -13,8 +12,8 @@ _tagZ(bond::Int) = "cbeZ,$bond"
 # convergence judgement.
 const _KRY_BREAKDOWN = 1e-13
 
-# ── STAGE 3: residual-driven K/L Krylov enrichment (plan §4, Tests C and D) ──
-# Krylov vectors live on one-site tensors, but the plan's projector `I - QQ'` acts on the frame (an
+# ── STAGE 3: residual-driven K/L Krylov enrichment (Tests C and D) ──
+# Krylov vectors live on one-site tensors, but the projector `I - QQ'` acts on the frame (an
 # isometry on `(link, site)`): a vector adds only through the part of its local range the frame
 # lacks. `_krylov_enrich`'s `start_frame` is the CBE output `U_ex`, so old directions are kept
 # verbatim; the seed `K_ex` already lies in `U_old`.
@@ -87,7 +86,7 @@ fits (Test A's rule, `_tail_rank`). Orthogonalised within each charge sector by 
 cut only at the numerical floor `_rank_cut`, re-orthogonalised against `frame` before the direct
 sum -- the same guard `cbe_expand` applies to its own appended block.
 
-`room` is what the work ceiling still allows on the frame leg (plan §5): at most that many are
+`room` is what the work ceiling still allows on the frame leg: at most that many are
 appended, and `fits = false` reports that the allowance needed more.
 """
 function _extend_frame(
@@ -144,7 +143,7 @@ relative to the state. `stats.basis` and `stats.weights` are the Arnoldi vectors
 weights, the last vector the active frontier: what a later round recycles. With `recycled` only
 the complement of the previous solve's input is extended ([`_krylov_basis`](@ref)).
 
-`fixed_depth = m > 0` is the conventional-control ablation (plan Figs. 2 and 4): exactly `m` steps,
+`fixed_depth = m > 0` is the conventional-control ablation: exactly `m` steps,
 every new local direction appended (numerical floor only), no weight stop; `met` then reports
 whether the weight had fallen to the allowance by depth `m`.
 """
@@ -237,7 +236,7 @@ function _merge_frame(frame, other_frame, side::Symbol)
     return first(_extend_frame(frame, residual, other_frame, side, 1.0, 0.0))
 end
 
-"Fold one `_krylov_enrich` verdict into the step ledger (plan §8 Krylov diagnostics)."
+"Fold one `_krylov_enrich` verdict into the step ledger's Krylov diagnostics."
 function _record_krylov!(ledger::Union{Nothing,AdaptiveLedger}, st, alloc::BasisAllocation)
     ledger === nothing && return nothing
     ledger.max_krylov_c = max(ledger.max_krylov_c, st.eta_c)

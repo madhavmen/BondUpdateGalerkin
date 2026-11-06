@@ -71,7 +71,7 @@ function _resolve_step_options(
             ),
         )
     end
-    # Plan §1 signature: `maxdim = 128`.
+    # Default `maxdim = 128`.
     maxdim = something(maxdim, 128)
     return (
         site_count = site_count,
@@ -105,7 +105,7 @@ end
     _close_root_frontiers!(frames, psi, mpo, root_start, tau, alloc, expansion_settings, expanded,
                            ledger; kwargs...) -> Union{Nothing,NamedTuple}
 
-The general-order stage (plan: krylov_closure_cbe_bug_realtime_L16_plan.md). The half-sweeps
+The general-order stage. The half-sweeps
 closed the frontier j = 0 (`psi` itself). For `order > 1` the frontiers j = 1..order-1 of the ROOT
 generator are closed against the GLOBAL operator, growing `frames.left_frames` and `frames.right_frames` in place; the
 root environments and the root start vector come back rebuilt in the final frames, and the single
@@ -138,7 +138,7 @@ function _close_root_frontiers!(
     fold,
 )
     if order > 1
-        # Plan T4.1: the frontier sweeps expand by the same DD-QR CBE as the half-sweeps.
+        # The frontier sweeps expand by the same DD-QR CBE as the half-sweeps.
         closure_settings = merge(
             expansion_settings,
             (
@@ -202,7 +202,7 @@ end
 The `root_report` instrumentation of `cbe_bug_step!`: the energies before and after the root solve,
 the solve's report and, with `outside_residual = true`, the outside-Galerkin action of the evolved
 state. When that residual fails `tol_basis`, the frames are re-enriched by the evolved state's own
-frontier sweep and the root is re-solved (plan Task 1). `solve_with(operator, start)` is the step's
+frontier sweep and the root is re-solved. `solve_with(operator, start)` is the step's
 root solver; `root_seconds` (a `Ref`) accumulates the re-solves' time. Returns the possibly
 re-solved `root_start`/`root_result` and the root environments they live in.
 """
@@ -277,7 +277,7 @@ function _report_root!(
     residual_of(action, state) =
         action === nothing ? NaN : abs(tau) * action.bound / max(norm(state), eps())
     initial_residual = residual_of(outside, root_result)
-    # ── re-enrich and re-solve on the failing residual (plan Task 1) ──
+    # ── re-enrich and re-solve on the failing residual ──
     # The closure can meet its shares while the outside action fails: grow frames by the evolved
     # state's own sweep, re-solve the root until the defect fits, nothing is added, or the ceiling
     # binds.

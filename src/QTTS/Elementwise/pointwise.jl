@@ -1,7 +1,6 @@
 # Pointwise linear operations on QTT fields: scaling, conjugation, sums.
 #
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/qtt/qtt_cores.jl. `tt_density` follows with the
-# zip-up products (`products.jl`) it is built on.
+# `tt_density` is in `products.jl`, with the zip-up products it is built on.
 
 "`c A` (the scalar on site 1)."
 tt_scale(A::AbstractVector, c::Number) = [k == 1 ? c .* A[1] : copy(A[k]) for k in eachindex(A)]

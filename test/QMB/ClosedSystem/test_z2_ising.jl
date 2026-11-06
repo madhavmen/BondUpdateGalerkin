@@ -1,11 +1,10 @@
-# Moved from BUG-Julia@b155550:tests/BondUpdateBUG/test_z2_ising.jl: the local space, the states and
-# the analytic energy. Not moved: the L = 8 spectrum and the Z2-vs-:none quench (they run tdvp2,
-# a Baseline); test_tfim.jl pins the Hamiltonian against a dense reference instead.
+# The Z2 Ising local space, the states and the analytic energy; test_tfim.jl pins the Hamiltonian
+# against a dense reference.
 
 using Test, LinearAlgebra, Telum
 using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
 
-# Z2 SYMMETRY FOR THE TRANSVERSE-FIELD ISING MODEL.
+# Z2 symmetry for the transverse-field Ising model.
 #
 #     H = -J Σ Z_i Z_{i+1} - h Σ X_i
 #

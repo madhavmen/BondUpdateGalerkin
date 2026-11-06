@@ -1,7 +1,5 @@
 # Independent Heston references: the exponential-affine solution, the semi-analytic call price,
 # and the forward density's mass and affine moments.
-#
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/qtt/qtt_observables.jl (`heston_*`).
 
 """
     heston_riccati(p, a, b, tau; nsteps = 20000, discount = true) -> (B, C)

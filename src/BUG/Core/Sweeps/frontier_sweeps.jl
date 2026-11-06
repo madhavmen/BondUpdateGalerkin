@@ -1,5 +1,3 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/bug/frontier_sweeps.jl.
-
 # frontier_sweeps.jl: the two frontier half-sweeps (`_frontier_left`, `_frontier_right`) and the
 # polar re-orthonormalisation of the frames they grow. The sweep over both sides, the
 # measurements built on it and the closure loop live in `frontier_closure.jl`, included next.

@@ -1,4 +1,4 @@
-# Same-problem comparison of the second-order BUG step and two-site TDVP (implementation plan WP6).
+# Same-problem comparison of the second-order BUG step and two-site TDVP.
 #
 # Parity: one XX chain (U(1), open boundaries, J = 1), one Neel start, one time step, one rank cap,
 # and one per-cut truncation rule (`weight_tol` for TDVP2 is the BUG's own `tol_trunc` budget,

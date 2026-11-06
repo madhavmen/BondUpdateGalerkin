@@ -1,13 +1,12 @@
 # Dense QTT cores <-> the BUG state and operator types under `:none`.
 #
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/qtt/qtt_telum.jl. The leg templates come from
-# Telum's two-dimensional site space directly instead of a spin model's product state and local
-# space, which QTTS may not reference.
+# The leg templates come from Telum's two-dimensional site space directly, not from a spin model's
+# product state and local space, which QTTS may not reference.
 #
 # Under `:none` a TLArray is one dense block with `symm = ()`, so a core is wrapped by giving it the
 # `inds` of a tensor of the same role: a product-state site (state) or an `onsite_mpo` site
 # (operator). The arrows and tags are then exactly the solver's, and only the data are ours.
-# ⚠ The MPO stores the TRANSPOSE of the applied matrix (`mpo_product`: the ket contracts leg 2, the
+# The MPO stores the TRANSPOSE of the applied matrix (`mpo_product`: the ket contracts leg 2, the
 # output is leg 3), so an operator core `(w_l, out, in, w_r)` is stored as `(w_l, in, out, w_r)`.
 
 const _BIT_SPACE = Ref{Any}(nothing)

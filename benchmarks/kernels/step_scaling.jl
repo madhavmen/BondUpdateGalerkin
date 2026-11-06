@@ -1,4 +1,4 @@
-# Cost of one BUG step against the bond dimension (implementation plan Section 7: no unexplained
+# Cost of one BUG step against the bond dimension (no unexplained
 # scaling degradation in chi). The kernel baseline that performance PRs compare against.
 #
 # A Heisenberg chain is first evolved (untimed) until its bonds reach the cap, so every timed step

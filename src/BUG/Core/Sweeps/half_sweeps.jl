@@ -1,6 +1,4 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/bug/half_sweeps.jl.
-
-# ── the two half-sweeps of `cbe_bug_step!` (plan: StageBasisBuilder) ──
+# ── the two half-sweeps of `cbe_bug_step!` ──
 # Both only build bases (they never evolve a site tensor) and share no data, so they run
 # concurrently on their own gauges. `psi` stays L-canonical so `AL`, `AR` and the assembly read one
 # gauge; `copy` is safe because every mutation replaces a slot.
@@ -10,7 +8,7 @@
 
 Everything ONE half-sweep accumulates, held per half-sweep rather than in closure variables.
 
-⛔ THIS EXISTS BECAUSE THE HALF-SWEEPS CAN NOW RUN CONCURRENTLY. Counters shared between them
+This exists because the half-sweeps can now run concurrently. Counters shared between them
 (`nmv`, `epre`, the phase timers) are read-modify-write from two tasks, so as closure `Ref`s they
 are a data race -- and a racy `+=` on a Float64 does not crash, it silently loses increments, so
 the failure would show up as a profile that quietly under-reports and never as an error.
@@ -26,7 +24,7 @@ mutable struct _HalfAcc
     tsplit::Float64
     tframe::Float64
     tenv::Float64
-    kc::KernelCounters      # this half-sweep's kernel counters (plan T1.4)
+    kc::KernelCounters      # this half-sweep's kernel counters
 end
 # An empty accumulator: zero counts and timers, fresh kernel counters.
 _HalfAcc() = _HalfAcc(0, 0, 0.0, 0.0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, KernelCounters())
@@ -69,7 +67,7 @@ end
 
 """
 Time one bond expansion into the half-sweep's own accumulator: `side`'s frame grows by the step's
-strategy (`expand_frame`; DD-QR CBE by default, plan T2.4) into the bond's own `ledger`;
+strategy (`expand_frame`; DD-QR CBE by default) into the bond's own `ledger`;
 `nn[bond]` records what it admitted. Returns the expansion.
 """
 function _expand_bond!(
@@ -220,7 +218,7 @@ function _half_left!(
         built_frame = _frame_from(carried_site, psiL[bond+1]);
         acc.tframe += (time_ns() - frame_start) / 1e9;
         built_frame)
-        bondlg = AdaptiveLedger()                               # this bond's own ledger (§8)
+        bondlg = AdaptiveLedger()                               # this bond's own ledger
         ex = _expand_bond!(
             acc,
             cx,
@@ -234,7 +232,7 @@ function _half_left!(
             rng,
         )
         _peak!(acc, held + _state_stored(psiL), ex.U_ex, ex.V_ex)
-        # ── STAGE 3 (plan §4): THE FRAME GROWS FROM `U_ex` BY TESTS C/D ─────────────────
+        # ── stage 3: the frame grows from `U_ex` by Tests C/D ──────────────────────────────
         # The CBE frame is KEPT (old directions verbatim, CBE directions reused) and a Krylov
         # direction is appended only when its weighted residual outside the frame matters.
         # The right site projected onto the expanded right isometry, then joined to the left one.
@@ -331,7 +329,7 @@ function _half_right!(
         built_frame = _frame_from(psiR[bond], carried_site);
         acc.tframe += (time_ns() - frame_start) / 1e9;
         built_frame)
-        bondlg = AdaptiveLedger()                               # this bond's own ledger (§8)
+        bondlg = AdaptiveLedger()                               # this bond's own ledger
         ex = _expand_bond!(
             acc,
             cx,

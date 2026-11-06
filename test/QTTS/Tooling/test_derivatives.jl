@@ -1,7 +1,6 @@
-# Derivative MPOs and 2D operator assembly against dense stencils (implementation plan WP5).
+# Derivative MPOs and 2D operator assembly against dense stencils.
 #
-# From BUG-Julia@b155550:tests/sweeps/test_qtt_task1.jl, U01's periodic-shift wrap and U02's
-# stencil, coordinate and mixed-derivative checks, plus a second-order convergence check of the
+# The periodic-shift wrap, the stencil, coordinate and mixed-derivative checks, plus a second-order convergence check of the
 # one-sided boundary stencils on a smooth function.
 
 using Test, LinearAlgebra

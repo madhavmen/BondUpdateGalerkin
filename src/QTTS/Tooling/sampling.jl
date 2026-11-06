@@ -1,7 +1,6 @@
 # Normalisation in the physical quadrature and selective sampling of QTT fields.
 #
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/qtt/qtt_observables.jl (`qtt_normalize!`,
-# `qtt_sample`). Physical quantities use the discrete L2 inner product with the weight `dx dy` kept
+# Physical quantities use the discrete L2 inner product with the weight `dx dy` kept
 # outside the cores; large fields are read point by point, never densified.
 
 "Rescale `psi` in place so that `dx dy sum |psi|^2 = N`."

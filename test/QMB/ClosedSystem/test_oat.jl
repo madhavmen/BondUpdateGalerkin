@@ -1,6 +1,5 @@
-# Moved from BUG-Julia@b155550:tests/sweeps/test_oat.jl: the analytic operator checks (the closed
-# MPO against pair_mpo's automaton and the dense (sum S^z)^2/2) and the initial state. Not moved:
-# the closed-form reference (needs tests/common/analytic_reference.jl) and the integrator runs.
+# One-axis twisting: the analytic operator checks (the closed MPO against pair_mpo's automaton and
+# the dense (sum S^z)^2/2) and the initial state.
 
 using Test, LinearAlgebra
 using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
@@ -46,7 +45,7 @@ end
     up = product_state(fill(:up, L))
     @test all(abs.(sx_profile(copy(up))) .< 1e-12)        # ⟨↑|S^x|↑⟩ = 0
 
-    # ⛔ The :none-only guards must THROW rather than return a symmetric zero.
+    # The :none-only guards must THROW rather than return a symmetric zero.
     set_symmetry!(:U1)
     @test_throws ArgumentError x_polarized_state(L)
     @test_throws ArgumentError sx_operator()

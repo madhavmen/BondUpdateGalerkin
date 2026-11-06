@@ -13,7 +13,6 @@
 # Expected output: one line per sample time with both errors and both maximum bonds, then
 # `DOMAIN-WALL-OK` (exit code 0) when both stay within 1e-3 of the exact answer. With OUTPUT_DIR,
 # the table is written to OUTPUT_DIR/xx_domain_wall.csv. Defaults: L = 16, T = 4, dt = 0.05.
-# Ported from BUG-Julia@b155550:examples/xx_domain_wall.jl.
 
 using LinearAlgebra
 using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB, BondUpdateGalerkin.Baselines

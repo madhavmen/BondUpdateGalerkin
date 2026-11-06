@@ -1,17 +1,12 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/expansion/dd_cbe.jl,
-# src/RSVDCBEBondUpdate/expansion/dd_cbe_controller.jl.
-
 # DD-QR CBE controllers, which decide how many probe columns one side of a bond needs: the
 # incremental D1 sketch controller (`_dd_controller`) and the D3 hybrid predictor controller
 # (`_dd_hybrid`, with its per-bond memory `DDMemory`). The probe and QR kernels they call
 # (`_dd_probe`, `_dd_select`) are in `dd_cbe.jl`; `dd_cbe_expand.jl` drives them for one side.
 
-# ── from src/RSVDCBEBondUpdate/expansion/dd_cbe_controller.jl ──
-
-# ── T3.1-T3.4: the incremental DD sketch controller ───────────────────────────────────────
+# ── the incremental DD sketch controller ──────────────────────────────────────────────────
 
 """
-Plan T3.3: the default independent holdout width `holdout_width` (the plan's `s`; an
+The default independent holdout width `holdout_width` (`s`; an
 implementation constant; tests 2, 4, 8).
 """
 const _DD_HOLDOUT = 4
@@ -134,7 +129,7 @@ function _dd_controller(
     end
 end
 
-# ── QTT plan §1.2 / §1.2A, arm D3: the hybrid predictor controller ────────────────────────
+# ── arm D3: the hybrid predictor controller ───────────────────────────────────────────────
 
 "Bounded oversampling of D3's first block over its predictor: `clamp(cld(pred, 4), 4, 8)` columns."
 _dd_oversample(pred::Int) = clamp(cld(pred, 4), 4, 8)
@@ -146,7 +141,7 @@ Per-bond memory of the D3 hybrid controller (`dd_policy = :hybrid`): the directi
 time at `(side, bond)` -- the PREDICTOR of the next first block, never a correctness condition --
 and one trace entry per call (`bond`, `side`, `branch`, `ell`, `s`, `retries`, `m`, `n`, `added`,
 `streamed`, `status`; `m`, `n` are the discarded dimensions of this side and of the probe side)
-for the first-impressions report (plan §1.2A: reported for every sampled bond). Locked, since the
+for the first-impressions report (reported for every sampled bond). Locked, since the
 two half-sweeps may run concurrently.
 """
 mutable struct DDMemory
@@ -174,7 +169,7 @@ end
                initial_width, wcap, cap, self_discarded, probe_discarded, alloc, ledger;
                pred, rng, kc, holdout_width) -> (dd_basis, status, record)
 
-Arm D3 of plan §1.2A, on the same `X = mat(F(psi))`, frames and DD-QR kernels as D1:
+Arm D3, on the same `X = mat(F(psi))`, frames and DD-QR kernels as D1:
 
 1. PREFLIGHT. `self_discarded` (`m`) and `probe_discarded` (`n`) are the discarded dimensions of
    this side and of the probe side. With `s = holdout_width`, when

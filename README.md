@@ -72,7 +72,7 @@ stage-solver statistics, the frame audits and timings.
 
 - `docs/`: the manual (`julia --project=docs docs/make.jl` after instantiating `docs/`).
 - `examples/`: runnable scripts, each checked against an exact or independent reference.
-- `docs/dev/`: the implementation plan, interface contracts and the migration map from BUG-Julia.
+- `docs/dev/`: developer notes and the interface contracts.
 
 ## Tests
 
@@ -83,8 +83,8 @@ julia --project -e 'using Pkg; Pkg.test()'
 ## Reproducibility
 
 The randomised expansion draws from a seeded stream owned by the step (`rng` keyword); the same
-inputs give the same result on the same machine. Regression fixtures frozen from BUG-Julia
-`b155550` are in `test/fixtures/b155550` with the versions they were made with.
+inputs give the same result on the same machine. The frozen regression fixtures are in
+`test/fixtures/b155550`, with the versions they were made with.
 
 ## Contributing
 

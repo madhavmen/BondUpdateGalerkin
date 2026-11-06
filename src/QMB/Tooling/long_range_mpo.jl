@@ -1,6 +1,5 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/operators/mpo.jl.
-
-# ── from src/RSVDCBEBondUpdate/operators/mpo.jl ──
+# Long-range two-body MPOs: explicit long-range terms and power-law couplings fitted by sums of
+# exponentials.
 
 """
     LongRangeTerm(left, right, coeff, decay)

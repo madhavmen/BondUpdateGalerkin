@@ -1,8 +1,6 @@
 # The essential checks of the quantum-jump engine on a 4-site chain, against dense operators.
 #
-# Written for PR 6b in place of BUG-Julia@b155550:tests/sweeps/test_dissipative_t4.jl, whose J0/U13
-# sets need a 454-line fixture file, tdvp2 (a Baseline) and an 80-trajectory ensemble. What stays
-# pinned: a site-emission jump is sqrt(gamma_j) sigma^-_j on the dense state (through BUG's
+# Pinned: a site-emission jump is sqrt(gamma_j) sigma^-_j on the dense state (through BUG's
 # `factor_product` with QMB's `SiteOp` method and through `apply_jump`), its weight is the jumped
 # state's squared norm, the weights add up to the no-jump decay operator Q, and a seeded trajectory
 # is reproducible with normalised conditional states.

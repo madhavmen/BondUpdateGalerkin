@@ -1,8 +1,7 @@
 # QTT fields: sampled functions through every ordering, separable embedding, and the round trip
 # through the BUG state type in several gauges.
 #
-# Moved from BUG-Julia@b155550:tests/sweeps/test_qtt_task1.jl (U01, indexing and round trips). The
-# periodic-shift wrap of U01 is checked in test_operators.jl with an independently built shift.
+# The periodic-shift wrap is checked in test_operators.jl with an independently built shift.
 
 using Test, LinearAlgebra
 using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QTTS

@@ -1,6 +1,4 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/bug/krylov_enrich.jl,
-# src/RSVDCBEBondUpdate/bug/krylov_closure.jl, src/RSVDCBEBondUpdate/bug/krylov_closure_loop.jl.
-# krylov_frontier_bonds.jl: one frontier bond of a closure sweep -- prescribed-isometry frames,
+# One frontier bond of a closure sweep -- prescribed-isometry frames,
 # leaks, the bond action, concurrent bond measurements, and the frontier CBE.
 
 """
@@ -113,7 +111,7 @@ end
 """
     _bond_measurements(Fm, mpo, fr, chain, stack, side; expansion, fold, nsample, rng) -> Vector
 
-A MEASURING half-sweep's bonds, CONCURRENTLY (parallel plan (b)). With the frames fixed, the only
+A MEASURING half-sweep's bonds, CONCURRENTLY. With the frames fixed, the only
 bond-to-bond dependency is the carry (`C = W[i]' K` on the left, `D = B Z[j]'` on the right): a
 cheap sequential chain. Each bond's frame, two-site action and leak (~1/3 of a measuring sweep,
 `_bond_action`) then depend on nothing else, so they run one task per bond, each with its own RNG
@@ -206,7 +204,7 @@ function _bond_measurements(
     return out
 end
 
-"How many charge sectors `new` carries on `leg` that `old` did not (plan §3.5)."
+"How many charge sectors `new` carries on `leg` that `old` did not."
 function _new_sectors(old, new, leg::Int)
     have = Set(first(sector) for sector in old.spaces[leg])
     return count(sector -> !(first(sector) in have), new.spaces[leg])
@@ -215,7 +213,7 @@ end
 """
     _frontier_expand(frame, mpo, bond, lch, rch, side, ckw, ledger, rng) -> CBEExpansion
 
-A frontier bond's CBE (plan T4.1): `side`'s frame grows by [`expand_frame`](@ref) with the
+A frontier bond's CBE: `side`'s frame grows by [`expand_frame`](@ref) with the
 step's strategy `ckw.expansion`, exactly as in the half-sweeps, so the Krylov stage after it
 starts from those directions. `ckw` carries `cbe_bug_step!`'s expansion settings.
 """

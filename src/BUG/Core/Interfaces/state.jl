@@ -1,5 +1,5 @@
-# The state contract every tensor-train state implements (implementation plan, Section 3.2).
-# docs/dev/interfaces.md holds the contract table; test/BUG/Core/Interfaces runs one conformance
+# The state contract every tensor-train state implements. docs/dev/interfaces.md holds the
+# contract table; test/BUG/Core/Interfaces runs one conformance
 # suite against every state type.
 #
 # Copy semantics: `copy(psi)` copies the site-tensor vector and shares the tensors. That is safe

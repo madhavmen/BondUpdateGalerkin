@@ -1,5 +1,3 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/operators/mpo_env.jl.
-
 # MPO environments (Eq. 1.8), the two-site effective Hamiltonian (Eq. 1.7) and the link-leg and
 # streamed two-site contractions the Core sweeps share. Included right after
 # `Core/TensorNetworks/mpo.jl`, whose `MPO` type the signatures here use.
@@ -246,10 +244,10 @@ end
 
 The exact energy variance `<H^2> - <H>^2` of the NORMALISED state, `<H^2> = <psi|H H|psi>` from a
 two-layer MPO environment (no `H^2` MPO is formed). The accuracy measure a ground state carries
-where exact diagonalisation is out of reach (simulation_plan_2 Task 4): zero exactly on an
+where exact diagonalisation is out of reach: zero exactly on an
 eigenstate, and `variance / gap` bounds the energy error.
 
-⚠ A difference of two `O(E^2)` numbers: its floor is `~eps * E^2`, i.e. ~1e-13 at `E ~ 30`.
+A difference of two `O(E^2)` numbers: its floor is `~eps * E^2`, i.e. ~1e-13 at `E ~ 30`.
 """
 function mpo_variance(psi::SymMPS, mpo::MPO)
     site_count = length(psi)

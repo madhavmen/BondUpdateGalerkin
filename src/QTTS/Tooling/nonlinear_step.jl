@@ -1,6 +1,6 @@
 # One rank-adaptive BUG step of a nonlinear flow on QTT states.
 #
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/qtt/qtt_flows.jl (`qtt_bug_step!`). The basis
+# The basis
 # comes from the BUG engine (`cbe_bug_step!` with `frames_report`), the root from the generic stage
 # solver (`rk_stage_solve`); this file holds the QTT glue (dense frames, keep states, compression).
 

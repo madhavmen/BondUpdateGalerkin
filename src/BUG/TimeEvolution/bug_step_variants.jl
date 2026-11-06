@@ -7,7 +7,7 @@
 """
     parallel_kls_step!(psi, mpo, tau; schedule = :concurrent, kwargs...) -> CBEBugSweepInfo
 
-ONE step of the fully parallel K/L/S integrator (plan Task 6): the preliminary half-sweeps (and,
+ONE step of the fully parallel K/L/S integrator: the preliminary half-sweeps (and,
 for `order = p > 1`, the frontier closure) of [`cbe_bug_step!`](@ref), then the K, L and root S
 equations from `psi` in those frames, the four-block reconstruction and the one compression.
 Takes `cbe_bug_step!`'s normal-API keywords. `schedule` is `:sequential` (K, L, then S),
@@ -18,7 +18,6 @@ the omitted block `missing` and whether the step fell back to the standard augme
 parallel_kls_step!(psi::SymMPS, mpo, tau; schedule::Symbol = :concurrent, kwargs...) =
     cbe_bug_step!(psi, mpo, tau; kwargs..., kls = schedule)
 
-# From BUG-Julia@b155550:src/RSVDCBEBondUpdate/qtt/qtt_flows.jl.
 "Overwrite `psi` with the tensors and gauge centre of `src` (same length)."
 function _replace_state!(psi::SymMPS, src::SymMPS)
     length(psi) == length(src) ||

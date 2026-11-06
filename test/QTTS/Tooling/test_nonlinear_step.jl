@@ -1,9 +1,9 @@
-# The nonlinear QTT BUG step (implementation plan WP5): a convergence test on an exact nonlinear
+# The nonlinear QTT BUG step: a convergence test on an exact nonlinear
 # solution, the order lost by a frozen density, and the frozen b155550 QTT runs (Heston backward
 # pricing, GP real time and ground state).
 #
-# From BUG-Julia@b155550:tests/sweeps/test_qtt_task2.jl V02 (plane wave, cut to order 2 and two step
-# sizes) and the fixtures `qtt_heston_backward`, `qtt_gp` of docs/dev/tools/make_fixtures_b155550.jl.
+# The plane wave runs at order 2 and two step sizes; the frozen runs are the fixtures
+# `qtt_heston_backward` and `qtt_gp` of docs/dev/tools/make_fixtures_b155550.jl.
 
 using Test, LinearAlgebra
 import JSON

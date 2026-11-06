@@ -1,8 +1,5 @@
 # Implicit Runge-Kutta stage equations in the root space of a BUG step.
 #
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/qtt/qtt_flows.jl (`reduced_field`,
-# `reduced_jacobian`, `RK_TABLEAUX`, `rk_stage_solve`, `_gmres_real`, `_pack`, `_unpack`).
-#
 # The root space is spanned by the Galerkin frames of a step: left isometries W and right isometries
 # Z, so a root matrix Y (r_L x r_R) is the state W Y Z. The stage solver only needs the frame
 # interface below; a state representation (the dense QTT cores of QTTS) implements it. Stage

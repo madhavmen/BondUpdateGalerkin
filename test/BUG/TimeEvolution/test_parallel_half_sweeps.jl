@@ -1,5 +1,4 @@
-# Moved from BUG-Julia@b155550:tests/sweeps/test_adaptive_parallel.jl, cut down to run in seconds:
-# L = 6 instead of 10, two steps instead of four, and the ordinary, midpoint and order-2 schemes
+# Parallel against serial half-sweeps, sized to run in seconds: L = 6, two steps, and the ordinary, midpoint and order-2 schemes
 # (order 4 is the same frontier code as order 2).
 #
 # `parallel = true` runs the two half-sweeps as two tasks. It must be the SAME METHOD as the serial

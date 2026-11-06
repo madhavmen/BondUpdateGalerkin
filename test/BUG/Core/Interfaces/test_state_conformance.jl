@@ -1,4 +1,4 @@
-# State-contract conformance (implementation plan WP2; docs/dev/interfaces.md). The same checks run
+# State-contract conformance (docs/dev/interfaces.md). The same checks run
 # against every state type and symmetry; a new state type is added to `conformance_states` and
 # must pass unchanged. A QTT field state is a no-symmetry `SymMPS`, so it runs under `:none`.
 

@@ -1,6 +1,4 @@
-# Moved from BUG-Julia@b155550:tests/common/liouville_fixtures.jl.
-
-# tests/common/liouville_fixtures.jl -- dense Liouvillian references and the XX / Bose-Hubbard
+# Dense Liouvillian references and the XX / Bose-Hubbard
 # Lindblad models of the MPDO tests.
 
 # ── dense references, written from the textbook formulas ───────────────────────────────────────

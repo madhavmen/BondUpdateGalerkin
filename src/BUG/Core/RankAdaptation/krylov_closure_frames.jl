@@ -1,9 +1,5 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/bug/krylov_enrich.jl,
-# src/RSVDCBEBondUpdate/bug/krylov_closure.jl, src/RSVDCBEBondUpdate/bug/krylov_closure_loop.jl.
-# krylov_closure_frames.jl: the K/L frames of the order-p closure, their shared environment
+# The K/L frames of the order-p closure, their shared environment
 # caches, and the projections of the state and its frontiers onto them.
-
-# ── from src/RSVDCBEBondUpdate/bug/krylov_closure.jl ──
 
 # ── GENERAL-ORDER KRYLOV CLOSURE (order-p condition) ──
 # The order-p error is O(|tau|^(p+1)) once `(I - P) A B^j psi = 0` for j < p, with B = P A P.
@@ -89,7 +85,7 @@ end
     _side_cache!(fr, Fm, mpo, side) -> (chain, stack)
 
 The environments of one half-sweep that do not depend on the frontier, built once per frame
-generation. ⛔ EVERY FRONTIER OF A GENERATION IS `(W ⊗ Z) core` WITH ONLY THE CORE DIFFERENT, so
+generation. Every frontier of a generation is `(W ⊗ Z) core` with only the core different, so
 re-gauging `Fm` to site 1 (left half) changes sites `1..c` only: the right stack on links
 `c+1..L+1` and the frame chain `<W[1..i-1]| H |W[1..i-1]>` (the non-enriching sweep's `lch`)
 are the same for every frontier. Rebuilding them per sweep was ~1/3 of a measuring sweep
@@ -288,7 +284,7 @@ function _projection_miss(psi::SymMPS, left_frames, right_frames, root_link::Int
     return sqrt(miss2)
 end
 
-"`S = (W ⊗ Z)' psi`, the root coefficients of `P psi` (plan: `project_root`)."
+"`S = (W ⊗ Z)' psi`, the root coefficients of `P psi`."
 _project_root(psi::SymMPS, fr::KLFrames) = to_concrete!(
     contract(
         _overlap_left(psi, fr.left_frames, fr.root_link),
@@ -298,7 +294,7 @@ _project_root(psi::SymMPS, fr::KLFrames) = to_concrete!(
     ),
 )
 
-"`B = P H P` at the root, from the frames' cached environments (plan: `root_generator`)."
+"`B = P H P` at the root, from the frames' cached environments."
 _root_generator(mpo, fr::KLFrames) = shift_h(
     zero_site_h(
         mpo,

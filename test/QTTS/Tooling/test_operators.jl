@@ -1,5 +1,5 @@
 # Dense against TT operators on small 1D and 2D grids, in grouped and interleaved layouts
-# (implementation plan WP2), and the BUG MPO applying the same matrix as the dense cores.
+# and the BUG MPO applying the same matrix as the dense cores.
 #
 # The references are written row by row on the grid index (axis 1 fastest) and share no code with
 # the core algebra: a wrong placement by the ordering shows up as a wrong matrix.

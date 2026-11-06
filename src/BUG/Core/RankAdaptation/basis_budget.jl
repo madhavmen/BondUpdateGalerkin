@@ -1,4 +1,5 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/budget/adaptive_budget.jl.
+# The tolerance budget of a step: the budget object, its allocation across the step's stages, the
+# work ceiling, and the ledger that records every check against it.
 
 """
     AdaptiveBudget(basis, trunc, expv)
@@ -57,7 +58,7 @@ scale 1, a pure closure question.
 `krylov` is the tolerance Tests C/D (the recycled local Krylov directions) are apportioned from, by
 the same rule; `nothing` is `budget.basis`. On a nonlocal generator the Krylov stage alone fills the
 trial frame to the work ceiling (dr6ta: ~4000 Krylov vs ~0 DD directions per step), so it is tuned
-on its own (USER 2026-10-27).
+on its own.
 """
 function basis_allocation(
     budget::AdaptiveBudget,
@@ -111,14 +112,14 @@ normal, healthy step.
 """
 mutable struct AdaptiveLedger
     max_sample::Float64          # worst Test B indicator over the step, either side
-    max_sample_l::Float64        # ...left expansions only (plan §8 `B_left`)
-    max_sample_r::Float64        # ...right expansions only (plan §8 `B_right`)
+    max_sample_l::Float64        # ...left expansions only (`B_left`)
+    max_sample_r::Float64        # ...right expansions only (`B_right`)
     max_tail::Float64            # worst Test A indicator
     max_krylov::Float64          # worst Test C/D indicator
     max_krylov_c::Float64        # worst Test C (first Krylov direction vs the CBE frame)
     max_krylov_d::Float64        # worst Test D (later Krylov directions vs the grown frame)
     # The final compression's RELATIVE CUMULATIVE discarded norm, `sqrt(sum_b w_b) / ||psi||`
-    # over every bond it cut -- the quantity `tol_trunc` bounds (plan §5, UT14). Not the
+    # over every bond it cut -- the quantity `tol_trunc` bounds. Not the
     # largest single bond's weight, which `CBEBugSweepInfo.discarded` still reports.
     discarded::Float64
     expv_err::Float64            # worst root `expv` error estimate (Saad, rel. to the root start)
@@ -128,27 +129,27 @@ mutable struct AdaptiveLedger
     n_krylov::Int                # Krylov directions appended
     n_h1::Int                    # one-site H applications
     n_targeted::Int              # sectors Test B widened after a failed holdout
-    # Plan §8: how often Test C finds CBE already captures the first one-site action, and how
-    # often Test D must still grow the frame although Test C passed (the UT08 case).
+    # How often Test C finds CBE already captures the first one-site action, and how
+    # often Test D must still grow the frame although Test C passed.
     n_c_pass::Int
     n_d_after_c::Int
     workcap_reached::Bool
     tolerance_met::Bool
     # `maxdim` cut a bond of the final compression past the rank its `tol_trunc` share asked
-    # for. Reported even when the cumulative total still fits (plan §7 UT14: a rank-cap
+    # for. Reported even when the cumulative total still fits (a rank-cap
     # violation is reported, not masked).
     maxdim_reached::Bool
-    # Plan §5/§8 `state_projection_error`: `||(1 - P) psi|| / ||psi||` for the frames the root
+    # `state_projection_error`: `||(1 - P) psi|| / ||psi||` for the frames the root
     # solve integrates in. Zero up to roundoff on the ordinary step (the frames contain `psi`);
     # on the midpoint step's second stage it measures how well the half-step frames hold the
     # ORIGINAL state, and it is charged against `tol_basis`.
     proj_err::Float64
-    # Plan §8 `r_old`, `r_augmented`, `r_final`: largest bond rank before the step, of the
+    # `r_old`, `r_augmented`, `r_final`: largest bond rank before the step, of the
     # trial space (half-sweep frames), and after the final compression.
     r_old::Int
     r_aug::Int
     r_final::Int
-    # Plan §8 `root_expv_iterations`: operator applications of the root solve (all substeps).
+    # `root_expv_iterations`: operator applications of the root solve (all substeps).
     expv_iters::Int
     # WHICH checks failed, so `:budget_unmet` comes with a reason (see `budget_diagnostic`):
     # `:sample` (Test B), `:tail` (Test A), `:krylov` (Tests C/D), `:trunc` (final
@@ -157,11 +158,11 @@ mutable struct AdaptiveLedger
     unmet::Vector{Symbol}
     # One entry per Test B verdict (per bond and side): `(side, est, relunc, per, holdout,
     # sketch)` -- the indicator, a bound on its relative sampling error, each sector's scaled
-    # indicator, and the holdout and sketch columns per sector. Plan §3 asks for sector-resolved
-    # estimates WITH their uncertainty, and §8 for `n_reachable_sectors`/`probes_per_sector`;
-    # a step-level maximum cannot say which sector or how sure.
+    # indicator, and the holdout and sketch columns per sector: sector-resolved estimates with
+    # their uncertainty, `n_reachable_sectors` and `probes_per_sector`, since a step-level maximum
+    # cannot say which sector or how sure.
     sample_log::Vector{Any}
-    # Plan §8 "track by bond and timestep": one entry per half-sweep bond visit, written by
+    # Tracked by bond and timestep: one entry per half-sweep bond visit, written by
     # `_log_bond!` -- the bond's own Test A/B/C/D indicators, its counts, its verdict, the
     # width of the frame it produced (`r_augmented`), and the reachable sectors with their
     # probes; after the compression `cbe_bug_step!` adds `r_old`, `r_final` and that bond's
@@ -183,7 +184,7 @@ mutable struct AdaptiveLedger
     # newly occupied sectors, bonds skipped by the leak gate.
     closure_log::Vector{Any}
     t_closure::Float64
-    n_compress::Int              # final `root_out` compressions (plan: exactly one per step)
+    n_compress::Int              # final `root_out` compressions (exactly one per step)
     # The same frontiers measured on the frames the half-sweeps built, BEFORE any closure
     # enrichment: what the ordinary CBE + local-Krylov step already captures. `leak_initial` is
     # time-weighted like `leak`; `rho_initial[j]` is scale-free, `||(I - P) A F_j|| / ||F_j||`
@@ -191,7 +192,7 @@ mutable struct AdaptiveLedger
     # 1`.
     leak_initial::Vector{Float64}
     rho_initial::Vector{Float64}
-    # Plan Task 6: the parallel K/L/S step's account (`_kls_finish`), `nothing` on every other step.
+    # The parallel K/L/S step's account (`_kls_finish`), `nothing` on every other step.
     kls::Any
 end
 
@@ -259,7 +260,7 @@ end
     budget_status(ledger) -> Symbol
 
 `:met` when every basis, compression and projection check of the step passed its share of
-the budget, `:budget_unmet` otherwise (plan §1). `nothing` (the legacy path, which makes no
+the budget, `:budget_unmet` otherwise. `nothing` (the legacy path, which makes no
 tolerance claim) gives `:legacy`. [`budget_diagnostic`](@ref) says which check failed and
 what to change.
 """
@@ -270,7 +271,7 @@ budget_status(ledger::AdaptiveLedger) = ledger.tolerance_met ? :met : :budget_un
     budget_diagnostic(ledger) -> String
 
 A one-line account of a `:budget_unmet` step: the failed checks with their worst indicators,
-and the retry that addresses each (plan §1 "retry diagnostic"). Empty when the budget held.
+and the retry that addresses each. Empty when the budget held.
 """
 function budget_diagnostic(ledger::AdaptiveLedger)
     ledger.tolerance_met && return ""
@@ -415,21 +416,21 @@ discovers rank-`r'` structure. It may not grow without bound, which an uncapped 
 does on bonds whose singular values never decay. The policy `max(d*maxdim, d*r, 1)` admits the
 whole one-site space a rank-`maxdim` frame reaches (`d*maxdim` directions, which is also the
 two-site space TDVP2 keeps), and the `d*r` floor stops a bond already above `maxdim` from being
-frozen. USER 10-28: `d`, not 2 -- at the d = 4 Hubbard site `2*maxdim` held A1 at the ceiling on
-every step whatever `tol_krylov` (dq7a). It is a tuned policy, not a theorem; `workcap_reached` in
-the ledger reports when it binds.
+frozen. The factor is `d`, not 2: at the d = 4 Hubbard site `2*maxdim` held the A1 benchmark at
+the ceiling on every step whatever `tol_krylov`. It is a tuned policy, not a theorem;
+`workcap_reached` in the ledger reports when it binds.
 """
 work_ceiling(maxdim::Int, bond_rank::Int, site_dim::Int = 2) =
     max(site_dim * maxdim, site_dim * bond_rank, 1)
 
 """
 The adaptive search's STARTING width schedule (`budget = ceil(growth*dmax) - r`, probe `1.2x` that).
-USER 2026-10-16: 1.2, not the legacy 2.0 -- at 2.0 the first probe is ~1.2chi columns against a
+1.2, not 2.0: at 2.0 the first probe is ~1.2chi columns against a
 local space of 2chi, so the RSVD starts as wide as the space it sketches. Only a start: Test B
 widens a side that fails (`_certified_range(...; thin = true)`). `cbe_expand`'s own default
 (2.0) is the fixed-count selection of the TDVP-CBE baselines.
 """
 const ADAPTIVE_GROWTH = 1.2
 
-"Default tolerances of the normal API. Plan §1; starting settings, not certified bounds."
+"Default tolerances of the normal API: starting settings, not certified bounds."
 const TOL_DEFAULTS = (basis = 1e-5, trunc = 1e-7, expv = 1e-10)

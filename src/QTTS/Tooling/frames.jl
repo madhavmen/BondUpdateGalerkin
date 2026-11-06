@@ -1,7 +1,6 @@
 # The root space of a BUG step on dense QTT cores: the frame interface of the stage solver.
 #
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/qtt/qtt_flows.jl (`QTTFrames`, `frame_*`, and
-# the dense contractions `_tc`, `_env_left`, `_env_right`, `_op_expect` they use). The stage solver
+# The stage solver
 # (`BUG/TimeEvolution/stage_solvers.jl`) only calls the frame interface; these methods implement it
 # for dense cores under `:none`. Everything is `O(L chi^3 w)`; no `2^L` object is formed.
 

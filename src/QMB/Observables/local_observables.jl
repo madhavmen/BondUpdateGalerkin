@@ -1,6 +1,4 @@
 # Site expectation values and the S^z observables of spin-1/2 states.
-#
-# Moved from BUG-Julia@b155550:src/BondUpdateBUG/symmetric_mps_canonical.jl.
 
 """
     site_expval(psi, j, O) -> ComplexF64

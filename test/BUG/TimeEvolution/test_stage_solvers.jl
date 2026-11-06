@@ -1,6 +1,6 @@
-# The implicit Runge-Kutta stage solver in the root space (implementation plan WP3/WP5).
+# The implicit Runge-Kutta stage solver in the root space.
 #
-# From BUG-Julia@b155550:tests/sweeps/test_qtt_task2.jl V01 (stage-solver part): in complete frames
+# In complete frames
 # the Galerkin stage solve is the full RK map, so on a linear flow the trapezoid and the two Radau
 # IIA methods must reproduce their stability functions R(h G) applied to the state exactly, with
 # and without the linear-part preconditioner, in real and in imaginary time. The frames are the

@@ -1,8 +1,5 @@
 # Elementwise products and the compressed operator application of QTT functions.
 #
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/qtt/qtt_cores.jl (`tt_hadamard`, `tt_density`,
-# `tt_product`, `op_zipup` and their zip-up kernels).
-#
 # A zip-up contracts and truncates site by site, left to right, over a right-canonical copy of the
 # input, so the exact `chi_A chi_B` (or `w chi`) cores are never formed. Each bond's discarded
 # singular values add to an error bound; the build is repeated once at a tighter cut if the bound

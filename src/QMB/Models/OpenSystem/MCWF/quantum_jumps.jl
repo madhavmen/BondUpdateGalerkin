@@ -1,10 +1,6 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/bug/quantum_jumps.jl.
-
-# ── from src/RSVDCBEBondUpdate/bug/quantum_jumps.jl ──
-
-# ── QUANTUM-JUMP TRAJECTORIES (dissipative_cbe_bug_implementation_plan.md, Task 4) ──
+# ── quantum-jump trajectories ──
 # A trajectory is an unnormalised no-jump segment `dψ/dt = Gψ` until the survival `||ψ||^2` reaches a
-# random threshold `u`, then a jump `ψ <- L_μ ψ / ||L_μ ψ||` with `p_μ ∝ ||L_μ ψ||^2` (plan eq. 8).
+# random threshold `u`, then a jump `ψ <- L_μ ψ / ||L_μ ψ||` with `p_μ ∝ ||L_μ ψ||^2`.
 # The segment is renormalised every step and its log survival carried explicitly, so the threshold
 # test is exact and never underflows. The step is any no-jump integrator, BUG by default.
 
@@ -69,13 +65,13 @@ end
 """
     step_doubling_error(full, half, p = 3) -> Float64
 
-Plan eq. (7): `||Φ_h ψ - Φ_{h/2} Φ_{h/2} ψ|| / (1 - 2^-p)`, the full step's error estimated from the
+`||Φ_h ψ - Φ_{h/2} Φ_{h/2} ψ|| / (1 - 2^-p)`, the full step's error estimated from the
 two half steps, for an order-`p` method.
 """
 step_doubling_error(full::SymMPS, half::SymMPS, p::Int = 3) =
     _mps_distance(full, half) / (1 - 2.0^(-p))
 
-"Plan eq. (7): `clip(0.8 h (tau / e)^(1/(p+1)), h/2, 2h)`."
+"The next step size `clip(0.8 h (tau / e)^(1/(p+1)), h/2, 2h)`."
 next_step_size(h::Real, e::Real, tau::Real, p::Int = 3) =
     clamp(0.8 * h * (tau / max(e, eps()))^(1 / (p + 1)), h / 2, 2h)
 
@@ -114,7 +110,7 @@ state at each grid time. A step that RAISES the norm by more than `growth_tol` i
 per-step renormalisation, which is bookkeeping and never flagged. `jumps = false` never jumps: the
 no-jump segment alone, with its log survival.
 
-STEP CONTROL (plan eq. 7, Task 5): with `target_step_error = τ`, every `check_every`-th step is a
+Step control: with `target_step_error = τ`, every `check_every`-th step is a
 calibration: the full step is compared with two half steps from the same state
 ([`step_doubling_error`](@ref)), the two-half-step state is kept, and the step size becomes
 [`next_step_size`](@ref) within `[dt_min, dt_max]`; a check above `τ` is rejected and redone at the
@@ -124,7 +120,7 @@ check: it starts from a fresh, weakly entangled state and carries the largest st
 fixed step's error). A jump also resets the step size to `dt` (no history survives a jump).
 `nothing` (default) is the fixed step `dt`.
 
-CHECKPOINT (plan §4.3): `checkpoint(state)` is called after every grid time `k >= 2` with the whole
+Checkpoint: `checkpoint(state)` is called after every grid time `k >= 2` with the whole
 loop state -- the normalised state, the RNG (the threshold `logu` already drawn), `logp`, the
 controller's `hcur`/`since`, and everything recorded so far -- as live references, valid during the
 call only (serialise or `deepcopy` it; a copy per grid time would double a large run's memory), and
@@ -343,7 +339,7 @@ end
 """
     jump_ensemble(psi0, G, channels, tgrid; ntraj, seed = 1, observe, kwargs...) -> NamedTuple
 
-`ntraj` independent trajectories with seeds `seed, seed + 1, ...` (plan eq. 9), `kwargs` passed to
+`ntraj` independent trajectories with seeds `seed, seed + 1, ...`, `kwargs` passed to
 [`jump_trajectory`](@ref). Returns the trajectories and, at each grid time, the ensemble mean and
 standard error of every component of `observe` and of the cumulative jump count, over the
 independent trajectories.

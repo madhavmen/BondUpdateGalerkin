@@ -1,7 +1,3 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/models/hubbard_d4.jl.
-
-# ── from src/RSVDCBEBondUpdate/models/hubbard_d4.jl ──
-
 # THE SPINFUL AUBRY-ANDRE-HUBBARD CHAIN ON FUSED d = 4 SITES (arXiv:1501.05661), graded against
 # hubbard_aa_exact.jl. The interleaved layout (up1 down1 up2 down2 ...) makes every hop range 2, which
 # a two-site sweep cannot see (H_eff vanishes on a product state). One physical site per MPS site
@@ -176,8 +172,8 @@ end
     hubbard_aa_mpo_d4(L; J, Delta, U, phi, beta, Vup, Vdn) -> MPO
 
 The Aubry-Andre-Hubbard chain of arXiv:1501.05661 on `L` fused d = 4 sites. `L` counts physical
-sites, not modes. `J` is one hopping or one per bond (`J[b]` on `(b, b+1)`: the dissipative plan's
-B1 junction, its central `J_link`); `Vup`/`Vdn` add spin-resolved on-site potentials
+sites, not modes. `J` is one hopping or one per bond (`J[b]` on `(b, b+1)`: the B1 junction, its
+central `J_link`); `Vup`/`Vdn` add spin-resolved on-site potentials
 `Σ_i (Vup[i] n_i↑ + Vdn[i] n_i↓)` (a lead bias), on top of the spin-independent `Delta` field.
 
 Virtual dimension 6 (id, four hopping channels, done), independent of `L`, `U` and `Delta`.
@@ -315,7 +311,7 @@ end
 
 `⟨n_i↑ + n_i↓⟩` on physical site `i`, in `0 … 2`.
 
-⛔ THE IMBALANCE IS A CHARGE OBSERVABLE, NOT A SPIN ONE, which is what makes it safe here. The
+The imbalance is a charge observable, not a spin one, which is what makes it safe here. The
 recorded trap is that `apply_sz!` silently returned `½·ψ` under `:SU2`, so no `S^z` quantity may
 be read in a total-spin basis; the density is invariant under spin rotations and has no such
 issue in any mode this file supports.

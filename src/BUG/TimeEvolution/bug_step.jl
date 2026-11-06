@@ -1,4 +1,5 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/bug/cbe_bug.jl.
+# The rank-adaptive CBE-BUG step: its keywords, the two half-sweeps, the order-p closure, the root
+# solve and the final compression.
 
 """
     cbe_bug_step!(psi, mpo, tau; kwargs...) -> CBEBugSweepInfo
@@ -22,41 +23,39 @@ function cbe_bug_step!(
     tol_basis::Union{Nothing,Float64} = nothing,
     tol_trunc::Union{Nothing,Float64} = nothing,
     tol_expv::Union{Nothing,Float64} = nothing,
-    # The plan's name for `tol_expv` (cbe_bug_high_order_rsvd_parallel_tasks.md
-    # invariant 1); naming both is refused.
+    # Another name for `tol_expv`; naming both is refused.
     tol_root::Union{Nothing,Float64} = nothing,
     # The share of `tol_basis` the recycled local Krylov stage (Tests C/D, half-
     # and frontier sweeps) is held to, set on its own (`basis_allocation`);
-    # `nothing` is `tol_basis`, the plan's one-knob default.
+    # `nothing` is `tol_basis`, the one-knob default.
     tol_krylov::Union{Nothing,Float64} = nothing,
     # The temporal order `p` -- a METHOD choice, not a fourth tolerance.
     # `p > 1` closes the global Krylov frontiers `j = 1..p-1` of the root
     # generator before the one root solve (`krylov_closure_loop.jl`); `1` is the
     # ordinary step, unchanged.
     order::Int = 1,
-    # ⚠ INSTRUMENTATION, NOT A METHOD CHOICE. `m > 0` on an `order = 1`
+    # Instrumentation, not a method choice. `m > 0` on an `order = 1`
     # step MEASURES (never enriches) the frontiers `j = 0..m-1` on the frames
     # the ordinary step solves in -- `ledger.leak_initial`/`rho_initial`,
     # what CBE + local Krylov already capture of the global Krylov sequence.
     # The evolved state is unchanged. `order > 1` always records them.
     closure_probe::Int = 0,
-    # ⚠ VALIDATION, NOT A METHOD CHOICE (USER 2026-10-17: off by default).
+    # Validation, not a method choice (off by default).
     # `false`: an `order = p` step is the two half-sweeps plus ONE enriching
     # sweep per frontier j = 1..p-1. `true`: the closure as it was validated --
     # measure every frontier first, loop until a pass adds nothing, measure
     # j = 0 on the final frames (`_krylov_closure!(...; checks)`).
     closure_checks::Bool = false,
-    # ⚠ ABLATION, NOT A METHOD CHOICE (plan T4.1 / P07). `true`: every local
+    # Ablation, not a method choice. `true`: every local
     # Krylov stage (half-sweeps and frontier sweeps) grows from the CBE output
     # `[U0 | U_CBE]`, so it never regenerates a CBE direction. `false`: it grows
     # from `U0` alone and the CBE directions are merged afterwards
-    # (`_merge_frame`) -- the reuse-off arm of P07.
+    # (`_merge_frame`) -- the reuse-off ablation.
     krylov_reuse::Bool = true,
-    # ⚠ ABLATION, NOT A METHOD CHOICE (xx-efficiency plan Fig. 3; dissipative
-    # plan §1.2). `true`: each order-p round's local Krylov stage reuses the
+    # Ablation, not a method choice. `true`: each order-p round's local Krylov stage reuses the
     # previous round's vectors at that bond, transported into its gauge
     # (`krylov_recycle.jl`); real-time and no-jump steps only. Off by default:
-    # neither study found a gain (docs/dissipative_results_summary.md §6). A
+    # neither the XX nor the dissipative study found a gain. A
     # `Ref` in `recycle_report` receives the per-bond log.
     krylov_recycle::Bool = false,
     recycle_report::Union{Nothing,Base.RefValue} = nothing,
@@ -66,13 +65,13 @@ function cbe_bug_step!(
     # input's evolution under this round's `H1`, and extends only the complement
     # of that input (`_rk_complement`).
     recycle_mode::Symbol = :images,
-    # ⚠ ABLATION, NOT A METHOD CHOICE (xx-efficiency plan Fig. 4, conventional
+    # Ablation, not a method choice (conventional
     # controls). `dd_width = l > 0`: every DD-QR CBE takes ONE probe of width
     # `l` (no holdout, no adaptive growth). `krylov_depth = m > 0`: every local
     # Krylov stage runs exactly `m` steps with no weight stop.
     dd_width::Int = 0,
     krylov_depth::Int = 0,
-    # ── IMAGINARY TIME (plan: cbe_bug_imaginary_open_benchmark, Task 1) ──
+    # ── imaginary time ──
     # The root integrator (`ROOT_METHODS`): `:exp` is the Saad-converged
     # exponential (the reference); `:trapezoid`/`:radau2`/`:radau3` apply that
     # implicit method's stability function in one stage; `:radau2_gmres` solves
@@ -83,24 +82,24 @@ function cbe_bug_step!(
     # generator, so the basis weights measure the change of the NORMALISED
     # state rather than its `exp(-dbeta*E)` growth. `0.0` is bit-identical.
     eshift::Real = 0.0,
-    # ⚠ INSTRUMENTATION. A `Ref` receives the root's account: energies of the
+    # Instrumentation. A `Ref` receives the root's account: energies of the
     # state before and after the root solve (`<S|H|S>/<S|S>`, exact in the
     # Galerkin space), the solve's report, and with `outside_residual = true`
     # the outside-Galerkin action `||(I - P) H psi_1|| / ||psi_1||` of the
     # evolved state (`estimate_global_complement_action`, one measuring sweep).
     root_report::Union{Nothing,Base.RefValue} = nothing,
     outside_residual::Bool = false,
-    # ⚠ INSTRUMENTATION. A `Ref` receives the root's final Galerkin frames
+    # Instrumentation. A `Ref` receives the root's final Galerkin frames
     # (`KLFrames`), for small-system diagnostics of the product space the step
-    # integrated in (plan T3.5 Taylor leak). Never read by the step.
+    # integrated in (the Taylor leak). Never read by the step.
     frames_report::Union{Nothing,Base.RefValue} = nothing,
-    # ── TRIAL SPACE CONTAINS `keep_states` (plan Task 2) ──
+    # ── the trial space contains `keep_states` ──
     # Each half-sweep carries these MPS through the new frames, so the root space
     # contains each one exactly. Keeping `|I>>` makes an MPDO step
     # trace-preserving before the compression. The states must share `psi`'s site
     # legs; `[]` is the ordinary step.
     keep_states::AbstractVector = Any[],
-    # ⚠ DEBUG REFERENCE (plan: exact DD references debug-only). `true` draws the
+    # Debug reference (exact DD references are for debugging only). `true` draws the
     # complete DD-projected probe instead of the randomised one.
     exact::Bool = false,
     root::Union{Nothing,Int} = nothing,
@@ -111,7 +110,7 @@ function cbe_bug_step!(
     # evolving `psi` over the full `tau`. `nothing` is the ordinary step.
     # Exists for [`cbe_bug_midpoint_step!`](@ref); see the comment at `psiL`.
     frame_state = nothing,
-    # ⛔ `hermitian = false` SWITCHES THE ROOT SOLVE TO ARNOLDI. Lanczos on a
+    # `hermitian = false` switches the root solve to Arnoldi. Lanczos on a
     # non-Hermitian generator -- an open system's Lindbladian or a
     # non-Hermitian H_eff -- returns a plausible vector and no error at all.
     # The half-sweep basis needs no flag: it already builds the full
@@ -122,21 +121,21 @@ function cbe_bug_step!(
     # more, off by default. Roundoff-level differences from serial. `:full`
     # selects the K/L/S integrator.
     parallel::Union{Bool,Symbol} = false,
-    # ⚠ A DIFFERENT INTEGRATOR, set by `parallel_kls_step!` (plan Task 6): the
+    # A different integrator, set by `parallel_kls_step!`: the
     # parallel K/L/S step in the preliminary frames, with this K/L/S schedule
     # (`KLS_SCHEDULES`). `nothing` is the standard augmented root step.
     kls::Union{Nothing,Symbol} = nothing,
     # The closure's leak measurement (`krylov_frontier_bonds.jl`): fold the probe into
     # the two-site contraction instead of building `H*Theta`. `nothing` folds
-    # for `order > 1`, so the closure forms no dense two-site action (dissipative
-    # plan §1.2), except under `exact`: the folded leak is sampled, and the debug
+    # for `order > 1`, so the closure forms no dense two-site action, except
+    # under `exact`: the folded leak is sampled, and the debug
     # reference draws no random numbers. `false` keeps the exact `H*Theta` leak.
     fold_omega::Union{Nothing,Bool} = nothing,
     # Which DD-QR CBE directions survive when the work ceiling binds:
     # `:weight` the heaviest across all sectors, `:sector` the first sectors in
     # storage order (`dd_cbe_expand`). Below the ceiling both are identical.
     cap_order::Symbol = :sector,
-    # ⚠ ABLATION, NOT A METHOD CHOICE (QTT plan §1.2A, arm D3). `:hybrid`: every
+    # Ablation, not a method choice (arm D3). `:hybrid`: every
     # DD-QR CBE takes the predictor + one-shot + independent-holdout controller
     # (`_dd_hybrid`), its predictor carried across steps in `dd_memory` (a
     # `DDMemory`, which also traces every call). `:adaptive` is the existing D1.
@@ -175,7 +174,7 @@ function cbe_bug_step!(
     # only while the state is canonical (the sweeps gauge before reading). An out-of-range `center`
     # falls back to 1.0 rather than erroring in a diagnostic.
     _nrm = (1 <= psi.center <= site_count) ? norm(psi[psi.center]) : 1.0
-    # Plan T3.2: DD-QR spends `tol_basis` as a linear sum of shares.
+    # DD-QR spends `tol_basis` as a linear sum of shares.
     alloc = basis_allocation(
         budget,
         site_count - 1;
@@ -187,12 +186,12 @@ function cbe_bug_step!(
     )
     ledger = AdaptiveLedger()
     ledger.order = order
-    bd0 = bond_dims(psi)                 # per-bond `r_old` for the bond log (plan §8)
+    bd0 = bond_dims(psi)                 # per-bond `r_old` for the bond log
     ledger.r_old = maximum(bd0; init = 0)
     bwts = zeros(site_count - 1)         # per-bond discarded norm of the compression
 
     expanded = zeros(Int, site_count - 1)
-    # ⚠ ONE ARRAY PER HALF-SWEEP: bond `root_link` is written by BOTH (`n_newL` from the left
+    # One array per half-sweep: bond `root_link` is written by BOTH (`n_newL` from the left
     # sweep, `n_newR` from the right), so a single shared array is a genuine write conflict there
     # -- benign when the sweeps ran in sequence and last-writer-wins, undefined when they run
     # concurrently. Merged after the join with the RIGHT sweep winning at `root_link`, which is
@@ -202,7 +201,7 @@ function cbe_bug_step!(
     accL = _HalfAcc()
     accR = _HalfAcc()
 
-    # The ONE work ceiling, shared by the CBE sketch and the Krylov enrichment (plan §4/§5), read
+    # The ONE work ceiling, shared by the CBE sketch and the Krylov enrichment, read
     # ONCE, globally, before anything widens.
     wcap_step = work_ceiling(maxdim, maximum(bond_dims(psi); init = 0), local_dim(psi))
     # The expansion settings every DD-QR CBE of the step takes, half-sweeps and frontier sweeps.
@@ -217,7 +216,7 @@ function cbe_bug_step!(
         dd_memory = dd_memory,
     )
 
-    # ⛔ THE LEDGER AND THE RNG ARE PER HALF-SWEEP, because under `parallel = true` the two run
+    # The ledger and the RNG are per half-sweep, because under `parallel = true` the two run
     # concurrently: a shared `AdaptiveLedger` loses `+=` updates, and a shared `MersenneTwister`
     # is not thread-safe at all. The right sweep gets a stream SEEDED FROM `rng` only when
     # parallel, so the serial path draws exactly the sequence it always did. The two ledgers are
@@ -332,7 +331,7 @@ function cbe_bug_step!(
         lenv_root, renv_root, root_start = closure.lenv, closure.renv, closure.root_start
         nclose = closure.operator_applications
     end
-    # PLAN §5 `state_projection_error`: how much of `psi` the frames miss. On the ordinary step the
+    # `state_projection_error`: how much of `psi` the frames miss. On the ordinary step the
     # frames contain `psi`, so this is roundoff; on the midpoint's second stage it is the genuine
     # error of projecting `Y_0` onto frames built from `Y_{1/2}`, charged against `tol_basis`. The
     # norm is taken from the state, not from `sqrt(||psi||^2 - ||root_start||^2)`, which is pure
@@ -345,7 +344,7 @@ function cbe_bug_step!(
     root_tensors = (left_frames[root_link], right_frames[root_link], root_start)
     peak = accL.peak + accR.peak + sum(tensor_elements(tensor) for tensor in root_tensors; init = 0)
 
-    # Plan Task 6: the K and L stages of the parallel K/L/S step start from `psi` in these frames
+    # The K and L stages of the parallel K/L/S step start from `psi` in these frames
     # and run beside the root solve (the S stage), and `_kls_finish` merges the three. `tol_expv`
     # drives the root solve's substep split (`substeps = 0`), so the iteration count follows from
     # it; the basis cap and breakdown threshold are numerical settings only.
@@ -438,7 +437,7 @@ function cbe_bug_step!(
     nkls = 0
     if klsst !== nothing
         # The four-block core in the grown root frames, or -- when the omitted new-new block is
-        # above `tol_basis` -- the standard augmented root solve in them (plan T6.3).
+        # above `tol_basis` -- the standard augmented root solve in them.
         solve_aug(generator, start_vector) =
             (op = RootOp(shift_h(generator, eshift), root_link, kroot);
             kls_stage(input -> (nroot[] += 1; apply_zero_site(op, input)), start_vector, rootrep))
@@ -477,7 +476,7 @@ function cbe_bug_step!(
         rootrep[].err > budget.expv * (1 + 1e-8) && _unmet!(ledger, :expv)
     end
 
-    # ⛔ THE ROOT CORE SPLIT IS LOSSLESS (plan §5). This SVD only splits `root_result` into the two
+    # The root core split is lossless. This SVD only splits `root_result` into the two
     # site tensors below: `cutoff = 0.0` keeps every singular value with `sv > 0` (Telum's selector
     # is relative to `sv_max`) and there is no `Nkeep`, so the closing pass is the step's one
     # compression -- and, with `truncate = false`, there is no rank control at the root at all.
@@ -513,7 +512,7 @@ function cbe_bug_step!(
     )
     bcomp = Base.gc_bytes() - bcomp
 
-    # ⚠ THE PHASE TIMERS ARE SUMS ACROSS BOTH HALF-SWEEPS, i.e. CPU time, while `t_step` is WALL
+    # The phase timers are sums across both half-sweeps, i.e. CPU time, while `t_step` is WALL
     # clock. Under `parallel = false` they are the same clock and the shares sum to ~1 as before.
     # Under `parallel = true` they DELIBERATELY DO NOT: two sweeps running at once spend more CPU
     # seconds than the step takes, and a share above 1 is the speedup showing up, not a bug. Keep

@@ -1,6 +1,4 @@
 # Local Hilbert spaces and their charge labels.
-#
-# Moved from BUG-Julia@b155550:src/BondUpdateBUG/symmetric_mps.jl (the spin-1/2 local space).
 
 const _LOCAL_SPACES = Dict{Symbol,Any}()
 
@@ -43,8 +41,6 @@ const SECTOR_DOWN = ((-1,),)
 const SECTOR_SU2_HALF = ((1,),)
 "SU(2) irrep label for a singlet (2S = 0) -- what two spin-½ multiplets fuse down to."
 const SECTOR_SU2_SINGLET = ((0,),)
-
-# ── from src/BondUpdateBUG/z2_ising.jl ──
 
 const _Z2_Q0 = ((0,),)      # sigma^x = +1
 
@@ -143,8 +139,6 @@ function ising_local_space(sym::Symbol = symmetry_mode())
     _ISING_SPACES[sym] = s
     return s
 end
-
-# ── from src/RSVDCBEBondUpdate/models/spin_xx.jl ──
 
 const _SPIN_SPACES = Dict{Int,Any}()
 

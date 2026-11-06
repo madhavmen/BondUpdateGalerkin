@@ -1,6 +1,5 @@
-# Moved from BUG-Julia@b155550:tests/sweeps/test_liouville.jl, OS-U1 to OS-U3 (vectorisation, the
-# Lindblad MPO against the dense Liouvillian, trace/Hermiticity/positivity including compressed BUG
-# steps on an MPDO). Not moved: OS-U4 to OS-U7 and the model references.
+# Vectorisation, the Lindblad MPO against the dense Liouvillian, and trace, Hermiticity and
+# positivity including compressed BUG steps on an MPDO.
 
 using Test, LinearAlgebra, LurCGT, Telum
 import JSON, Random
@@ -8,7 +7,7 @@ using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
 
 include(joinpath(@__DIR__, "..", "..", "..", "common", "liouville_fixtures.jl"))
 
-@testset "symmetry-aware MPDO (plan Task 2)" begin
+@testset "symmetry-aware MPDO" begin
     set_symmetry!(:U1)
 
     @testset "OS-U1: vectorisation convention" begin

@@ -1,7 +1,6 @@
 # A moving paddle potential for the Gross-Pitaevskii vortex-shedding studies.
 #
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/qtt/qtt_models.jl (`GPPaddle`, `paddle_state`,
-# `gp_paddle_op`). The operator is built from the grid and the paddle; `gp_paddle_op(m, t)` for a
+# The operator is built from the grid and the paddle; `gp_paddle_op(m, t)` for a
 # model is in `gross_pitaevskii.jl`.
 
 """

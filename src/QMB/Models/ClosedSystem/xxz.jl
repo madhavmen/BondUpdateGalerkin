@@ -1,12 +1,7 @@
 # The XXZ chain: its term list, its two-site gate and its MPO.
 #
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/operators/henv.jl (`xxz_chain`,
-# `heisenberg_su2_chain`), operators/henv_stacks.jl (`bond_gate`), operators/mpo.jl (`xxz_mpo`,
-# `heisenberg_su2_mpo`), and the `XXZChain` methods of bug/cbe_bug.jl and bug/cbe_bug_midpoint.jl.
 # The term-list types `XXZTerm`/`XXZChain` stay in BUG (Core/Environments), whose channel
 # environments are written on them; the model supplies the local identity they do not carry.
-
-# ── from src/RSVDCBEBondUpdate/operators/henv.jl ──
 
 """
     xxz_chain(L; J=1.0, delta=1.0) -> XXZChain
@@ -56,8 +51,6 @@ function heisenberg_su2_chain(L::Int; J::Float64 = 1.0)
     return XXZChain(L, terms, J, 1.0)
 end
 
-# ── from src/RSVDCBEBondUpdate/operators/henv_stacks.jl ──
-
 """
     bond_gate(h, site_l, site_r) -> TLArray
 
@@ -66,8 +59,6 @@ the term list and the gate can never disagree about `J` or `delta`.
 """
 BUG.bond_gate(h::XXZChain, site_l, site_r) =
     heisenberg_bond_gate(site_l, site_r; J = h.J, delta = h.delta)
-
-# ── from src/RSVDCBEBondUpdate/operators/mpo.jl ──
 
 """
     xxz_mpo(L; J=1.0, delta=1.0) -> MPO

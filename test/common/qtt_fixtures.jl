@@ -1,7 +1,6 @@
 # Independent references for the QTT tests.
 #
-# Moved from BUG-Julia@b155550:tests/common/qtt_fixtures.jl (the grid re-indexing, random TTs, the
-# stencil references and the Heston grid; the stencils are dense matrices here instead of sparse).
+# The grid re-indexing, random TTs, the stencil references (dense matrices) and the Heston grid.
 # Dense site-basis objects are small-grid only.
 
 using LinearAlgebra, Random

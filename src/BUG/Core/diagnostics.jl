@@ -1,8 +1,6 @@
 # Step and run records: kernel counters, the typed step record, run and sweep infos, and the closing
 # assembly and compression of a step (`_assemble_and_compress!`).
 #
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/expansion/cbe_options.jl and
-# src/RSVDCBEBondUpdate/bug/cbe_bug_info.jl.
 
 # ── from BUG/Randomised/dd_cbe.jl: deterministic, used by the Core sweeps ──
 
@@ -13,7 +11,7 @@ Operator applications, QR ranks, sector additions, seconds and allocated bytes p
 Plain mutable fields so the hot loop records with no allocation. One instance per half-sweep
 (they may run concurrently) and one for the root, merged after the join.
 
-⚠ Bytes are `Base.gc_bytes()` differences: process-wide, so under `parallel = :half_sweeps`
+Bytes are `Base.gc_bytes()` differences: process-wide, so under `parallel = :half_sweeps`
 each half-sweep's counts include the other thread's allocations in the same interval.
 """
 mutable struct KernelCounters
@@ -34,7 +32,7 @@ mutable struct KernelCounters
     b_stream::Int
     b_output_dd::Int
     b_qr::Int
-    # dissipative plan U17: every phase measured in bytes as well as seconds. The environment
+    # Every phase is measured in bytes as well as seconds. The environment
     # and compression times are the step's `t_env` / `t_trunc`.
     b_one_site::Int
     b_root::Int
@@ -87,7 +85,7 @@ end
 """
     StepRecord
 
-One `cbe_bug_step!`'s account, typed and allocation-light (plan T1.4): which algorithm ran
+One `cbe_bug_step!`'s account, typed and allocation-light: which algorithm ran
 (`policy`, `qr_backend`, `closure_policy` for the order > 1 frontier sweeps, `order`,
 `parallel`), the kernel counters, the ranks `D_old` (largest bond before), `D_stage` (largest
 trial-space frame, untruncated), `D_final` (after compression) and the two limits they are held
@@ -96,7 +94,7 @@ puts on the frames), root iterations, total seconds and bytes,
 the process `peak_rss` (`Sys.maxrss()`, a high-water mark, not per step), and `limits`: which
 of `:basis_limited`, `:root_limited`, `:truncation_limited`, `:work_limited`, `:rank_limited`
 held the step back (empty when the budget held), and `budget_rule`, how `tol_basis` was
-aggregated over the shares (`:linear`; plan T3.2).
+aggregated over the shares (`:linear`).
 """
 struct StepRecord
     policy::Symbol
@@ -118,7 +116,7 @@ struct StepRecord
     budget_rule::Symbol
 end
 
-"Plan invariant 4: the separate limit statuses, read off the ledger's failed checks."
+"The separate limit statuses, read off the ledger's failed checks."
 function _step_limits(ledger::AdaptiveLedger)
     lim = Symbol[]
     any(check -> check in (:sample, :tail, :krylov, :closure, :projection), ledger.unmet) &&
@@ -129,9 +127,6 @@ function _step_limits(ledger::AdaptiveLedger)
     ledger.workcap_reached && push!(lim, :work_limited)
     return lim
 end
-
-
-# ── from src/RSVDCBEBondUpdate/expansion/cbe_options.jl ──
 
 """
     CBEBugRunInfo
@@ -199,8 +194,6 @@ CBEBugRunInfo(
 # The number of recorded steps.
 Base.length(info::CBEBugRunInfo) = length(info.times)
 
-# ── from src/RSVDCBEBondUpdate/bug/cbe_bug_info.jl ──
-
 """
     CBEBugSweepInfo
 
@@ -226,7 +219,7 @@ struct CBEBugSweepInfo
     # Extra CBE growth passes of the removed fixed-knob path; always 0, kept so the record's
     # layout (and every recorded run) is unchanged.
     n_grow::Int
-    # ⛔ THE ROOT'S **RIGHT** FRAME WIDTH, WHICH NOTHING ELSE RECORDED. `expanded[root_link]` is
+    # The root's right frame width, which nothing else recorded. `expanded[root_link]` is
     # `leg_dim(left_frames[root_link], 3)` -- the LEFT frame only -- and the right half-sweep skips
     # the root (`bond != root_link && (expanded[bond] = ...)`), so `b_R` was invisible. That
     # matters because the Galerkin space is `b_L x b_R`: judging completeness from `b_L` alone can
@@ -237,7 +230,7 @@ struct CBEBugSweepInfo
     # share, and those call for opposite responses: by Amdahl, the speedup is capped at 1/(1-f) for
     # an expansion share f.
     t_cbe::Float64
-    # ⛔ A PHASE BREAKDOWN OF THE STEP, because "the sketch did not help" has two very different
+    # A phase breakdown of the step, because "the sketch did not help" has two very different
     # causes and only one is a code problem. The sketch makes `cbe_expand` cheaper and nothing
     # else, so Amdahl caps the whole-step speedup at `1/(1 - t_cbe/t_step)`. If `t_cbe` is a small
     # share, the answer is not a better sketch -- it is whatever these other phases are doing.
@@ -252,11 +245,11 @@ struct CBEBugSweepInfo
     t_frame::Float64    # `_frame_from`, which factorises both sides of the bond
     t_env::Float64      # environment stacks and channel pushes
     t_step::Float64     # the whole call, so the shares can be checked to sum to 1
-    # ⛔ THE STEP'S VERDICT. Without it a step that failed Test A/B, or stopped at the work
+    # The step's verdict. Without it a step that failed Test A/B, or stopped at the work
     # ceiling, returns looking exactly like one that passed -- the silent convergence claim the
     # three-tolerance API exists to rule out.
     ledger::AdaptiveLedger
-    # Plan Task 1.4: the typed record of the step -- CBE policy, kernel counters, ranks, limit
+    # The typed record of the step -- CBE policy, kernel counters, ranks, limit
     # statuses (`StepRecord`, dd_cbe.jl).
     record::StepRecord
 end
@@ -268,7 +261,7 @@ end
 Stage 4 of [`cbe_bug_step!`](@ref): the frames become the new site tensors --
 `left_frames[1:root_link-1]`, the split root core `left_frames[root_link] U` and
 `S Vd right_frames[root_link]`, `right_frames[root_link+1:end]` -- and then ONE compression of the
-evolved state (plan §5). `res` is the SVD of the evolved root. `tol_trunc` is a budget on the
+evolved state. `res` is the SVD of the evolved root. `tol_trunc` is a budget on the
 CUMULATIVE discarded norm over all bonds, shared out by `truncate_recursive!` into `bwts`; the
 ledger records it and closes the per-bond log. `discarded` is the largest single relative weight
 the root split or the compression threw away.

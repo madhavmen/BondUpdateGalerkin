@@ -1,7 +1,3 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/models/tfim.jl.
-
-# ── from src/RSVDCBEBondUpdate/models/tfim.jl ──
-
 # ── the transverse-field Ising chain as an explicit MPO ──
 # Open-chain MPO of virtual dimension 3 (id, open, done) with no self-loop on `open`, which keeps the
 # coupling nearest-neighbour. The first and last sites keep only the row or column that can enter or exit.

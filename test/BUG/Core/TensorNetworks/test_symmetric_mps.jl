@@ -1,5 +1,5 @@
-# Moved from BUG-Julia@b155550:tests/BondUpdateBUG/test_symmetric_mps.jl (container and canonical
-# form; its observable testsets are in test/QMB/Observables/test_local_observables.jl).
+# The `SymMPS` container and its canonical form; the observables are tested in
+# test/QMB/Observables/test_local_observables.jl.
 
 using Test, LinearAlgebra, LurCGT, Telum
 using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB

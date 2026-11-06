@@ -1,18 +1,13 @@
-# Moved from BUG-Julia@b155550:src/RSVDCBEBondUpdate/operators/mpo_env.jl (the MPO sketch),
-# src/RSVDCBEBondUpdate/operators/mpo_fold.jl and src/RSVDCBEBondUpdate/expansion/bond_expansion.jl.
-
 # cbe_mpo.jl: the CBE sketch on MPO environments (shared `H*Theta` and fold-omega-first), the
 # MPO `cbe_expand`, the per-bond `expand_bond!` and the DMRG eigensolve `lanczos_lowest`
 # (included after `cbe_bond_update.jl`).
-
-# ── from src/RSVDCBEBondUpdate/operators/mpo_env.jl ──
 
 # The CBE sketch, unchanged in substance: only `H Theta` comes from the MPO now. The
 # projector and the sketch are the reference's (`RSVDpreBE0SiQS.m`), and nothing in the
 # selection knows how `H` is stored.
 
 "See the [`sketch_h_left`](@ref) for a term list; this is the same sketch on MPO
-environments. ⚠ A standalone call rebuilds `H*Theta`; inside a sweep the shared cache in
+environments. A standalone call rebuilds `H*Theta`; inside a sweep the shared cache in
 [`_sketch_closures`](@ref) is what runs."
 sketch_h_left(frame::BondFrame, mpo::MPO, bond::Int, lenv::MPOLink, renv::MPOLink, Om) = first(
     _sketch_closures(frame, () -> apply_h_two_site(frame_theta(frame), mpo, bond, lenv, renv)),
@@ -25,8 +20,6 @@ sketch_h_right(frame::BondFrame, mpo::MPO, bond::Int, lenv::MPOLink, renv::MPOLi
     last(_sketch_closures(frame, () -> apply_h_two_site(frame_theta(frame), mpo, bond, lenv, renv)))(
         Om,
     )
-
-# ── from src/RSVDCBEBondUpdate/operators/mpo_fold.jl ──
 
 # ── fold-omega-first: the sketch that never forms H*Theta ──
 # Contracting `Om` in first makes the cost scale with the sketch width g, not d*chi. It is exact,
@@ -47,7 +40,7 @@ return the DISCARDED-space component, i.e. with `P_perp` already applied -- iden
 """
 function _fold_sketch_closures(frame::BondFrame, mpo::MPO, bond::Int, lenv::MPOLink, renv::MPOLink)
     left_mpo, right_mpo = mpo[bond], mpo[bond+1]
-    # ⚠ `Theta` IS SHARED, `H*Theta` IS NOT. `frame_theta` is `U0*S0*V0` -- an `O(chi^2 d^2)`
+    # `Theta` is shared, `H*Theta` is not. `frame_theta` is `U0*S0*V0` -- an `O(chi^2 d^2)`
     # object the frame already implies, with no `H` in it. Rebuilding it per call would be pure
     # waste; caching the thing this function exists NOT to build would defeat the purpose.
     Theta = frame_theta(frame)                       # (ℓ_l, s_l, s_r, ℓ_r)
@@ -135,7 +128,7 @@ end
 The bond expansion at bond `(bond, bond+1)`, driven by MPO environments.
 
 `fold_omega = true` selects [`_fold_sketch_closures`](@ref), which folds the probe into the
-contraction instead of building `H*Theta`. ⚠ It makes `share_ht` MEANINGLESS -- there is no
+contraction instead of building `H*Theta`. It makes `share_ht` MEANINGLESS -- there is no
 shared object to cache -- so passing both is refused rather than silently ignoring one.
 """
 function cbe_expand(
@@ -144,7 +137,7 @@ function cbe_expand(
     bond::Int,
     lenv::MPOLink,
     renv::MPOLink;
-    # ⛔ `nothing`, NOT `true`, SO "NOT PASSED" IS DISTINGUISHABLE FROM "PASSED
+    # `nothing`, not `true`, so "not passed" is distinguishable from "passed
     # true". With a `Bool` default the contradiction check below cannot fire at
     # all -- `share_ht` is a NAMED kwarg, so it never appears in `kwargs...` and
     # `haskey(kwargs, :share_ht)` is false even when the caller passed it. That
@@ -154,7 +147,7 @@ function cbe_expand(
     kwargs...,
 )
     if fold_omega
-        # ⛔ REFUSE THE CONTRADICTION RATHER THAN RESOLVING IT. A caller who sets `fold_omega`
+        # Refuse the contradiction rather than resolving it. A caller who sets `fold_omega`
         # alone is asserting nothing about sharing and is not warned; a caller who ALSO passes
         # `share_ht` explicitly believes something false about the run they are about to time,
         # and silently honouring one of the two is how a benchmark reports the wrong arm.
@@ -176,8 +169,6 @@ function cbe_expand(
         kwargs...,
     )
 end
-
-# ── from src/RSVDCBEBondUpdate/expansion/bond_expansion.jl ──
 
 # ── the per-bond expansion, at the reference's granularity ──
 # One function for every sweep: expand the bond, keep the state unchanged, and push the far

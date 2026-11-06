@@ -1,9 +1,8 @@
-# Moved from BUG-Julia@b155550:tests/sweeps/test_spin_xx.jl, T7.0: the two U(1) XX models
+# The two U(1) XX models
 # (s = 1/2, d = 2 and s = 3, d = 7) on one exchange convention. d = 2s + 1 sectors, s = 1/2 is
 # `xxz_mpo(delta = 0)`, <H> = 0 and the exact variance on product states (the normalisation of the
-# exchange at both spins). The entangled comparison state is now made by `cbe_bug_step!` instead of
-# tdvp2 (a Baseline): the check compares two operators on one state, so any entangled state does.
-# Not moved: T7.1-T7.3 (order-4 TDVP2 references and sector ED).
+# exchange at both spins). The entangled comparison state is made by `cbe_bug_step!`: the check
+# compares two operators on one state, so any entangled state does.
 
 using Test, LinearAlgebra
 import Random
@@ -25,7 +24,7 @@ end
 
 _wall(L, twoS) = [i <= L ÷ 2 ? twoS : -twoS for i = 1:L]
 
-@testset "T7.0: the two XX models" begin
+@testset "the two XX models" begin
     set_symmetry!(:U1)
     @test spin_space(1) === local_space(:U1)
     rng = Random.MersenneTwister(7)
