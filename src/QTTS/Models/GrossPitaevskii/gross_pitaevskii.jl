@@ -99,8 +99,9 @@ gp_density(m::GPModel, A::AbstractVector) = tt_density(A; tol = m.rho_tol)
 
 `H[psi, t] = H0 + V_pad(t) + g diag(rho(psi))` as operator cores. Pass `rho` to reuse a density
 built elsewhere (the frozen-density ablation); by default it is rebuilt from `A`. `info` carries the
-density's `chi_rho`, error bound `rho_err`, build seconds `t_rho`, `retried`, and the operator's
-bond dimension `w`.
+density's `chi_rho`, error bound `rho_err`, build seconds `t_rho`, `retried`, the operator's
+bond dimension `w`, and the density itself (`rho`, for the Jacobian at the same state:
+`flow_jac_ops(...; rho)`).
 """
 function gp_hamiltonian_op(m::GPModel, A::AbstractVector, t::Real; rho = nothing)
     linear = gp_linear_op(m, t)
@@ -112,6 +113,7 @@ function gp_hamiltonian_op(m::GPModel, A::AbstractVector, t::Real; rho = nothing
             t_rho = 0.0,
             retried = false,
             w = maximum(tt_ranks(linear); init = 1),
+            rho = nothing,
         )
     end
     density_info = (
@@ -131,6 +133,7 @@ function gp_hamiltonian_op(m::GPModel, A::AbstractVector, t::Real; rho = nothing
         t_rho = density_info.seconds,
         retried = density_info.retried,
         w = maximum(tt_ranks(H); init = 1),
+        rho = rho,
     )
 end
 
@@ -236,13 +239,24 @@ GPFlow(m::GPModel; imaginary::Bool = false, normalized::Bool = imaginary) =
 
 flow_op(fl::GPFlow, A, t) = gp_hamiltonian_op(fl.m, A, t)
 flow_normalized(fl::GPFlow) = fl.normalized
+# the summands the stage solve projects separately (`Tooling/stage_fields.jl`)
+_static_operator(fl::GPFlow) = fl.m.H0
+_timed_operator(fl::GPFlow, field_time) = gp_paddle_op(fl.m, field_time)
+_density_coupling(fl::GPFlow) = fl.m.g
+_density_tol(fl::GPFlow) = fl.m.rho_tol
+_flow_op_at(fl::GPFlow, state_cores, field_time, density) =
+    gp_hamiltonian_op(fl.m, state_cores, field_time; rho = density)
 
-"`J1 = H0 + V_pad + 2 g diag(rho)`, `J2 = g diag(psi^2)` of the real-linear Jacobian."
-function flow_jac_ops(fl::GPFlow, A, t)
+"""
+`J1 = H0 + V_pad + 2 g diag(rho)`, `J2 = g diag(psi^2)` of the real-linear Jacobian. Pass `rho`, the
+density of the same state `A` (e.g. from the field's info), to skip rebuilding it: every build is
+an `O(chi^4)` zip-up, and the stage solve evaluated it at that state just before.
+"""
+function flow_jac_ops(fl::GPFlow, A, t; rho = nothing)
     m = fl.m
     linear = gp_linear_op(m, t)
     m.g == 0 && return linear, nothing
-    rho, _ = gp_density(m, A)
+    rho === nothing && (rho = first(gp_density(m, A)))
     psi_squared, _ = tt_product(A, A; tol = m.rho_tol)
     return op_lincomb([(1.0, linear), (2 * m.g, op_diag(rho))]), op_scale(op_diag(psi_squared), m.g)
 end

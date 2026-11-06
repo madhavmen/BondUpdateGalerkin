@@ -4,7 +4,8 @@
 # Z, so a root matrix Y (r_L x r_R) is the state W Y Z. The stage solver only needs the frame
 # interface below; a state representation (the dense QTT cores of QTTS) implements it. Stage
 # equations Y_j = S + h sum_l A_jl G(t + c_l h, Y_l), with G(Y) = W' F(t, W Y Z) Z' the reduced
-# field, are solved by Newton-GMRES on the doubled-real unknowns, since F is only real-linear.
+# field, are solved by Newton-GMRES on the doubled-real unknowns, since F is only real-linear
+# (`stage_gmres.jl`).
 
 """
     frame_state(fr, Y) -> state
@@ -24,8 +25,7 @@ function frame_project end
 """
     frame_operator_matrix(fr, H) -> Matrix
 
-The root-space matrix of `W' H Z` in `vec(Y)` order (row index of `Y` fastest), for the stage
-preconditioner.
+The root-space matrix of `W' H Z` in `vec(Y)` order (row index of `Y` fastest).
 """
 function frame_operator_matrix end
 
@@ -38,10 +38,71 @@ of a real-linear Jacobian).
 function frame_conj end
 
 """
+    frame_root_envs(fr, H; conj_ket = false) -> envs
+
+The environments of `W' H Z` at the root cut, from which the projected action, the root-space
+matrix ([`root_envs_matrix`](@ref)) and the nearest Kronecker sum ([`root_envs_kron_sum`](@ref))
+follow without another sweep over the sites.
+"""
+function frame_root_envs end
+
+"""
+    root_envs_matrix(envs) -> Matrix
+
+The root-space matrix of the environments `envs` of [`frame_root_envs`](@ref), in `vec(Y)` order;
+the dense stage preconditioner factorises it.
+"""
+function root_envs_matrix end
+
+"""
+    root_envs_kron_sum(envs) -> (Ml, Mr)
+
+The Kronecker sum `Ml (x) I + I (x) Mr` nearest (Frobenius) to the root-space operator of `envs`,
+acting on a root `Y` as `Ml Y + Y transpose(Mr)`: the separable stage preconditioner inverts it by
+Sylvester solves ([`_separable_precond`](@ref)).
+"""
+function root_envs_kron_sum end
+
+"""
+    stage_field_ops(fl, fr; density, warm, jacobian_psi2) -> ops
+
+The stage solve's field and Jacobian on fixed frames `fr`, by root environments per summand of the
+flow's operator (QTTS: `StageFieldOps`). [`stage_field`](@ref), [`stage_jacobian`](@ref) and
+[`stage_linear_envs`](@ref) evaluate them; `ops.t_rho`, `ops.env_builds` and `ops.psi2_fits`
+count the density seconds, the environment sets built and the Jacobians' `psi^2` fits.
+"""
+function stage_field_ops end
+
+"""
+    stage_field(ops, Y, field_time, slot) -> (G, mu, info, aux)
+
+The reduced field `G(Y)` of stage `slot` at `field_time`, its `mu`, the operator info and `aux`,
+what [`stage_jacobian`](@ref) at the same `Y` reuses.
+"""
+function stage_field end
+
+"""
+    stage_jacobian(ops, Y, field_time, mu, aux, slot) -> (V -> DG(Y)[V])
+
+The real-linear Jacobian of [`stage_field`](@ref) at the same `Y`, with the normalised flow's
+`D mu` term.
+"""
+function stage_jacobian end
+
+"""
+    stage_linear_envs(ops, Y, field_time) -> envs
+
+Root environments of the Jacobian's linear part `J1` at `Y`, the stage preconditioner's frozen
+operator.
+"""
+function stage_linear_envs end
+
+"""
     reduced_field(fl, fr, root_matrix, field_time) -> (G, mu, info)
 
 The reduced vector field `G(Y) = W' F(t, W Y Z) Z'` at `Y = root_matrix`, `t = field_time`, the
-subtracted `mu[psi]` (zero unless `flow_normalized(fl)`) and the flow's operator info.
+subtracted `mu[psi]` (zero unless `flow_normalized(fl)`) and the flow's operator info. Every call
+contracts the whole operator over the sites (`rk_stage_solve(...; envs = :full)`).
 """
 function reduced_field(fl::QTTFlow, fr, root_matrix, field_time)
     state = frame_state(fr, root_matrix)
@@ -55,15 +116,17 @@ function reduced_field(fl::QTTFlow, fr, root_matrix, field_time)
 end
 
 """
-    reduced_jacobian(fl, fr, root_matrix, field_time, mu) -> Function
+    reduced_jacobian(fl, fr, root_matrix, field_time, mu; rho = nothing) -> Function
 
 The reduced real-linear Jacobian at `Y = root_matrix` as a closure
 `direction_matrix -> DG(Y)[direction_matrix]`. `dmu` is left out for a normalised flow: a
-Newton-like solve whose residual is still exact.
+Newton-like solve whose residual is still exact. `rho` is the density of the same state, which the
+field already built (see [`flow_jac_ops`](@ref)).
 """
-function reduced_jacobian(fl::QTTFlow, fr, root_matrix, field_time, mu)
+function reduced_jacobian(fl::QTTFlow, fr, root_matrix, field_time, mu; rho = nothing)
     # `linear_jacobian` acts on the direction, `conjugate_jacobian` (or `nothing`) on its conjugate
-    linear_jacobian, conjugate_jacobian = flow_jac_ops(fl, frame_state(fr, root_matrix), field_time)
+    linear_jacobian, conjugate_jacobian =
+        flow_jac_ops(fl, frame_state(fr, root_matrix), field_time; rho = rho)
     return function (direction_matrix)
         direction = frame_state(fr, direction_matrix)
         out = frame_project(fr, linear_jacobian, direction) .- mu .* direction_matrix
@@ -102,121 +165,60 @@ qtt_root_for_order(order::Int) =
     order == 4 ? :radau3 : throw(ArgumentError("nonlinear BUG orders are 2, 3, 4; got $order"))
 
 """
-    _gmres_real(apply, target; tol = 1e-10, restart = 40, maxiter = 400)
-        -> (solution, iterations, relres)
-
-Restarted GMRES with Givens rotations on real vectors (the doubled-real form of a real-linear
-complex map) for `apply(solution) = target`. Stops when the residual falls below `tol ||target||`.
-"""
-function _gmres_real(
-    apply,
-    target::Vector{Float64};
-    tol::Float64 = 1e-10,
-    restart::Int = 40,
-    maxiter::Int = 400,
-)
-    dimension = length(target)
-    solution = zeros(dimension)
-    target_norm = norm(target)
-    target_norm == 0 && return solution, 0, 0.0
-    iterations = 0
-    while iterations < maxiter
-        residual = target .- apply(solution)
-        beta = norm(residual)
-        beta <= tol * target_norm && return solution, iterations, beta / target_norm
-        cycle = min(restart, maxiter - iterations)
-        basis = zeros(dimension, cycle + 1)
-        hessenberg = zeros(cycle + 1, cycle)
-        cosines, sines, rhs = zeros(cycle), zeros(cycle), zeros(cycle + 1)
-        basis[:, 1] .= residual ./ beta
-        rhs[1] = beta
-        used = 0
-        stalled = false
-        for column = 1:cycle
-            iterations += 1
-            image = apply(basis[:, column])
-            # modified Gram-Schmidt against the Krylov basis
-            for row = 1:column
-                hessenberg[row, column] = dot(view(basis, :, row), image)
-                image .-= hessenberg[row, column] .* view(basis, :, row)
-            end
-            hessenberg[column+1, column] = norm(image)
-            hessenberg[column+1, column] > 0 &&
-                (basis[:, column+1] .= image ./ hessenberg[column+1, column])
-            # apply the earlier rotations to the new column, then rotate its subdiagonal away
-            for row = 1:(column-1)
-                rotated =
-                    cosines[row] * hessenberg[row, column] + sines[row] * hessenberg[row+1, column]
-                hessenberg[row+1, column] =
-                    -sines[row] * hessenberg[row, column] + cosines[row] * hessenberg[row+1, column]
-                hessenberg[row, column] = rotated
-            end
-            radius = hypot(hessenberg[column, column], hessenberg[column+1, column])
-            # The Krylov space closed (zero subdiagonal) on a direction the operator maps into the
-            # earlier ones: the new column adds nothing, and keeping it would make the triangular
-            # solve singular. The solution in the first column - 1 vectors is the best this space
-            # holds.
-            if radius == 0
-                stalled = true
-                break
-            end
-            used = column
-            cosines[column] = hessenberg[column, column] / radius
-            sines[column] = hessenberg[column+1, column] / radius
-            hessenberg[column, column], hessenberg[column+1, column] = radius, 0.0
-            rhs[column+1] = -sines[column] * rhs[column]
-            rhs[column] = cosines[column] * rhs[column]
-            abs(rhs[column+1]) <= tol * target_norm && break
-        end
-        if used > 0
-            coefficients = UpperTriangular(hessenberg[1:used, 1:used]) \ rhs[1:used]
-            solution .+= basis[:, 1:used] * coefficients
-        end
-        # a stalled space cannot improve on restart: return what it holds
-        (stalled || abs(rhs[used+1]) <= tol * target_norm) &&
-            return solution, iterations, abs(rhs[used+1]) / target_norm
-    end
-    return solution, iterations, norm(target .- apply(solution)) / target_norm
-end
-
-"Stack complex matrices as one real vector: real parts, then imaginary parts, matrix by matrix."
-_pack(matrices) = vcat((vcat(vec(real(matrix)), vec(imag(matrix))) for matrix in matrices)...)
-
-"The inverse of `_pack` for matrices of sizes `dims`."
-function _unpack(packed::Vector{Float64}, dims)
-    out = Matrix{ComplexF64}[]
-    offset = 0
-    for block_dims in dims
-        entry_count = prod(block_dims)
-        # this matrix's real parts, then its imaginary parts
-        real_part = packed[(offset+1):(offset+entry_count)]
-        imag_part = packed[(offset+entry_count+1):(offset+2*entry_count)]
-        push!(out, reshape(real_part .+ 1im .* imag_part, block_dims))
-        offset += 2 * entry_count
-    end
-    return out
-end
-
-"""
-Largest stacked stage dimension `s r_L r_R` for which the dense preconditioner is factorised; above
-it the stage GMRES runs unpreconditioned (and says so in `stats.precond`).
+Largest stacked stage dimension `s r_L r_R` for which `precond = :auto` factorises the dense
+preconditioner; above it that mode runs GMRES unpreconditioned (and says so in `stats.precond`).
 """
 const _STAGE_PRECOND_MAX = 3072
 
 """
+Largest inexact-Newton forcing term of `rk_stage_solve` (GMRES tolerance relative to the
+residual): each Newton iteration then removes at least ~90% of the linearised residual, so the
+stall exit (`newton_stall`) and `maxnewton` keep their meaning.
+"""
+const _NEWTON_FORCING_MAX = 0.1
+
+"""
     rk_stage_solve(fl, fr, root_start, start_time, step_size, method; tol = 1e-10,
-                   maxnewton = 20, gmres_tol = 1e-3 tol, gmres_maxiter = 600, Y0 = nothing,
-                   precond = :auto) -> (stage_values, stats)
+                   maxnewton = 20, gmres_tol = nothing, gmres_maxiter = 600, Y0 = nothing,
+                   precond = :separable, envs = :summand, density = :variational,
+                   warm = Dict(), gmres_recycle = 0, newton_stall = 0.5,
+                   jacobian_psi2 = :fresh) -> (stage_values, stats)
 
 The nonlinear stage equations `Y_j = S + h sum_l A_jl G(t + c_l h, Y_l)` of `RK_TABLEAUX[method]`
 (`S = root_start`, `t = start_time`, `h = step_size`, `Y_j` the returned `stage_values`) in the
 root space of frames `fr`, by Newton-GMRES on the doubled-real unknowns with the reduced
 real-linear Jacobian. The residual is the full nonlinear one, driven to `tol` relative to `||S||`.
-`precond = :auto` right-preconditions GMRES with `I - h A (x) pref (M - mu)`, `M = W' J1 Z` the
-linear part of the Jacobian at the step midpoint, factorised once when `s r_L r_R <=
-_STAGE_PRECOND_MAX`. `Y0` are starting stage values (default: `S` in every stage). `stats` records
-Newton and GMRES iterations, the final residual, `converged`, the field evaluations `nfield`, the
-density-build seconds `t_rho`, the last `mu` and the preconditioner used.
+`Y0` are starting stage values (default: `S` in every stage).
+
+GMRES is right-preconditioned with `I - h A (x) pref (M - mu)`, `M` the frozen linear part `W' J1 Z`
+of the Jacobian at the step input (`conj(d)` is left to GMRES):
+- `precond = :separable` (default): `M` replaced by its nearest Kronecker sum
+  ([`root_envs_kron_sum`](@ref)) and inverted by Sylvester solves, with no root-space matrix. It is
+  exact for operators that are Kronecker sums across the root bond, at every grid size;
+- `:dense`: the full `M` factorised as an `s r_L r_R` matrix; `:auto`: that only when
+  `s r_L r_R <= _STAGE_PRECOND_MAX`, else none;
+- `:none`: plain GMRES.
+
+`envs = :summand` (default) evaluates fields and Jacobians through [`stage_field_ops`](@ref): root
+environments per summand, the density fitted per `density` (`:variational`, warm-started from
+`warm`, which the caller may carry across a step's root solves, or `:zipup`), `jacobian_psi2` how
+the Jacobian's `psi^2` is refitted (`:fresh` or `:lagged`), and the normalised flow's `D mu` in the
+Jacobian. `envs = :full` is [`reduced_field`](@ref) / [`reduced_jacobian`](@ref): every
+application contracts the whole operator over the sites, without `D mu`.
+
+`gmres_tol` is GMRES's tolerance relative to the current residual. `nothing` (default) is inexact
+Newton: the Eisenstat-Walker forcing term (choice 2, `0.9 (res_k / res_{k-1})^2`, safeguarded, at
+most `_NEWTON_FORCING_MAX`), never below `0.5 tol / res_k`, so the linear solve is only as accurate
+as the next Newton iterate needs. A number fixes it at every Newton iteration.
+`gmres_recycle = k > 0` carries `k` recycled directions across this call's Newton solves
+([`GMRESRecycle`](@ref)); `0` is plain GMRES. Newton stops unconverged once the residual is above
+`newton_stall` times its value three iterations earlier (`Inf`: run to `maxnewton`).
+
+`stats` records Newton and GMRES iterations (with recycling, including the `recycled` products
+that re-image the directions), the GMRES seconds `t_gmres`, the final residual, `converged`, the
+field evaluations `nfield`, the density seconds `t_rho`, the last `mu`, the preconditioner, `envs`,
+the `forcing` rule, `env_builds` and `psi2_fits` (`-1` under `envs = :full`), and `fields`, the
+stage fields `G(Y_j)` at the returned stages.
 """
 function rk_stage_solve(
     fl::QTTFlow,
@@ -227,60 +229,57 @@ function rk_stage_solve(
     method::Symbol;
     tol::Real = 1e-10,
     maxnewton::Int = 20,
-    gmres_tol::Real = 1e-3 * tol,
+    gmres_tol::Union{Nothing,Real} = nothing,
     gmres_maxiter::Int = 600,
     Y0 = nothing,
-    precond::Symbol = :auto,
+    precond::Symbol = :separable,
+    envs::Symbol = :summand,
+    density::Symbol = :variational,
+    warm::Dict = Dict{Any,Any}(),
+    gmres_recycle::Int = 0,
+    newton_stall::Real = 0.5,
+    jacobian_psi2::Symbol = :fresh,
 )
+    precond in (:separable, :dense, :auto, :none) ||
+        throw(ArgumentError("precond must be :separable, :dense, :auto or :none, got :$precond"))
+    envs in (:summand, :full) || throw(ArgumentError("envs must be :summand or :full, got :$envs"))
     tableau = RK_TABLEAUX[method]
     nstages = length(tableau.c)
     butcher = tableau.A
+    stage_times = [start_time + node * step_size for node in tableau.c]
     stage_values =
         Y0 === nothing ? [ComplexF64.(root_start) for _ = 1:nstages] :
         [ComplexF64.(start_value) for start_value in Y0]
     dims = [size(root_start) for _ = 1:nstages]
     start_norm = max(norm(root_start), eps())
-    nfield, ngmres, t_rho, residual_norm = 0, 0, 0.0, Inf
-    root_size = length(root_start)
-    factorised = nothing
-    if precond === :auto && nstages * root_size <= _STAGE_PRECOND_MAX
-        linear_jacobian, _ =
-            flow_jac_ops(fl, frame_state(fr, root_start), start_time + step_size / 2)
-        linear_part = frame_operator_matrix(fr, linear_jacobian)
-        # the Rayleigh shift `mu` of a normalised flow, frozen at the start value
-        mu0 =
-            flow_normalized(fl) ?
-            real(dot(vec(root_start), linear_part * vec(root_start))) /
-            max(norm(root_start)^2, eps()) : 0.0
-        stage_jacobian = fl.pref .* (linear_part - mu0 * I)
-        factorised = lu(
-            Matrix{ComplexF64}(I, nstages * root_size, nstages * root_size) .-
-            step_size .* kron(butcher, stage_jacobian),
-        )
-    end
-    # packed -> P^-1 packed on the packed real vector (identity without a preconditioner)
-    function apply_preconditioner(packed)
-        factorised === nothing && return packed
-        stacked = vcat((vec(block) for block in _unpack(packed, dims))...)
-        solved = factorised \ stacked
-        return _pack([
-            reshape(solved[((stage-1)*root_size+1):(stage*root_size)], dims[stage]) for
-            stage = 1:nstages
-        ])
-    end
+    nfield, ngmres, t_rho, t_gmres, residual_norm = 0, 0, 0.0, 0.0, Inf
+    # one recycle space per call: the frames (and so the unknowns' space) change between root solves
+    recycle = gmres_recycle > 0 ? GMRESRecycle(gmres_recycle) : nothing
+    ops =
+        envs === :summand ?
+        stage_field_ops(fl, fr; density = density, warm = warm, jacobian_psi2 = jacobian_psi2) :
+        nothing
+    apply_preconditioner, precond_name =
+        _stage_preconditioner(fl, fr, ops, root_start, start_time, step_size, butcher, precond)
+    residual_history = Float64[]           # residual per Newton iteration, for the stall exit
+    forcing = _NEWTON_FORCING_MAX          # the inexact-Newton GMRES tolerance of this iteration
     for newton = 0:maxnewton
         fields, mus = Matrix{ComplexF64}[], Float64[]
+        densities = Any[]                  # :full -- each stage's density, reused by its Jacobian
+        auxes = Any[]                      # :summand -- what each stage's Jacobian reuses
         for stage = 1:nstages
-            field, mu, info = reduced_field(
-                fl,
-                fr,
-                stage_values[stage],
-                start_time + tableau.c[stage] * step_size,
-            )
+            if ops === nothing
+                field, mu, info = reduced_field(fl, fr, stage_values[stage], stage_times[stage])
+                push!(densities, get(info, :rho, nothing))
+                t_rho += info.t_rho
+            else
+                field, mu, _, aux = stage_field(ops, stage_values[stage], stage_times[stage], stage)
+                push!(auxes, aux)
+                t_rho = ops.t_rho
+            end
             push!(fields, field)
             push!(mus, mu)
             nfield += 1
-            t_rho += info.t_rho
         end
         # the residual of each stage equation, Y_j - S - h sum_l A_jl G_l
         residuals = [
@@ -290,7 +289,11 @@ function rk_stage_solve(
         ]
         residual_norm =
             sqrt(sum(norm(stage_residual)^2 for stage_residual in residuals)) / start_norm
-        if residual_norm <= tol || newton == maxnewton
+        push!(residual_history, residual_norm)
+        # a stalled Newton gives up: the residual did not fall below `newton_stall` times its value
+        # three iterations earlier (the caller rejects the step)
+        stalled = newton >= 3 && residual_norm > newton_stall * residual_history[end-3]
+        if residual_norm <= tol || newton == maxnewton || stalled
             return stage_values,
             (
                 newton = newton,
@@ -299,19 +302,40 @@ function rk_stage_solve(
                 converged = residual_norm <= tol,
                 nfield = nfield,
                 t_rho = t_rho,
+                t_gmres = t_gmres,
                 mu = mus[end],
-                precond = factorised === nothing ? :none : :linear_part,
+                precond = precond_name,
+                envs = envs,
+                forcing = gmres_tol === nothing ? :eisenstat_walker : :fixed,
+                env_builds = ops === nothing ? -1 : ops.env_builds,
+                psi2_fits = ops === nothing ? -1 : ops.psi2_fits,
+                recycled = recycle === nothing ? 0 : recycle.extra_products,
+                fields = fields,
             )
         end
-        jacobians = [
-            reduced_jacobian(
-                fl,
-                fr,
-                stage_values[stage],
-                start_time + tableau.c[stage] * step_size,
-                mus[stage],
-            ) for stage = 1:nstages
-        ]
+        # the Jacobian at the same stage values: its density is the one the field just built
+        jacobians =
+            ops === nothing ?
+            [
+                reduced_jacobian(
+                    fl,
+                    fr,
+                    stage_values[stage],
+                    stage_times[stage],
+                    mus[stage];
+                    rho = densities[stage],
+                ) for stage = 1:nstages
+            ] :
+            [
+                stage_jacobian(
+                    ops,
+                    stage_values[stage],
+                    stage_times[stage],
+                    mus[stage],
+                    auxes[stage],
+                    stage,
+                ) for stage = 1:nstages
+            ]
         # the stage system's Jacobian on packed directions; an all-zero column (the trapezoid's
         # explicit first stage) needs no Jacobian action
         function newton_operator(packed)
@@ -326,17 +350,99 @@ function rk_stage_solve(
                 for equation = 1:nstages
             ])
         end
-        # right preconditioning: solve (op o P^-1) y = -R, then dx = P^-1 y
-        dy, iterations, _ = _gmres_real(
-            packed -> newton_operator(apply_preconditioner(packed)),
-            -_pack(residuals);
-            tol = Float64(gmres_tol),
-            maxiter = gmres_maxiter,
-        )
+        # Eisenstat-Walker choice 2 once a previous residual exists; its safeguard keeps a large
+        # previous forcing term from collapsing in one iteration
+        if gmres_tol === nothing && newton >= 1
+            walker = 0.9 * (residual_norm / residual_history[end-1])^2
+            safeguard = 0.9 * forcing^2
+            forcing = min(_NEWTON_FORCING_MAX, safeguard > 0.1 ? max(walker, safeguard) : walker)
+        end
+        # never solve the linear system past what the next residual needs to reach `tol`
+        linear_tol =
+            gmres_tol === nothing ? max(forcing, 0.5 * tol / residual_norm) : Float64(gmres_tol)
+        # right preconditioning: solve (op o P^-1) y = -R, then dx = P^-1 y; the preconditioner and
+        # the frames are fixed within this call, so recycled directions stay in the same space
+        preconditioned(packed) = newton_operator(apply_preconditioner(packed))
+        gmres_start = time_ns()
+        dy, iterations, _ =
+            recycle === nothing ?
+            _gmres_real(
+                preconditioned,
+                -_pack(residuals);
+                tol = Float64(linear_tol),
+                maxiter = gmres_maxiter,
+            ) :
+            _gcro_real(
+                preconditioned,
+                -_pack(residuals),
+                recycle;
+                tol = Float64(linear_tol),
+                maxiter = gmres_maxiter,
+            )
+        t_gmres += (time_ns() - gmres_start) / 1e9
         ngmres += iterations
         stage_values = [
             stage_values[stage] .+ correction for
             (stage, correction) in enumerate(_unpack(apply_preconditioner(dy), dims))
         ]
     end
+end
+
+"""
+    _stage_preconditioner(fl, fr, ops, root_start, start_time, step_size, butcher, precond)
+        -> (packed -> P^-1 packed, name)
+
+The right preconditioner of [`rk_stage_solve`](@ref) on packed stage vectors, from the Jacobian's
+linear part `J1` at the step input and midpoint time, with the normalised flow's shift `mu` frozen
+at `root_start`; `name` is `:separable`, `:linear_part` (dense) or `:none`.
+"""
+function _stage_preconditioner(
+    fl::QTTFlow,
+    fr,
+    ops,
+    root_start::AbstractMatrix,
+    start_time::Real,
+    step_size::Real,
+    butcher::AbstractMatrix,
+    precond::Symbol,
+)
+    nstages, root_size = size(butcher, 1), length(root_start)
+    dims = [size(root_start) for _ = 1:nstages]
+    identity_map = (packed -> packed, :none)
+    (precond === :none || (precond === :auto && nstages * root_size > _STAGE_PRECOND_MAX)) &&
+        return identity_map
+    midpoint = start_time + step_size / 2
+    linear_envs =
+        ops === nothing ?
+        frame_root_envs(fr, first(flow_jac_ops(fl, frame_state(fr, root_start), midpoint))) :
+        stage_linear_envs(ops, root_start, midpoint)
+    start_norm_squared = max(norm(root_start)^2, eps())
+    if precond === :separable
+        Ml, Mr = root_envs_kron_sum(linear_envs)
+        # the normalised flow's mu[psi_n] = <S, M S> / <S, S>, with M by its separable part
+        mu0 =
+            flow_normalized(fl) ?
+            real(dot(root_start, Ml * root_start .+ root_start * transpose(Mr))) /
+            start_norm_squared : 0.0
+        solve = _separable_precond(Ml - mu0 * I, Mr, fl.pref, butcher, step_size)
+        return (packed -> _pack(solve(_unpack(packed, dims)))), :separable
+    end
+    linear_part = root_envs_matrix(linear_envs)
+    mu0 =
+        flow_normalized(fl) ?
+        real(dot(vec(root_start), linear_part * vec(root_start))) / start_norm_squared : 0.0
+    stage_jacobian_matrix = fl.pref .* (linear_part - mu0 * I)
+    factorised = lu(
+        Matrix{ComplexF64}(I, nstages * root_size, nstages * root_size) .-
+        step_size .* kron(butcher, stage_jacobian_matrix),
+    )
+    function apply_dense(packed)
+        stacked = vcat((vec(block) for block in _unpack(packed, dims))...)
+        solved = factorised \ stacked
+        return _pack([
+            reshape(solved[((stage-1)*root_size+1):(stage*root_size)], dims[stage]) for
+            stage = 1:nstages
+        ])
+    end
+    return apply_dense, :linear_part
 end

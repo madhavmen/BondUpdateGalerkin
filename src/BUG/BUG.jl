@@ -64,6 +64,7 @@ include("TimeEvolution/bug_step_stages.jl")
 include("TimeEvolution/bug_step_variants.jl")
 include("TimeEvolution/midpoint.jl")
 include("TimeEvolution/flows.jl")
+include("TimeEvolution/stage_gmres.jl")
 include("TimeEvolution/stage_solvers.jl")
 include("ITE/schedules.jl")
 include("ITE/ite_step.jl")
@@ -121,6 +122,8 @@ export geometric_schedule
 # flows and implicit stage equations in the root space (TimeEvolution)
 export QTTFlow, LinearFlow, flow_op, flow_jac_ops, flow_normalized, frozen_flow
 export frame_state, frame_project, frame_operator_matrix, frame_conj
+export frame_root_envs, root_envs_matrix, root_envs_kron_sum
+export stage_field_ops, stage_field, stage_jacobian, stage_linear_envs
 export reduced_field, reduced_jacobian, RK_TABLEAUX, qtt_root_for_order, rk_stage_solve
 
 end

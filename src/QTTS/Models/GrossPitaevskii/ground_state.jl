@@ -10,13 +10,28 @@
 
 """
     gp_ground_state!(psi, m, schedule; order = 2, maxdim = 128, tol_trunc = 1e-10, tol_basis = 1e-8,
-                     max_reject = 6, normalized_flow = false, kwargs...) -> Vector{NamedTuple}
+                     max_reject = 6, normalized_flow = false, N = 1, growth = 0, on_step = nothing,
+                     tol_scaling = :fixed, kwargs...) -> Vector{NamedTuple}
 
 Imaginary-time relaxation of `psi` along the step list `schedule` by [`qtt_bug_step!`](@ref),
-renormalised after each step. A step is rejected and retried at half the step when its stage solve
-does not converge or the normalised energy rises beyond roundoff (at most `max_reject` rejections
-per schedule entry on average). The ledger records every attempt with `tau`, `h`, `accepted`,
-`reason`, `E`, `mu`, `R_mu`, `chi` and the accumulated wall time.
+renormalised to particle number `N` after each step (the nonlinear ground state depends on `N`:
+relax at the physical one, not at 1 and rescale). A step is rejected and retried at half the step
+when its stage solve does not converge or the normalised energy rises beyond roundoff above the
+energy of the current state (at most `max_reject` rejections per schedule entry on average).
+
+`growth = 0` integrates every scheduled step in full (halved substeps after a rejection: a
+relaxation to a fixed time). `growth = q > 1` is the logarithmic policy with memory: entry `k` is
+one accepted step of `min(schedule[k], q * h_accepted)`, so after a rejection the steps grow again
+from the step that was accepted instead of restarting at the scheduled size.
+
+`tol_scaling` is `qtt_bug_step!`'s, `:fixed` here: a relaxation is graded by the state it reaches,
+not by an `O(h^p)` time error, so the real-time `:order` scaling would only tighten its small first
+steps. `on_step(entry)` is called with every ledger entry as it is recorded.
+
+The ledger records every attempt with `tau`, `h`, `accepted`, `reason`, `E`, `mu`, `R_mu`, `chi`,
+the accumulated wall time `wall`, the attempt's `step_wall`, the cumulative Newton iterations and
+GMRES products of all attempts so far (`newton`, `gmres`: rejected attempts included, their work
+was spent) and the attempt's cost split (`frame`, the root-bond frame widths, `t_basis`, `t_root`).
 """
 function gp_ground_state!(
     psi::SymMPS,
@@ -28,12 +43,18 @@ function gp_ground_state!(
     tol_basis::Real = 1e-8,
     max_reject::Int = 6,
     normalized_flow::Bool = false,
+    N::Real = 1.0,
+    growth::Real = 0.0,
+    on_step = nothing,
+    tol_scaling::Symbol = :fixed,
     kwargs...,
 )
+    growth == 0 || growth > 1 || throw(ArgumentError("growth must be 0 or > 1, got $growth"))
     fl = GPFlow(m; imaginary = true, normalized = normalized_flow)
     g = m.grid
-    qtt_normalize!(psi, g)
+    qtt_normalize!(psi, g; N = N)
     start = gp_observables(m, qtt_cores(psi), 0.0)
+    newton_total, gmres_total = 0, 0
     history = NamedTuple[(
         tau = 0.0,
         h = 0.0,
@@ -44,17 +65,27 @@ function gp_ground_state!(
         R_mu = start.R_mu,
         chi = start.chi,
         wall = 0.0,
+        newton = 0,
+        gmres = 0,
     )]
+    report() = on_step === nothing || on_step(history[end])
+    report()
     tau = 0.0
     wall = 0.0
+    # the energy of the current state: a retry after a rejection is judged against it, not
+    # against the rejected trial (the last ledger entry)
+    current_energy = start.E
+    h_accepted = Inf
     for scheduled in schedule
-        h = Float64(scheduled)
+        # the span this entry covers: the scheduled step, or (growth) one step capped by the memory
+        span = growth > 0 ? min(Float64(scheduled), growth * h_accepted) : Float64(scheduled)
+        h = span
         done = 0.0
-        while done < scheduled - 1e-14
-            h = min(h, scheduled - done)
+        while done < span - 1e-14
+            h = min(h, span - done)
             trial = copy(psi)
             attempt_start = time_ns()
-            report = qtt_bug_step!(
+            step_report = qtt_bug_step!(
                 trial,
                 fl,
                 tau,
@@ -63,48 +94,53 @@ function gp_ground_state!(
                 maxdim = maxdim,
                 tol_trunc = tol_trunc,
                 tol_basis = tol_basis,
+                tol_scaling = tol_scaling,
                 kwargs...,
             )
-            qtt_normalize!(trial, g)
+            newton_total += step_report.newton
+            gmres_total += step_report.gmres
+            qtt_normalize!(trial, g; N = N)
             observed = gp_observables(m, qtt_cores(trial), 0.0)
-            wall += (time_ns() - attempt_start) / 1e9
-            energy_rose = observed.E > history[end].E + 1e-10 * abs(history[end].E)
+            step_wall = (time_ns() - attempt_start) / 1e9
+            wall += step_wall
+            energy_rose = observed.E > current_energy + 1e-10 * abs(current_energy)
             rejections = count(entry -> !entry.accepted, history)
-            if (!report.converged || energy_rose) && rejections < max_reject * length(schedule)
-                push!(
-                    history,
-                    (
-                        tau = tau,
-                        h = h,
-                        accepted = false,
-                        reason = report.converged ? :energy : :stage,
-                        E = observed.E,
-                        mu = observed.mu,
-                        R_mu = observed.R_mu,
-                        chi = observed.chi,
-                        wall = wall,
-                    ),
-                )
-                h /= 2
-                continue
-            end
-            _replace_state!(psi, trial)
-            tau += h
-            done += h
+            rejected =
+                (!step_report.converged || energy_rose) &&
+                rejections < max_reject * length(schedule)
             push!(
                 history,
                 (
-                    tau = tau,
+                    tau = rejected ? tau : tau + h,
                     h = h,
-                    accepted = true,
-                    reason = :ok,
+                    accepted = !rejected,
+                    reason = !rejected ? :ok : step_report.converged ? :energy : :stage,
                     E = observed.E,
                     mu = observed.mu,
                     R_mu = observed.R_mu,
                     chi = observed.chi,
                     wall = wall,
+                    newton = newton_total,
+                    gmres = gmres_total,
+                    step_wall = step_wall,
+                    frame = join(step_report.frame_width, "x"),
+                    t_basis = step_report.t_basis,
+                    t_root = step_report.t_root,
                 ),
             )
+            report()
+            if rejected
+                h /= 2
+                continue
+            end
+            _replace_state!(psi, trial)
+            current_energy = observed.E
+            tau += h
+            done += h
+            if growth > 0
+                h_accepted = h
+                break
+            end
         end
     end
     return history
@@ -117,7 +153,7 @@ end
 QTT gradient descent on the normalised energy (the ground-state baseline of Chen et al.,
 arXiv:2507.04279v5): `psi <- normalise(psi - eta (H[psi] - mu[psi]) psi)`, compressed, with
 backtracking (`eta` halved while the energy rises, grown by 1.2 after an accepted step). Stops at
-`R_mu < tol`.
+`R_mu < tol`. `on_step(entry)` is called with every ledger entry as it is recorded.
 """
 function gp_gradient_descent!(
     psi::SymMPS,
@@ -127,6 +163,7 @@ function gp_gradient_descent!(
     tol::Real = 1e-8,
     maxdim::Int = 128,
     tol_trunc::Real = 1e-10,
+    on_step = nothing,
 )
     g = m.grid
     qtt_normalize!(psi, g)
@@ -141,6 +178,7 @@ function gp_gradient_descent!(
         chi = observed.chi,
         wall = 0.0,
     )]
+    on_step === nothing || on_step(history[end])
     wall = 0.0
     step_size = Float64(eta)
     for iteration = 1:maxiter
@@ -178,6 +216,7 @@ function gp_gradient_descent!(
                 wall = wall,
             ),
         )
+        on_step === nothing || on_step(history[end])
     end
     _replace_state!(psi, qtt_mps(A))
     return history

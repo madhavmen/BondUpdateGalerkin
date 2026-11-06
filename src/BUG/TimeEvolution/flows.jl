@@ -45,13 +45,14 @@ flow_op(fl::LinearFlow, state_cores, field_time) =
     (fl.H, (chi_rho = 0, rho_err = 0.0, t_rho = 0.0, retried = false, w = _op_bond_max(fl.H)))
 
 """
-    flow_jac_ops(fl, state_cores, field_time) -> (J1, J2)
+    flow_jac_ops(fl, state_cores, field_time; rho = nothing) -> (J1, J2)
 
 The operators of the real-linear Jacobian at `state_cores` (file header); `J2 = nothing` when it
-vanishes.
+vanishes. `rho` is a density of the same state the flow already built (the field's info), reused
+instead of rebuilt; flows without a density ignore it.
 """
 function flow_jac_ops end
-flow_jac_ops(fl::LinearFlow, state_cores, field_time) = (fl.H, nothing)
+flow_jac_ops(fl::LinearFlow, state_cores, field_time; rho = nothing) = (fl.H, nothing)
 
 "Whether the flow subtracts `mu[psi]` (the normalised gradient flow)."
 flow_normalized(::QTTFlow) = false

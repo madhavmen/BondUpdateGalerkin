@@ -1,7 +1,8 @@
 # The Gross-Pitaevskii nonlinear right-hand side on QTT.
 #
-# The density and the
-# zip-up products against dense, H[psi, t] and F(psi) against dense, the density rebuilt from the
+# The density, the
+# zip-up products and their variational fit against dense, H[psi, t] and F(psi) against dense, the
+# normalised energy with the paddle term, the density rebuilt from the
 # trial state, the real-linear JVP against finite differences, and H0 against the dense stencils.
 # The frozen-density step is `frozen_flow`.
 
@@ -62,6 +63,17 @@ clear_fusion_cache!()
         @test squared_info.err_bound < 1e-11
         mixed, _ = tt_product(state_one, state_two; tol = 1e-13)
         @test _relerr(vec(tt_dense(mixed)), values_one .* values_two) < 1e-11
+        # the variational fit, warm-started from a different product of the same ranks
+        fitted, fit_info = tt_hadamard_fit(state_one, tt_conj(state_one), mixed; tol = 1e-12)
+        @test _relerr(vec(tt_dense(fitted)), abs2.(values_one)) < 1e-10
+        @test fit_info.sweeps >= 1 && fit_info.chi == maximum(tt_ranks(fitted))
+        fitted_mixed, _ = tt_hadamard_fit(state_one, state_two, rho; tol = 1e-12)
+        @test _relerr(vec(tt_dense(fitted_mixed)), values_one .* values_two) < 1e-10
+        # the normalised energy is the functional imaginary time descends, paddle included:
+        # E N = F_gc + mu N
+        observed = gp_observables(m, state_one, t)
+        @test observed.E_pad != 0
+        @test observed.E * observed.N ≈ observed.F_gc + m.mu * observed.N rtol = 1e-10
         # H[psi, t], its zip-up application and F(psi) against dense
         H1, _ = gp_hamiltonian_op(m, state_one, t)
         @test _relerr(op_dense(H1), linear + m.g * Diagonal(abs2.(values_one))) < 1e-11

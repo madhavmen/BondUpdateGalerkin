@@ -90,20 +90,75 @@ function frame_project(fr::QTTFrames, H, C::AbstractVector)
     return _tc(E, (2, 3), F, (2, 3))
 end
 
-"The root-space matrix of `W' H Z`: `M[(a,a2),(c,c2)] = sum_b E[a,b,c] F[a2,b,c2]`."
-function frame_operator_matrix(fr::QTTFrames, H)
+"""
+    frame_root_envs(fr, H; conj_ket = false) -> (E, F)
+
+The environments of `W' H Z` at the root cut: `E[a, b, c]` over the `W` sites (bra `W`, operator
+channel `b`, ket `W`, or `conj(W)` with `conj_ket` -- for the Jacobian's `psi^2 conj(dpsi)` term),
+`F[a2, b, c2]` over the `Z` sites. Built per summand of an operator (the static part once per frame
+set, the paddle per stage time, the density per stage iterate). With them the projected action is
+[`root_apply`](@ref), `sum_b E_b Y transpose(F_b)`, which equals `frame_project(fr, H,
+frame_state(fr, Y))` (with `conj_ket`: of `tt_conj(frame_state(fr, conj(Y)))`) at `O(w r^3)` per
+application, with no sweep over the sites.
+"""
+function frame_root_envs(fr::QTTFrames, H; conj_ket::Bool = false)
+    ket(core) = conj_ket ? conj(core) : core
     c = length(fr.W)
     E = _unit_env()
     for k = 1:c
-        E = _env_left(E, fr.W[k], H[k], fr.W[k])
+        E = _env_left(E, fr.W[k], H[k], ket(fr.W[k]))
     end
     F = _unit_env()
     for k = length(H):-1:(c+1)
-        F = _env_right(F, fr.Z[k-c], H[k], fr.Z[k-c])
+        F = _env_right(F, fr.Z[k-c], H[k], ket(fr.Z[k-c]))
     end
+    return (E, F)
+end
+
+"`sum_b E_b Y transpose(F_b)`, the root action of [`frame_root_envs`](@ref)'s `(E, F)`."
+function root_apply(envs, Y::AbstractMatrix)
+    E, F = envs
+    partial = _tc(E, (3,), Y, (1,))                  # (a, b, c2)
+    return _tc(partial, (2, 3), F, (2, 3))           # (a, a2)
+end
+
+"Root environments of `sum_t c_t H_t` from those of each summand (channels side by side)."
+_envs_cat(terms) = (
+    cat((coefficient .* first(envs) for (coefficient, envs) in terms)...; dims = 2),
+    cat((last(envs) for (_, envs) in terms)...; dims = 2),
+)
+
+"The root-space matrix of `W' H Z`: `M[(a,a2),(c,c2)] = sum_b E[a,b,c] F[a2,b,c2]`."
+frame_operator_matrix(fr::QTTFrames, H) = root_envs_matrix(frame_root_envs(fr, H))
+
+"The root-space matrix of the environments `(E, F)` ([`frame_operator_matrix`](@ref))."
+function root_envs_matrix(envs)
+    E, F = envs
     M = _tc(E, (2,), F, (2,))                        # (a, c, a2, c2)
     left_rank, right_rank = size(E, 1), size(F, 1)
     return reshape(permutedims(M, (1, 3, 2, 4)), left_rank * right_rank, left_rank * right_rank)
+end
+
+"""
+    root_envs_kron_sum(envs) -> (Ml, Mr)
+
+The Kronecker sum `Ml (x) I + I (x) Mr` nearest (Frobenius) to the root-space operator of the
+environments `envs`, acting on a root `Y` as `Ml Y + Y transpose(Mr)`; the root matrix is never
+formed. With the cut's channels `E_b` (left, `r_L x r_L`) and `F_b` (right, `r_R x r_R`),
+`Ml = sum_b tr(F_b)/r_R E_b - kappa I`, `Mr = sum_b tr(E_b)/r_L F_b`,
+`kappa = sum_b tr(E_b) tr(F_b) / (r_L r_R)`. It is exact when the operator is a Kronecker sum across
+the root bond: the kinetic and trap terms at the grouped x|y interface, which is where the BUG root
+sits (`L / 2 = n_x`); the rest (rotation, density, paddle, Heston's mixed term) is left to GMRES.
+"""
+function root_envs_kron_sum(envs)
+    E, F = envs
+    left_rank, channels, right_rank = size(E, 1), size(E, 2), size(F, 1)
+    left_traces = [sum(E[row, channel, row] for row = 1:left_rank) for channel = 1:channels]
+    right_traces = [sum(F[row, channel, row] for row = 1:right_rank) for channel = 1:channels]
+    Ml = sum((right_traces[channel] / right_rank) .* E[:, channel, :] for channel = 1:channels)
+    Mr = sum((left_traces[channel] / left_rank) .* F[:, channel, :] for channel = 1:channels)
+    kappa = sum(left_traces .* right_traces) / (left_rank * right_rank)
+    return Ml - kappa * I, Mr
 end
 
 frame_conj(::QTTFrames, C::AbstractVector) = tt_conj(C)

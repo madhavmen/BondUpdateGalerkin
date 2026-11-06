@@ -25,8 +25,9 @@ end
 """
     _dense_expv(apply, v, tau; tol = 1e-12, m = 30) -> (w, napply)
 
-`exp(tau A) v` by Arnoldi with the a-posteriori estimate `|h_{m+1,m} [exp(tau H_m)]_{m,1}|`,
-halving the substep until it fits `tol` (relative).
+`exp(tau A) v` by Arnoldi with the a-posteriori estimate `|h_{m+1,m} [exp(tau H_m)]_{m,1}|`: the
+basis stops at the first depth whose estimate fits `tol` (relative), and at depth `m` the substep
+is halved until it does.
 """
 function _dense_expv(apply, v::AbstractArray, tau::Number; tol::Real = 1e-12, m::Int = 30)
     nv = norm(v)
@@ -60,6 +61,11 @@ function _dense_expv(apply, v::AbstractArray, tau::Number; tol::Real = 1e-12, m:
                 happy = true
                 break
             end
+            # stop the basis as soon as the estimate for this substep fits `tol`
+            if j < m && abs(Hm[j+1, j] * dt) * abs(exp(dt .* Hm[1:j, 1:j])[j, 1]) <= tol
+                k = j
+                break
+            end
             push!(Vs, u ./ Hm[j+1, j])
         end
         while true
@@ -79,9 +85,10 @@ end
 """
     tt_expv(apply, C, tau; m = 16, tol = 1e-10, maxdim = 256, tol_trunc = 1e-12) -> (TT, info)
 
-`exp(tau A) C` by Arnoldi on TT vectors (every new vector compressed at `tol_trunc`), substeps
-halved until the estimate `|h_{m+1,m} tau [exp(tau H_m)]_{m,1}|` fits `tol`. A stable global
-reference with no backward substep.
+`exp(tau A) C` by Arnoldi on TT vectors (every new vector compressed at `tol_trunc`): the basis
+stops at the first depth whose estimate `|h_{m+1,m} tau [exp(tau H_m)]_{m,1}|` fits `tol`, and at
+depth `m` the substep is halved until it does. A stable global reference with no backward
+substep.
 """
 function tt_expv(
     apply,
@@ -115,6 +122,12 @@ function tt_expv(
             Hm[j+1, j] = tt_norm(u)
             if abs(Hm[j+1, j]) <= 1e-13 * max(1.0, opnorm(Hm[1:j, 1:j], 1))
                 k, happy = j, true
+                break
+            end
+            # stop at the first depth whose estimate fits `tol` for this substep: every further
+            # vector costs 2j TT recompressions (Gram-Schmidt, two passes)
+            if j < m && abs(Hm[j+1, j] * dt) * abs(exp(dt .* Hm[1:j, 1:j])[j, 1]) <= tol
+                k = j
                 break
             end
             push!(Vs, tt_scale(u, 1 / Hm[j+1, j]))
@@ -151,7 +164,9 @@ of the flow `fl`, with the explicitly BACKWARD one-site centre substeps `exp(-h/
   substep time) from the TRIAL state, by the self-consistent midpoint iteration
   `x' = exp(dt F[(x + x')/2]) x` to `tol_sc`, environments rebuilt at every iterate.
 
-Records `A_back = ||M_after|| / ||M_before||` for every backward substep, the
+Every two-site cut is allowed what the BUG step's final compression allows each bond
+(`_cut_divisor` at the BUG root). The lagged step caches its environments (its operator is fixed
+for the step). Records `A_back = ||M_after|| / ||M_before||` for every backward substep, the
 self-consistency iterations and the discarded weight. "TDVP2" names the two-site update, not a
 temporal order; the order is measured (V07).
 """
@@ -204,15 +219,40 @@ function qtt_tdvp2_step!(
         end
         return lo == hi ? (z -> _eff1(E, H[lo], F, z)) : (z -> _eff2(E, H[lo], H[hi], F, z))
     end
+    # TDVP2_lagged: H[psi_n, t_n] is fixed for the whole step, so its environments are the
+    # standard cached ones, each extended by one site after every cut. TDVP2_consistent rebuilds
+    # them at every trial state: its density, refitted from the whole trial state, changes at every
+    # site.
+    lagged = density === :lagged
+    fixed_operator = lagged ? first(flow_op(flow, C, t)) : nothing
+    left_envs, right_envs = Vector{Any}(undef, L), Vector{Any}(undef, L)
+    if lagged
+        left_envs[1], right_envs[L] = _unit_env(), _unit_env()
+        for site = L:-1:2
+            right_envs[site-1] =
+                _env_right(right_envs[site], C[site], fixed_operator[site], C[site])
+        end
+    end
     # one local substep `exp(dt F_local) x` at time `ts`, generator from the trial state
     function substep(x, lo, hi, dt, ts)
+        if lagged
+            left_env, right_env = left_envs[lo], right_envs[hi]
+            app =
+                lo == hi ? (z -> _eff1(left_env, fixed_operator[lo], right_env, z)) :
+                (z -> _eff2(left_env, fixed_operator[lo], fixed_operator[hi], right_env, z))
+            # the state is mixed-canonical around `x`: <X|H|X> / <X|X> is local
+            mu = flow_normalized(fl) ? real(dot(x, app(x))) / max(norm(x)^2, eps()) : 0.0
+            y, k = _dense_expv(z -> fl.pref .* (app(z) .- mu .* z), x, dt; tol = tol_krylov)
+            nap += k
+            push!(nsc, 0)
+            return y
+        end
         X = assemble(x, lo, hi)
         H, _ = flow_op(flow, X, ts)
         mu = mu_of(H, X)
         app = local_op(H, X, lo, hi)
         y, k = _dense_expv(z -> fl.pref .* (app(z) .- mu .* z), x, dt; tol = tol_krylov)
         nap += k
-        density === :lagged && (push!(nsc, 0); return y)
         it = 0
         for _ = 1:maxsc
             it += 1
@@ -229,12 +269,14 @@ function qtt_tdvp2_step!(
         push!(nsc, it)
         return y
     end
-    # the truncating split of a two-site block (the TDVP2 rank control)
+    # the truncating split of a two-site block (the TDVP2 rank control), every cut allowed what
+    # the BUG step's final compression allows each bond (as the spin-chain `tdvp2_step!`)
+    cut_divisor = _cut_divisor(L, _bug_root_link(L) + 1)
     function cut(Th, keep_left::Bool)
         cl, _, _, cr = size(Th)
         F = svd(reshape(Th, 2cl, 2cr))
         nrm = norm(F.S)
-        r = _qtt_rank(F.S, tol_trunc * nrm / sqrt(max(L - 1, 1)), maxdim)
+        r = _qtt_rank(F.S, tol_trunc * nrm / cut_divisor, maxdim)
         disc2 += sum(abs2, @view(F.S[(r+1):end]); init = 0.0) / max(nrm^2, eps())
         U, S, Vt = F.U[:, 1:r], F.S[1:r], F.Vt[1:r, :]
         return keep_left ? (reshape(U, cl, 2, r), reshape(Diagonal(S) * Vt, r, 2, cr)) :
@@ -251,6 +293,7 @@ function qtt_tdvp2_step!(
     for i = 1:(L-1)                                     # left to right, h/2
         Th = substep(theta(i), i, i + 1, half, tmid)
         C[i], M = cut(Th, true)
+        lagged && (left_envs[i+1] = _env_left(left_envs[i], C[i], fixed_operator[i], C[i]))
         if i < L - 1
             C[i+1] = M                                   # in place for the environments
             n0 = norm(M)
@@ -260,9 +303,12 @@ function qtt_tdvp2_step!(
         C[i+1] = M
     end
     tmid = t + 3half / 2
+    # right to left: the left environments of the first sweep hold (sites 1..L-1 final, H fixed)
     for i = (L-1):-1:1                                  # right to left, h/2
         Th = substep(theta(i), i, i + 1, half, tmid)
         M, C[i+1] = cut(Th, false)
+        lagged &&
+            (right_envs[i] = _env_right(right_envs[i+1], C[i+1], fixed_operator[i+1], C[i+1]))
         if i > 1
             C[i] = M
             n0 = norm(M)

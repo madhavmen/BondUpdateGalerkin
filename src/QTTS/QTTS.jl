@@ -16,6 +16,8 @@ module QTTS
 using ..BUG
 # the frame and flow interface of the BUG stage solver, extended for dense QTT cores
 import ..BUG: frame_state, frame_project, frame_operator_matrix, frame_conj
+import ..BUG: frame_root_envs, root_envs_matrix, root_envs_kron_sum
+import ..BUG: stage_field_ops, stage_field, stage_jacobian, stage_linear_envs
 import ..BUG: flow_op, flow_jac_ops, flow_normalized
 using ..BUG: KLFrames, _replace_state!
 using LinearAlgebra
@@ -31,6 +33,7 @@ include("Tooling/sampling.jl")
 include("Tooling/derivatives.jl")
 include("Tooling/operator_assembly.jl")
 include("Tooling/frames.jl")
+include("Tooling/stage_fields.jl")
 include("Tooling/nonlinear_step.jl")
 include("Models/Heston/heston.jl")
 include("Models/Heston/heston_reference.jl")
@@ -58,11 +61,13 @@ export QTT_BCS, qtt_shift, qtt_derivative, qtt_diag_1d, qtt_d, qtt_coord_diag, q
 export HestonParams, feller, heston_op, heston_mpo
 export heston_riccati, heston_affine_field, heston_call, heston_mass, heston_moment
 # elementwise products and the compressed operator application (Elementwise/products.jl)
-export tt_hadamard, tt_product, tt_density, op_zipup
+export tt_hadamard, tt_product, tt_density, tt_hadamard_fit, op_zipup
 # normalisation and sampling (Tooling/sampling.jl)
 export qtt_normalize!, qtt_sample
 # dense root-space frames and the nonlinear step (Tooling/frames.jl, nonlinear_step.jl)
-export QTTFrames, frame_miss, frame_defect, qtt_bug_step!
+export QTTFrames, frame_miss, frame_defect, qtt_bug_step!, qtt_step_tolerance
+# per-summand root environments of the stage solve (Tooling/frames.jl, Tooling/stage_fields.jl)
+export root_apply, StageFieldOps
 # Gross-Pitaevskii (Models/GrossPitaevskii)
 export GPPaddle, paddle_state, gp_paddle_op, GPModel, gp_model, gp_linear_op, gp_density
 export gp_hamiltonian_op, GPHamiltonianCache, qtt_state_tag, gp_hamiltonian
