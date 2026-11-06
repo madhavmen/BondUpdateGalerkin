@@ -40,8 +40,8 @@ include(joinpath(@__DIR__, "..", "..", "..", "common", "dense_reference.jl"))
     end
     start_vector = dense_state(start_state)
     start_norm = norm(start_vector)
-    exact_vector = exp(time_step * Matrix(dense_heisenberg(chain_length; J = 1.0, delta = 1.0))) *
-                   start_vector
+    exact_vector =
+        exp(time_step * Matrix(dense_heisenberg(chain_length; J = 1.0, delta = 1.0))) * start_vector
 
     # one step from `start_state`: (relative error against exp(tau H), D_stage)
     function step_error_and_stage(; keywords...)

@@ -14,6 +14,8 @@ using Test, LinearAlgebra
 using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
 import BondUpdateGalerkin.BUG: _cap_at
 
+include(joinpath(@__DIR__, "..", "..", "..", "common", "dense_reference.jl"))
+
 @testset "per-bond work ceiling (work_ceiling_rule = :bond)" begin
     @testset "bond_work_ceilings" begin
         @test bond_work_ceilings([1, 3, 8], 2, 1024) == [4, 12, 32]
@@ -94,11 +96,8 @@ import BondUpdateGalerkin.BUG: _cap_at
         @test all(tight_ceilings .< ceilings)                 # fixture guard: tighter everywhere
         for order in (2, 3)
             per_bond = ceiling_step(; order = order, work_ceiling_rule = :bond)
-            tight = ceiling_step(;
-                order = order,
-                work_ceiling_rule = :bond,
-                bond_ceiling_factor = 1.2,
-            )
+            tight =
+                ceiling_step(; order = order, work_ceiling_rule = :bond, bond_ceiling_factor = 1.2)
             @test all(tight.widths .<= tight_ceilings)
             @test all(bond_dims(tight.state) .<= tight_ceilings)
             @test tight.stage <= per_bond.stage

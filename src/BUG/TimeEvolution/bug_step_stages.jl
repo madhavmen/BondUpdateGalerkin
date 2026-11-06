@@ -69,9 +69,8 @@ function _resolve_step_options(
             ),
         )
     frontier_tol >= 0 || throw(ArgumentError("frontier_tol must be >= 0, got $frontier_tol"))
-    work_ceiling_rule in (:maxdim, :bond) || throw(
-        ArgumentError("work_ceiling_rule must be :maxdim or :bond, got $work_ceiling_rule"),
-    )
+    work_ceiling_rule in (:maxdim, :bond) ||
+        throw(ArgumentError("work_ceiling_rule must be :maxdim or :bond, got $work_ceiling_rule"))
     bond_ceiling_factor == 0 ||
         (bond_ceiling_factor > 1 && work_ceiling_rule === :bond) ||
         throw(

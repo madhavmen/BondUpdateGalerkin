@@ -28,8 +28,8 @@ include(joinpath(@__DIR__, "..", "..", "..", "common", "dense_reference.jl"))
     end
     start_vector = dense_state(start_state)
     start_norm = norm(start_vector)
-    exact_vector = exp(time_step * Matrix(dense_heisenberg(chain_length; J = 1.0, delta = 1.0))) *
-                   start_vector
+    exact_vector =
+        exp(time_step * Matrix(dense_heisenberg(chain_length; J = 1.0, delta = 1.0))) * start_vector
 
     plain_state, compressed_state = copy(start_state), copy(start_state)
     cbe_bug_step!(plain_state, hamiltonian, time_step; step_settings..., parallel = false)
@@ -58,8 +58,9 @@ include(joinpath(@__DIR__, "..", "..", "..", "common", "dense_reference.jl"))
         frontier_tol = 1e-12,
     )
     parallel_vector = dense_state(parallel_state)
-    fidelity = abs(dot(parallel_vector, compressed_vector)) /
-               (norm(parallel_vector) * norm(compressed_vector))
+    fidelity =
+        abs(dot(parallel_vector, compressed_vector)) /
+        (norm(parallel_vector) * norm(compressed_vector))
     @test 1 - fidelity < 1e-12
     @test bond_dims(parallel_state) == bond_dims(compressed_state)
 
