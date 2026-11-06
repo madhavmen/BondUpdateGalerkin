@@ -32,6 +32,11 @@ function _resolve_step_options(
     frontier_tol,
     work_ceiling_rule,
     bond_ceiling_factor,
+    keep_states,
+    keep_tols,
+    frames_only,
+    root_report,
+    truncate,
 )
     site_count = length(psi)
     length(mpo) == site_count ||
@@ -77,6 +82,21 @@ function _resolve_step_options(
         )
     closure_probe >= 0 ||
         throw(ArgumentError("closure_probe must be a non-negative count, got $closure_probe"))
+    isempty(keep_tols) ||
+        length(keep_tols) == length(keep_states) ||
+        throw(
+            ArgumentError(
+                "keep_tols has $(length(keep_tols)) entries for $(length(keep_states)) keep_states",
+            ),
+        )
+    all(>=(0), keep_tols) || throw(ArgumentError("keep_tols must be >= 0, got $keep_tols"))
+    frames_only &&
+        (root_report !== nothing || kls !== nothing || truncate) &&
+        throw(
+            ArgumentError(
+                "frames_only needs root_report = nothing, kls = nothing and truncate = false",
+            ),
+        )
     if kls !== nothing
         kls in KLS_SCHEDULES ||
             throw(ArgumentError("the K/L/S schedule must be one of $(KLS_SCHEDULES), got $kls"))
@@ -106,6 +126,7 @@ function _resolve_step_options(
         fold_omega = fold_omega,
         maxdim = maxdim,
         workcap = workcap,
+        keep_tols = isempty(keep_tols) ? zeros(length(keep_states)) : Float64.(keep_tols),
     )
 end
 
@@ -378,4 +399,149 @@ function _report_root!(
         resid = outside === nothing ? NaN : abs(tau) * outside.bound / result_norm,
     )
     return (root_start = root_start, root_result = root_result, lenv = lenv_root, renv = renv_root)
+end
+
+"""
+    _finish_kls!(klsst, mpo, left_frames, right_frames, root_link, lenv_root, renv_root,
+                 root_start, root_result; kwargs...) -> (root_result, operator_applications)
+
+The parallel K/L/S step's merge (`_kls_finish`): the four-block core in the grown root frames, or
+-- when the omitted new-new block is above `tol_basis` -- the standard augmented root solve in them.
+Grows the root frames in place and records the K/L account in `ledger`. With no K/L/S step
+(`klsst === nothing`) the root result is returned unchanged.
+"""
+function _finish_kls!(
+    klsst,
+    mpo,
+    left_frames,
+    right_frames,
+    root_link::Int,
+    lenv_root,
+    renv_root,
+    root_start,
+    root_result;
+    tau,
+    eshift,
+    kls_stage,
+    kernel_counters,
+    root_applications,
+    root_solve_report,
+    ledger,
+    budget,
+    norm_scale,
+)
+    klsst === nothing && return root_result, 0
+    solve_aug(generator, start_vector) = (
+        operator = RootOp(shift_h(generator, eshift), root_link, kernel_counters);
+        kls_stage(
+            input -> (root_applications[] += 1; apply_zero_site(operator, input)),
+            start_vector,
+            root_solve_report,
+        )
+    )
+    merged = _kls_finish(
+        klsst,
+        mpo,
+        left_frames,
+        right_frames,
+        root_link,
+        lenv_root,
+        renv_root,
+        root_start,
+        root_result,
+        tau,
+        solve_aug;
+        nrm = norm_scale,
+        tol_missing = budget.basis,
+    )
+    left_frames[root_link], right_frames[root_link] = merged.left_root, merged.right_root
+    merge_counters!(kernel_counters, merged.kc)
+    ledger.kls = merged.account
+    ledger.r_aug =
+        max(ledger.r_aug, leg_dim(left_frames[root_link], 3), leg_dim(right_frames[root_link], 1))
+    max(merged.account.err_K, merged.account.err_L) > budget.expv * (1 + 1e-8) &&
+        _unmet!(ledger, :expv)
+    return merged.root_result, merged.account.n_K + merged.account.n_L
+end
+
+"""
+    _step_info(psi, ledger, (left_acc, right_acc), root_counters; kwargs...) -> CBEBugSweepInfo
+
+The step's result: its `StepRecord` and the `CBEBugSweepInfo` around it, from the two half-sweeps'
+accumulators and the root's kernel counters. The phase timers are sums across both half-sweeps,
+i.e. CPU time, while `seconds.step` is wall clock: under `parallel = true` two sweeps running at
+once spend more CPU seconds than the step takes, and a share above 1 is the speedup showing up,
+not a bug. Compare phases arm to arm in seconds; only the serial arm's shares are fractions.
+"""
+function _step_info(
+    psi,
+    ledger,
+    accumulators,
+    root_counters;
+    expanded,
+    n_new,
+    root_link,
+    root_rank,
+    root_frame_width,
+    errors,
+    discarded,
+    applications,
+    peak,
+    seconds,
+    bytes,
+    order,
+    parallel_mode,
+    start_ranks,
+    maxdim,
+    workcap,
+    alloc,
+)
+    left_acc, right_acc = accumulators
+    counters = merge_counters!(
+        merge_counters!(merge_counters!(KernelCounters(), left_acc.kc), right_acc.kc),
+        root_counters,
+    )
+    counters.b_compress += bytes.compression
+    record = StepRecord(
+        :dd_qr_streamed,
+        _qr_backend(),
+        order > 1 ? :dd_qr_streamed : :none,
+        order,
+        parallel_mode,
+        counters,
+        maximum(start_ranks; init = 0),
+        max(maximum(expanded; init = 0), root_frame_width),
+        maximum(bond_dims(psi); init = 0),
+        maxdim,
+        maximum(workcap),
+        applications.root,
+        seconds.step,
+        bytes.step,
+        Int(Sys.maxrss()),
+        _step_limits(ledger),
+        alloc.rule,
+    )
+    return CBEBugSweepInfo(
+        expanded,
+        n_new,
+        root_link,
+        root_rank,
+        errors[1],
+        errors[2],
+        discarded,
+        left_acc.nmv + right_acc.nmv + applications.root + applications.closure + applications.kls,
+        peak,
+        left_acc.ngrow + right_acc.ngrow,
+        root_frame_width,
+        left_acc.tcbe + right_acc.tcbe,
+        left_acc.tkry + right_acc.tkry,
+        seconds.root,
+        seconds.truncation,
+        left_acc.tsplit + right_acc.tsplit,
+        left_acc.tframe + right_acc.tframe,
+        left_acc.tenv + right_acc.tenv,
+        seconds.step,
+        ledger,
+        record,
+    )
 end

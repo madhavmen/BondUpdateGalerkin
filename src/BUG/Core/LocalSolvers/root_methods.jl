@@ -51,14 +51,19 @@ function _rational_apply(root_method::Symbol, matrix::AbstractMatrix, rhs::Abstr
     return poly(denominator) \ (poly(numerator) * rhs)
 end
 
-"The shift of a rational root: the Ritz value maximising `Re(tau*lambda)` (none in real time)."
-_rational_shift(vals, tau::ComplexF64) =
-    (isempty(vals) || real(tau) == 0) ? zero(ComplexF64) :
+"""
+The shift of a rational root: the Ritz value maximising `Re(tau*lambda)` (none in real time).
+`shift = false` (`expv`'s `rational_shift`) gives no shift: `R(tau*T)e_1` is then the plain
+implicit-RK step, its scale kept -- for a linear PDE flow `u' = A u` with real `tau` (Heston), whose
+decay is the solution and must not be normalised away (the shifted root held the `-r` mode at 1).
+"""
+_rational_shift(vals, tau::ComplexF64, shift::Bool = true) =
+    (!shift || isempty(vals) || real(tau) == 0) ? zero(ComplexF64) :
     ComplexF64(vals[argmax([real(tau * ComplexF64(value)) for value in vals])])
 
 "`R(tau*(T - sigma))e_1` for the Hermitian tridiagonal's eigendecomposition; scale not returned."
-function _rational_coeffs(vals, vecs, tau::ComplexF64, root_method::Symbol)
-    sigma = _rational_shift(vals, tau)
+function _rational_coeffs(vals, vecs, tau::ComplexF64, root_method::Symbol, shift::Bool = true)
+    sigma = _rational_shift(vals, tau, shift)
     # e_1 in the eigenbasis (first row of `vecs`), each component times R of its shifted value
     eigen_weights =
         root_stability.(root_method, tau .* (ComplexF64.(vals) .- sigma)) .* ComplexF64.(vecs[1, :])
@@ -138,11 +143,16 @@ end
 
 """
 `R(tau*(Hm - sigma))e_1` on the Arnoldi Hessenberg, `sigma` the eigenvalue maximising
-`Re(tau*lambda)` (see the root-integrator block); scale not returned.
+`Re(tau*lambda)` (see the root-integrator block; `shift = false` none); scale not returned.
 """
-function _hess_rational(Hm::Matrix{ComplexF64}, tau::ComplexF64, root_method::Symbol)
+function _hess_rational(
+    Hm::Matrix{ComplexF64},
+    tau::ComplexF64,
+    root_method::Symbol,
+    shift::Bool = true,
+)
     isempty(Hm) && return (ComplexF64[], zero(ComplexF64))
-    sigma = _rational_shift(eigvals(Hm), tau)
+    sigma = _rational_shift(eigvals(Hm), tau, shift)
     unit_vector = zeros(ComplexF64, size(Hm, 1))
     unit_vector[1] = 1
     return _rational_apply(root_method, tau * (Hm - sigma * I), unit_vector), zero(ComplexF64)
@@ -230,7 +240,7 @@ coupled stages solved matrix-free by GMRES (block above) to the relative stage r
 `_RADAU_MAXCYCLE` times. `report` receives `(iterations, substeps = 1, err, cycles, stages)`: `err`
 is the TRUE relative stage residual `‖1 ⊗ x - (I - tau A ⊗ (B - sigma)) Y‖ / ‖x‖`, recomputed with
 two actions rather than read off the recurrence, and `stages = (Y_1, Y_2)`. As for `:radau2` the
-shift's scale is not returned.
+shift's scale is not returned; `rational_shift = false` solves the unshifted stages (scale kept).
 """
 function radau2_gmres_expv(
     apply,
@@ -240,6 +250,7 @@ function radau2_gmres_expv(
     maxiter::Int = 60,
     conv_tol::Float64 = 0.0,
     report::Union{Nothing,Base.RefValue} = nothing,
+    rational_shift::Bool = true,
 )
     xc = _as_complex(vector)
     beta0 = norm(xc)
@@ -258,7 +269,8 @@ function radau2_gmres_expv(
         zs,
         stage_eigvecs_inv * ones(ComplexF64, 2),
         stage_eigvecs,
-        nothing,
+        # `nothing`: the shift is the Ritz value `_rational_shift` picks; zero: unshifted
+        rational_shift ? nothing : zero(ComplexF64),
         target,
         maxiter,
         tol,
@@ -341,7 +353,9 @@ Arnoldi (needed for the non-Hermitian K and L generators). `conv_tol > 0` stops 
 estimate; `substeps = 0` splits `tau` adaptively. `report = Ref{Any}()` receives `(iterations,
 substeps, err)` ([`_report!`](@ref)). `root_method` (`:exp` default) can also be `:trapezoid`,
 `:radau2` or `:radau3`, which apply that implicit stability function in one stage and ignore
-`substeps`.
+`substeps`. `rational_shift = false` turns off those roots' imaginary-time spectral shift
+(`_rational_shift`): the step is then `R(tau*A) vector` exactly, its decay kept, as a linear PDE
+flow (Heston) needs.
 """
 function expv(
     apply,
@@ -355,6 +369,7 @@ function expv(
     substeps::Int = 1,
     report::Union{Nothing,Base.RefValue} = nothing,
     root_method::Symbol = :exp,
+    rational_shift::Bool = true,
 )
     return hermitian ?
            lanczos_expv(
@@ -368,6 +383,7 @@ function expv(
         substeps = substeps,
         report = report,
         root_method = root_method,
+        rational_shift = rational_shift,
     ) :
            arnoldi_expv(
         apply,
@@ -379,6 +395,7 @@ function expv(
         substeps = substeps,
         report = report,
         root_method = root_method,
+        rational_shift = rational_shift,
     )
 end
 

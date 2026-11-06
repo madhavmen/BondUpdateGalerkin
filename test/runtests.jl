@@ -46,6 +46,7 @@ end
     run_testfile("BUG/Randomised/test_expansion.jl")
     run_testfile("BUG/ITE/test_schedules.jl")
     run_testfile("BUG/TimeEvolution/test_parallel_half_sweeps.jl")
+    run_testfile("BUG/TimeEvolution/test_step_keep_states.jl")
     run_testfile("BUG/TimeEvolution/test_fixtures_b155550.jl")
     run_testfile("BUG/TimeEvolution/test_stage_solvers.jl")
     # QMB

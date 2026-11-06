@@ -86,6 +86,43 @@ diag_exact(scale, tau, v) =
         end
     end
 
+    @testset "rational roots unshifted: R(tau G) itself, its decay kept" begin
+        # A linear PDE flow (Heston, real time only): `rational_shift = false` is R(tau G) per
+        # sector, on both recurrences and through radau2_gmres; the default shifted root drops the
+        # scale (it normalises the extreme Ritz value), so it is not
+        scale = s -> 0.5 * s[1][1] + 1.0
+        root_exact(root, tau) = to_concrete(
+            reduce(+, (root_stability(root, tau * scale(s)) * p for (s, p) in sector_parts(xe))),
+        )
+        for tau in (0.3 + 0.0im, -0.3 + 0.0im), root in (:trapezoid, :radau2, :radau3)
+            want = root_exact(root, tau)
+            for hermitian in (true, false)
+                unshifted = expv(
+                    diag_apply(scale),
+                    tau,
+                    xe;
+                    hermitian = hermitian,
+                    root_method = root,
+                    rational_shift = false,
+                )
+                @test norm(unshifted - want) < 1e-10 * norm(want)
+            end
+            shifted = expv(diag_apply(scale), tau, xe; hermitian = false, root_method = root)
+            @test norm(shifted - want) > 1e-6 * norm(want)
+        end
+        unshifted_gmres = expv(
+            diag_apply(scale),
+            -0.3 + 0.0im,
+            xe;
+            hermitian = false,
+            root_method = :radau2_gmres,
+            conv_tol = 1e-12,
+            rational_shift = false,
+        )
+        @test norm(unshifted_gmres - root_exact(:radau2, -0.3 + 0.0im)) <
+              1e-9 * norm(root_exact(:radau2, -0.3 + 0.0im))
+    end
+
     @testset "reorth=true spans the same space as the bare recurrence" begin
         scale = s -> 0.5 * s[1][1] + 1.0
         y0 = expv(diag_apply(scale), -0.5im, xe; hermitian = true, reorth = false)

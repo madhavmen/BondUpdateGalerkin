@@ -47,8 +47,11 @@ end
 What both half-sweeps of one step READ and never write: the operator, `tau`, the generator shift,
 the root bond `root_link`, the step's allocation, its basis-selection strategy (`expansion`) and that
 strategy's settings (`exkw`), the work ceiling, the `krylov_reuse` and `krylov_depth` ablations,
-the states the trial space must contain (`keep_states`) and the `krylov_recycle` cache (`nothing`
-when off), which round 1 fills.
+the states the trial space must contain (`keep_states`, each admitted at its `keep_tols` entry)
+and the `krylov_recycle` cache (`nothing` when off), which round 1 fills. `cap_keep`
+(`work_ceiling_rule = :bond`): a tolerance-admitted kept state may only fill the frame up to the
+bond's work ceiling, so no frame exceeds it; exactly kept states (tol 0, e.g. Heston's mass) stay
+a containment guarantee and are never cut.
 """
 struct _HalfSweepCtx{M,E,A,X<:BasisExpansion,K,S,R}
     mpo::M
@@ -62,7 +65,9 @@ struct _HalfSweepCtx{M,E,A,X<:BasisExpansion,K,S,R}
     krylov_reuse::Bool
     krylov_depth::Int
     keep_states::S
+    keep_tols::Vector{Float64}   # per kept state: 0 = contained exactly, > 0 = `_union_fresh`'s tol
     recycle::R
+    cap_keep::Bool
 end
 
 """
@@ -126,10 +131,21 @@ end
 const _UNION_KEEP = 0.5
 
 """
+    _union_fresh(frame, candidates, side; tol = 0, room = typemax(Int)) -> directions or nothing
+
 Orthonormal directions of `candidates` outside the frame `frame` that survive a second
 projection, or `nothing`.
+
+`tol = 0` admits every direction above the numerical floor: `candidates` lies in the new span
+exactly (the MPDO identity, Heston's mass state). `tol > 0` admits only directions carrying more
+than about `tol * ||candidates||` of it (the SVD cutoff is relative to the largest singular value
+of the normalised complement, so the threshold sits between `tol ||candidates|| / sqrt(rank)` and
+`tol ||candidates||`, never above): the DD acceptance rule applied to a predictor state, which is
+how the QTT step's stage fields enter its basis. `room` bounds how many directions are appended,
+the strongest first (the work ceiling's headroom, `_keep_room`); `room <= 0` admits none.
 """
-function _union_fresh(frame, candidates, side::Symbol)
+function _union_fresh(frame, candidates, side::Symbol; tol::Float64 = 0.0, room::Int = typemax(Int))
+    room <= 0 && return nothing
     left = side === :left
     perp = left ? perp_component : perp_component_right
     # The legs the frame spans, and the tags of the new bond leg's two ends.
@@ -139,14 +155,19 @@ function _union_fresh(frame, candidates, side::Symbol)
     residual = perp(frame, candidates)
     residual_norm = norm(residual)
     residual_norm <= _CBE_EPS * max(norm(candidates), 1.0) && return nothing
-    # First projection: normalise, cut at the preselection's floor relative to the whole state.
+    # the whole complement below the tolerance: nothing to admit
+    residual_norm <= tol * norm(candidates) && return nothing
+    # First projection: normalise, cut at the preselection's floor relative to the whole state, or
+    # at the admission tolerance when that is higher.
+    first_cut =
+        max(_rank_cut(0.0, candidates, residual_norm), tol * norm(candidates) / residual_norm)
     orthonormal_basis = orient(
         svd(
             to_concrete((1.0 / residual_norm) * residual),
             legs,
             left_tag,
             right_tag;
-            cutoff = _rank_cut(0.0, candidates, residual_norm),
+            cutoff = first_cut,
         ).U,
     )
     # Second projection of that basis: keep only directions that retain `_UNION_KEEP` of it.
@@ -154,8 +175,14 @@ function _union_fresh(frame, candidates, side::Symbol)
     res = svd(residual, legs, left_tag, right_tag; cutoff = 1e-13, get_lists = true)
     smax = maximum(first, res.kept_list; init = 0.0)
     smax < _UNION_KEEP && return nothing
-    return orient(svd(residual, legs, left_tag, right_tag; cutoff = _UNION_KEEP / smax).U)
+    # the SVD orders the surviving directions by weight, so `Nkeep` keeps the strongest ones
+    limit = room < typemax(Int) ? (Nkeep = room,) : NamedTuple()
+    return orient(svd(residual, legs, left_tag, right_tag; cutoff = _UNION_KEEP / smax, limit...).U)
 end
+
+"How many directions a kept state with tolerance `tol` may still append to a frame `width` wide."
+_keep_room(cx, bond::Int, width::Int, tol::Float64) =
+    cx.cap_keep && tol > 0 ? _cap_at(cx.wcap, bond) - width : typemax(Int)
 
 """
 Union `krylov_frame` (the basis update's output) with `cbe_frame` (the CBE frame), on the LEFT.
@@ -164,16 +191,16 @@ Union `krylov_frame` (the basis update's output) with `cbe_frame` (the CBE frame
 outside them is appended -- `_preselect_left` returns `nothing` when there is nothing to append,
 which is the ordinary case once the two already span the same space.
 """
-function _union_left(cbe_frame, krylov_frame)
-    fresh = _union_fresh(cbe_frame, krylov_frame, :left)
+function _union_left(cbe_frame, krylov_frame; tol::Float64 = 0.0, room::Int = typemax(Int))
+    fresh = _union_fresh(cbe_frame, krylov_frame, :left; tol = tol, room = room)
     fresh === nothing && return cbe_frame
     return to_concrete(
         oplus([cbe_frame, to_concrete(setitag(fresh, 3, cbe_frame.inds[3].itags))], (3,)),
     )
 end
 "Row mirror of [`_union_left`](@ref): the bond leg is 1 and the direct sum is over it."
-function _union_right(cbe_frame, krylov_frame)
-    fresh = _union_fresh(cbe_frame, krylov_frame, :right)
+function _union_right(cbe_frame, krylov_frame; tol::Float64 = 0.0, room::Int = typemax(Int))
+    fresh = _union_fresh(cbe_frame, krylov_frame, :right; tol = tol, room = room)
     fresh === nothing && return cbe_frame
     return to_concrete(
         oplus([cbe_frame, to_concrete(setitag(fresh, 1, cbe_frame.inds[1].itags))], (1,)),
@@ -266,8 +293,10 @@ function _half_left!(
             to_concrete!(contract(kcar[state_index], (2,), kept_state[bond], (1,))) for
             (state_index, kept_state) in pairs(cx.keep_states)
         ]
-        for KX in KXs
-            left_frames[bond] = _union_left(left_frames[bond], KX)
+        for (state_index, KX) in pairs(KXs)
+            tol = cx.keep_tols[state_index]
+            room = _keep_room(cx, bond, leg_dim(left_frames[bond], 3), tol)
+            left_frames[bond] = _union_left(left_frames[bond], KX; tol = tol, room = room)
         end
         for (state_index, KX) in pairs(KXs)
             kcar[state_index] = to_concrete!(contract(left_frames[bond]', (1, 2), KX, (1, 2)))
@@ -373,8 +402,10 @@ function _half_right!(
             to_concrete!(contract(kept_state[bond+1], (3,), kcar[state_index], (1,))) for
             (state_index, kept_state) in pairs(cx.keep_states)
         ]
-        for BX in BXs                  # all unions before any carry, as on the left
-            right_frames[bond] = _union_right(right_frames[bond], BX)
+        for (state_index, BX) in pairs(BXs)     # all unions before any carry, as on the left
+            tol = cx.keep_tols[state_index]
+            room = _keep_room(cx, bond, leg_dim(right_frames[bond], 1), tol)
+            right_frames[bond] = _union_right(right_frames[bond], BX; tol = tol, room = room)
         end
         for (state_index, BX) in pairs(BXs)
             kcar[state_index] = to_concrete!(contract(BX, (2, 3), right_frames[bond]', (2, 3)))

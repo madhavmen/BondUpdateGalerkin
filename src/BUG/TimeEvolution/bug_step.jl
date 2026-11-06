@@ -96,6 +96,12 @@ function cbe_bug_step!(
     # Radau IIA(2)'s coupled stages by GMRES to `tol_root`. A METHOD choice: the
     # CBE, local Krylov and frontier enrichment before the root are the same.
     root_method::Symbol = :exp,
+    # `true`: the rational roots shift the Galerkin spectrum to its extreme Ritz value and drop the
+    # scale (imaginary time). `false`: `R(tau*H)` exactly, its decay kept (a real-time linear PDE
+    # flow such as Heston). The root's Krylov basis cap `root_maxiter` is a numerical setting: a
+    # rational root takes the whole step in one stage, so a stiff unshifted flow needs a deeper one.
+    root_shift::Bool = true,
+    root_maxiter::Int = _ROOT_MAXITER,
     # The step integrates `H - eshift` (`shift_h`): the root and every Krylov
     # generator, so the basis weights measure the change of the NORMALISED
     # state rather than its `exp(-dbeta*E)` growth. `0.0` is bit-identical.
@@ -117,6 +123,14 @@ function cbe_bug_step!(
     # trace-preserving before the compression. The states must share `psi`'s site
     # legs; `[]` is the ordinary step.
     keep_states::AbstractVector = Any[],
+    # Per kept state: `0` contains it exactly (the default, the trace or mass case); `tol > 0`
+    # admits only its directions outside the frame that carry more than ~`tol` of it
+    # (`_union_fresh`), the DD acceptance rule for a predictor state (the QTT stage fields). Under
+    # `work_ceiling_rule = :bond` an admitted state fills a frame only up to its bond's ceiling.
+    keep_tols::AbstractVector{<:Real} = Float64[],
+    # For a caller that only wants the frames (`frames_report`) and solves its own root (the QTT
+    # Newton-GMRES step): the root solve is skipped, so the state is `psi` projected on the frames.
+    frames_only::Bool = false,
     # Debug reference (exact DD references are for debugging only). `true` draws the
     # complete DD-projected probe instead of the randomised one.
     exact::Bool = false,
@@ -185,6 +199,11 @@ function cbe_bug_step!(
         frontier_tol = frontier_tol,
         work_ceiling_rule = work_ceiling_rule,
         bond_ceiling_factor = bond_ceiling_factor,
+        keep_states = keep_states,
+        keep_tols = keep_tols,
+        frames_only = frames_only,
+        root_report = root_report,
+        truncate = truncate,
     )
     site_count, root_link, budget = options.site_count, options.root_link, options.budget
     parallel_sym, parallel, kls = options.parallel_mode, options.run_parallel, options.kls
@@ -257,7 +276,9 @@ function cbe_bug_step!(
         krylov_reuse,
         krylov_depth,
         keep_states,
+        options.keep_tols,
         rec,
+        work_ceiling_rule === :bond,
     )
 
     troot = Ref(0.0)
@@ -375,13 +396,14 @@ function cbe_bug_step!(
         tau,
         start_vector;
         hermitian = hermitian,
-        maxiter = _ROOT_MAXITER,
+        maxiter = root_maxiter,
         tol = 1e-15,
         reorth = reorth,
         conv_tol = budget.expv,
         substeps = 0,
         report = rep,
         root_method = root_method,
+        rational_shift = root_shift,
     )
     klsst =
         kls === nothing ? nothing :
@@ -415,7 +437,8 @@ function cbe_bug_step!(
     # The root solver for any root operator; it counts every application in `nroot`.
     solve_with(operator, start_vector) =
         kls_stage(input -> (nroot[] += 1; apply_zero_site(operator, input)), start_vector, rootrep)
-    root_result = solve_with(root_operator, root_start)
+    # `frames_only`: the caller solves its own root on these frames, so `root_start` is carried
+    root_result = frames_only ? root_start : solve_with(root_operator, root_start)
     troot[] = (time_ns() - _t0root) / 1e9
     if root_report !== nothing
         # Energies, the outside-Galerkin residual and its re-enrichment (`bug_step_stages.jl`).
@@ -456,40 +479,27 @@ function cbe_bug_step!(
         root_start, root_result = report.root_start, report.root_result
         lenv_root, renv_root = report.lenv, report.renv
     end
-    nkls = 0
-    if klsst !== nothing
-        # The four-block core in the grown root frames, or -- when the omitted new-new block is
-        # above `tol_basis` -- the standard augmented root solve in them.
-        solve_aug(generator, start_vector) =
-            (op = RootOp(shift_h(generator, eshift), root_link, kroot);
-            kls_stage(input -> (nroot[] += 1; apply_zero_site(op, input)), start_vector, rootrep))
-        kr = _kls_finish(
-            klsst,
-            mpo,
-            left_frames,
-            right_frames,
-            root_link,
-            lenv_root,
-            renv_root,
-            root_start,
-            root_result,
-            tau,
-            solve_aug;
-            nrm = _nrm,
-            tol_missing = budget.basis,
-        )
-        left_frames[root_link], right_frames[root_link], root_result =
-            kr.left_root, kr.right_root, kr.root_result
-        merge_counters!(kroot, kr.kc)
-        nkls = kr.account.n_K + kr.account.n_L
-        ledger.kls = kr.account
-        ledger.r_aug = max(
-            ledger.r_aug,
-            leg_dim(left_frames[root_link], 3),
-            leg_dim(right_frames[root_link], 1),
-        )
-        max(kr.account.err_K, kr.account.err_L) > budget.expv * (1 + 1e-8) && _unmet!(ledger, :expv)
-    end
+    # the K/L/S step's merge of its K, L and S stages (`bug_step_stages.jl`)
+    root_result, nkls = _finish_kls!(
+        klsst,
+        mpo,
+        left_frames,
+        right_frames,
+        root_link,
+        lenv_root,
+        renv_root,
+        root_start,
+        root_result;
+        tau = tau,
+        eshift = eshift,
+        kls_stage = kls_stage,
+        kernel_counters = kroot,
+        root_applications = nroot,
+        root_solve_report = rootrep,
+        ledger = ledger,
+        budget = budget,
+        norm_scale = _nrm,
+    )
     if rootrep[] !== nothing
         ledger.expv_err = rootrep[].err
         ledger.expv_iters = rootrep[].iterations
@@ -534,56 +544,28 @@ function cbe_bug_step!(
     )
     bcomp = Base.gc_bytes() - bcomp
 
-    # The phase timers are sums across both half-sweeps, i.e. CPU time, while `t_step` is WALL
-    # clock. Under `parallel = false` they are the same clock and the shares sum to ~1 as before.
-    # Under `parallel = true` they DELIBERATELY DO NOT: two sweeps running at once spend more CPU
-    # seconds than the step takes, and a share above 1 is the speedup showing up, not a bug. Keep
-    # comparing phases arm-to-arm in seconds; only the serial arm's shares are fractions of a step.
-    t_step = (time_ns() - _t0step) / 1e9
-    kc =
-        merge_counters!(merge_counters!(merge_counters!(KernelCounters(), accL.kc), accR.kc), kroot)
-    kc.b_compress += bcomp
-    rec = StepRecord(
-        :dd_qr_streamed,
-        _qr_backend(),
-        order > 1 ? :dd_qr_streamed : :none,
-        order,
-        kls === nothing ? parallel_sym : :full,
-        kc,
-        maximum(bd0; init = 0),
-        max(maximum(expanded; init = 0), leg_dim(right_frames[root_link], 1)),
-        maximum(bond_dims(psi); init = 0),
-        maxdim,
-        maximum(wcap_step),
-        nroot[],
-        t_step,
-        Base.gc_bytes() - _b0step,
-        Int(Sys.maxrss()),
-        _step_limits(ledger),
-        alloc.rule,
-    )
-    return CBEBugSweepInfo(
-        expanded,
-        n_new,
-        root_link,
-        root_rank,
-        epre,
-        efnl,
-        discarded,
-        accL.nmv + accR.nmv + nroot[] + nclose + nkls,
-        peak,
-        accL.ngrow + accR.ngrow,
-        leg_dim(right_frames[root_link], 1),
-        accL.tcbe + accR.tcbe,
-        accL.tkry + accR.tkry,
-        troot[],
-        ttrunc[],
-        accL.tsplit + accR.tsplit,
-        accL.tframe + accR.tframe,
-        accL.tenv + accR.tenv,
-        t_step,
+    return _step_info(
+        psi,
         ledger,
-        rec,
+        (accL, accR),
+        kroot;
+        expanded = expanded,
+        n_new = n_new,
+        root_link = root_link,
+        root_rank = root_rank,
+        root_frame_width = leg_dim(right_frames[root_link], 1),
+        errors = (epre, efnl),
+        discarded = discarded,
+        applications = (root = nroot[], closure = nclose, kls = nkls),
+        peak = peak,
+        seconds = (root = troot[], truncation = ttrunc[], step = (time_ns() - _t0step) / 1e9),
+        bytes = (compression = bcomp, step = Base.gc_bytes() - _b0step),
+        order = order,
+        parallel_mode = kls === nothing ? parallel_sym : :full,
+        start_ranks = bd0,
+        maxdim = maxdim,
+        workcap = wcap_step,
+        alloc = alloc,
     )
 end
 

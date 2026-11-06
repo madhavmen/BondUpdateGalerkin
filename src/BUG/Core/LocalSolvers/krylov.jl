@@ -142,6 +142,7 @@ function lanczos_expv(
     substeps::Int = 1,
     report::Union{Nothing,Base.RefValue} = nothing,
     root_method::Symbol = :exp,
+    rational_shift::Bool = true,
 )
     # GMRES needs the full orthogonalisation whatever `B` is: the shifted stage systems are
     # complex non-Hermitian even for a Hermitian generator
@@ -153,6 +154,7 @@ function lanczos_expv(
         maxiter = maxiter,
         conv_tol = conv_tol,
         report = report,
+        rational_shift = rational_shift,
     )
     root_method in ROOT_METHODS || _bad_root(root_method)
     # An implicit root takes the WHOLE step in one stage -- that is what it is for -- so the
@@ -161,7 +163,7 @@ function lanczos_expv(
     # Krylov coefficients of the root's step over `trial_tau` from the tridiagonal's eigenpairs.
     coeffs(vals, vecs, trial_tau) =
         root_method === :exp ? _coeffs_from_eigen(vals, vecs, trial_tau) :
-        _rational_coeffs(vals, vecs, trial_tau, root_method)
+        _rational_coeffs(vals, vecs, trial_tau, root_method, rational_shift)
     xc = _as_complex(vector)
     beta0 = norm(xc)
     if beta0 == 0
@@ -356,6 +358,7 @@ function arnoldi_expv(
     substeps::Int = 1,
     report::Union{Nothing,Base.RefValue} = nothing,
     root_method::Symbol = :exp,
+    rational_shift::Bool = true,
 )
     root_method === :radau2_gmres && return radau2_gmres_expv(
         apply,
@@ -365,13 +368,14 @@ function arnoldi_expv(
         maxiter = maxiter,
         conv_tol = conv_tol,
         report = report,
+        rational_shift = rational_shift,
     )
     root_method in ROOT_METHODS || _bad_root(root_method)
     root_method === :exp || (substeps = 1)     # an implicit root takes the whole step at once
     # Krylov coefficients of the root's step over `trial_tau` on the leading Hessenberg block.
     hcoeffs(Hm, trial_tau) =
         root_method === :exp ? _hess_coeffs(Hm, trial_tau) :
-        _hess_rational(Hm, trial_tau, root_method)
+        _hess_rational(Hm, trial_tau, root_method, rational_shift)
     xc = _as_complex(vector)
     beta0 = norm(xc)
     if beta0 == 0
