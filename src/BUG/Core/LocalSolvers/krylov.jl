@@ -81,9 +81,26 @@ Eigendecomposition of the leading tridiagonal, done ONCE so the substep search c
 re-exponentiating the matrix.
 """
 function _tridiag_eigen(alpha::Vector{Float64}, beta::Vector{Float64})
+    # a NaN/Inf here comes from the input vector or the operator, not from the eigensolver: say so
+    # instead of letting LAPACK report a convergence failure
+    (all(isfinite, alpha) && all(isfinite, beta)) || throw(
+        ArgumentError(
+            "Lanczos tridiagonal has non-finite entries ($(count(!isfinite, alpha)) of " *
+            "$(length(alpha)) alpha, $(count(!isfinite, beta)) of $(length(beta)) beta): the " *
+            "input vector or the operator is not finite",
+        ),
+    )
     tridiagonal =
         isempty(beta) ? Matrix{Float64}(reshape(alpha, 1, 1)) : Matrix(SymTridiagonal(alpha, beta))
-    return eigen(Symmetric(tridiagonal))
+    try
+        return eigen(Symmetric(tridiagonal))       # LAPACK syevr (MRRR): the fast default
+    catch err
+        err isa LinearAlgebra.LAPACKException || rethrow()
+        # MRRR can fail to converge on a finite tridiagonal (an XX L = 20 TDVP2 reference died in
+        # syevr info 1); the implicit QR algorithm (syev) is slower but always converges
+        eigenvalues, eigenvectors = LinearAlgebra.LAPACK.syev!('V', 'U', copy(tridiagonal))
+        return LinearAlgebra.Eigen(eigenvalues, eigenvectors)
+    end
 end
 
 """
@@ -183,8 +200,13 @@ function lanczos_expv(
             offdiag_entry < tol && break           # genuine breakdown: the space is exhausted
             if conv_tol > 0                        # genuine convergence: the answer stopped moving
                 vals, vecs = _tridiag_eigen(alpha, betas)
-                trial_coeff, _ = coeffs(vals, vecs, tau_rem)
-                _tail(trial_coeff, offdiag_entry) < conv_tol && break
+                trial_tail = _tail_sup(
+                    trial_tau -> coeffs(vals, vecs, trial_tau),
+                    tau_rem,
+                    offdiag_entry;
+                    above = conv_tol,
+                )
+                trial_tail < conv_tol && break
             end
             push!(betas, offdiag_entry)
             basis_vector = to_concrete((1.0 / offdiag_entry) * residual)
@@ -233,7 +255,7 @@ function lanczos_expv(
         end
 
         coeff, ls = evalcoeff(tau_s)
-        err += _tail(coeff, betak) * cur_norm / beta0
+        err += _tail_sup(evalcoeff, tau_s, betak) * cur_norm / beta0
         cur = _combine(coeff, basis, cur_norm)
         logscale += ls                 # already a log: never round-trips through a huge scalar
         tau_rem -= tau_s
@@ -383,8 +405,14 @@ function arnoldi_expv(
             betak = residual_norm
             residual_norm < tol && break
             if conv_tol > 0
-                trial_coeff = hcoeffs(hess_matrix[1:basis_dim, 1:basis_dim], tau_rem)[1]
-                _tail(trial_coeff, residual_norm) < conv_tol && break
+                leading_block = hess_matrix[1:basis_dim, 1:basis_dim]
+                trial_tail = _tail_sup(
+                    trial_tau -> hcoeffs(leading_block, trial_tau),
+                    tau_rem,
+                    residual_norm;
+                    above = conv_tol,
+                )
+                trial_tail < conv_tol && break
             end
             hess_matrix[krylov_step+1, krylov_step] = residual_norm
             krylov_step == maxiter && break
@@ -404,7 +432,7 @@ function arnoldi_expv(
         end
 
         coeff, ls = evalcoeff(tau_s)
-        err += _tail(coeff, betak) * cur_norm / beta0
+        err += _tail_sup(evalcoeff, tau_s, betak) * cur_norm / beta0
         cur = _combine(coeff, basis[1:basis_dim], cur_norm)
         logscale += ls                 # already a log: never round-trips through a huge scalar
         tau_rem -= tau_s

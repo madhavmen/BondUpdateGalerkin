@@ -1,5 +1,5 @@
-# The half-sweep Krylov stage: the Saad weight estimate, the frame extension, `_krylov_enrich`, and
-# the frame merge and ledger fold around it. The local recurrence it drives (`_krylov_basis`) is in
+# The half-sweep Krylov stage: the Krylov weight (a residual integral), the frame extension,
+# `_krylov_enrich`, and the frame merge and ledger fold around it. The local recurrence it drives (`_krylov_basis`) is in
 # `krylov_recurrence.jl`, included right after this file.
 
 # ── THE HALF-SWEEP KRYLOV STAGE OF `cbe_bug_step!` (Tests C and D) ───────────────────────────
@@ -32,20 +32,30 @@ const _ROOT_MAXITER = 30
 # gives the same weight in both branches anyway.
 const _KRY_SKEW_TOL = 1e-12
 
+"Most Simpson panels of one residual integral (a numerical cap: `2 x 4096` nodes)."
+const _RESIDUAL_MAX_PANELS = 4096
+
 """
     _kry_weight(Hm, krylov_step, tau; state_seed = true) -> Float64
 
 The weight the newest Krylov vector `v_{k+1}` carries in `exp(tau*H) v_1`, from the Arnoldi
-Hessenberg `Hm` after `k = krylov_step` steps: `|tau * beta_k * [phi_1(tau*H_k)]_{k,1}|`, read
-from one `(k+1)x(k+1)` exponential. This is Saad's a posteriori error of the `k`-dimensional
-approximation, so it is also the closure test: below the allowance, no later direction matters more.
+Hessenberg `Hm` after `k = krylov_step` steps, and so the closure test: below the allowance, no
+later direction matters more. With `f(s) = [exp(s tau H_k)]_{k,1}` and `beta_k = Hm[k+1, k]` it is
+the residual integral `|tau| beta_k int_0^1 |f(s)| ds`, the variation-of-constants bound on
+`||exp(tau A) v_1 - V_k exp(tau H_k) e_1||` for a unitary propagator. Saad's scalar
+`|tau beta_k int_0^1 f(s) ds|` is never larger, and cancels when `f` turns its phase over the step:
+`A = -i[2pi 1; 1 0]`, `v = e1`, `tau = 1` gives it 4e-17 against a true error of 0.155.
 
-`state_seed` is false when `v_1` is a closure frontier rather than the state's own tensor; it
-matters only for a non-unitary propagator.
-
-The propagator is unitary when `tau*H_k` is skew-Hermitian, not whenever `real(tau) == 0`: a
+Three normalisations: absolute for a unitary propagator and for a closure frontier
+(`state_seed = false`), relative to the state's own growth `||exp(tau H_k) e_1||` for the state's
+seed. The propagator is unitary when `tau*H_k` is skew-Hermitian, not whenever `real(tau) == 0`: a
 no-jump generator `H - (i/2)Q` at `tau = -im*dt` contracts, and its weight must be relative to the
-decayed state, not to the start norm.
+decayed state, not to the start norm. A closure frontier is not the state: it decays under the
+shifted generator, so dividing by its own growth would inflate its directions by `e^{dbeta h11}`.
+
+Composite Simpson on an even number of intervals with `||M - sigma||_1 / intervals <= 1/4`
+(`M = tau H_k`), so the phase of `f` is resolved; `sigma` is the largest real part of `M`'s
+spectrum (0 when unitary), so no exponential overflows, and the sum is taken in log space.
 """
 function _kry_weight(
     Hm::Matrix{ComplexF64},
@@ -53,27 +63,35 @@ function _kry_weight(
     tau::ComplexF64;
     state_seed::Bool = true,
 )
-    # `tau * H_k` bordered by the subdiagonal entry `tau * beta_k`: its exponential's first
-    # column carries both the approximation (rows 1..k) and the newest vector's weight (row k+1).
-    augmented = zeros(ComplexF64, krylov_step + 1, krylov_step + 1)
-    augmented[1:krylov_step, 1:krylov_step] .= tau .* @view Hm[1:krylov_step, 1:krylov_step]
-    augmented[krylov_step+1, krylov_step] = tau * Hm[krylov_step+1, krylov_step]
-    leading_block = @view augmented[1:krylov_step, 1:krylov_step]
-    norm(leading_block + leading_block') <= _KRY_SKEW_TOL * norm(leading_block) &&
-        return abs(exp(augmented)[krylov_step+1, 1])
-    # Non-unitary (imaginary time, Lindblad, no-jump loss): weigh relative to the state's own
-    # growth `g = ||exp(tau*H_k) e_1||`, which is `exp(dbeta*|E|)` unshifted and overflows at large
-    # dbeta. The `shift` cancels in that ratio exactly.
-    shift = maximum(real, eigvals(augmented[1:krylov_step, 1:krylov_step]))
-    shifted_exp = exp(augmented - shift * I)
-    state_seed && return abs(shifted_exp[krylov_step+1, 1]) /
-           max(norm(@view shifted_exp[1:krylov_step, 1]), floatmin(Float64))
-    # A closure frontier is not the state: it decays under the shifted generator, so dividing by its
-    # own growth inflated its directions by `e^{dbeta h11}`, enough to block a converged step. Its
-    # weight is the absolute one, `|shifted_exp[k+1,1]| e^shift`, in the shifted frame, which never
-    # under-weights in imaginary time (the shift is the energy there).
-    frontier_weight = abs(shifted_exp[krylov_step+1, 1])
-    return frontier_weight == 0 ? 0.0 : exp(log(frontier_weight) + shift)
+    beta = abs(Hm[krylov_step+1, krylov_step])
+    beta == 0 && return 0.0
+    generator = tau .* Hm[1:krylov_step, 1:krylov_step]
+    unitary = norm(generator + generator') <= _KRY_SKEW_TOL * norm(generator)
+    sigma = unitary ? 0.0 : maximum(real, eigvals(generator))
+    shifted = generator - sigma * I
+    intervals = 2 * clamp(ceil(Int, 2 * opnorm(shifted, 1)), 8, _RESIDUAL_MAX_PANELS)
+    spacing = 1.0 / intervals
+    propagator = exp(spacing .* shifted)
+    column = zeros(ComplexF64, krylov_step)          # exp(s * shifted) e_1, from s = 0
+    column[1] = 1
+    log_terms = Vector{Float64}(undef, intervals + 1)
+    for node = 0:intervals
+        node > 0 && (column = propagator * column)
+        simpson_weight = node == 0 || node == intervals ? 1.0 : (isodd(node) ? 4.0 : 2.0)
+        magnitude = abs(column[krylov_step])
+        # |f(s)| = e^{s sigma} |[exp(s shifted)]_{k,1}|, weighted by Simpson's rule
+        log_terms[node+1] =
+            magnitude == 0 ? -Inf :
+            log(simpson_weight * spacing / 3 * magnitude) + node * spacing * sigma
+    end
+    peak = maximum(log_terms)
+    peak == -Inf && return 0.0
+    log_integral = peak + log(sum(exp(term - peak) for term in log_terms))
+    log_weight = log(abs(tau)) + log(beta) + log_integral
+    (unitary || !state_seed) && return exp(log_weight)
+    # the state's own seed: relative to its growth ||exp(M) e_1|| = e^sigma ||exp(shifted) e_1||,
+    # and `column` now holds exp(shifted) e_1
+    return exp(log_weight - sigma - log(max(norm(column), floatmin(Float64))))
 end
 
 """

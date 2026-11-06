@@ -72,6 +72,31 @@ generic operator -- measured: identical results for thresholds from 1e-6 to 1e-1
 """
 _tail(coeff::Vector{ComplexF64}, betak::Float64) = isempty(coeff) ? 0.0 : betak * abs(coeff[end])
 
+"Nodes `s = j / _TAIL_NODES` of [`_tail_sup`](@ref)'s guard over the step."
+const _TAIL_NODES = 8
+
+"""
+    _tail_sup(evalcoeff, step, betak; above = Inf) -> Float64
+
+Saad's tail [`_tail`](@ref) at `step`, guarded against cancellation in real time: the largest
+`betak * |[exp(s step T_k)]_{k,1}|` over `s = j / _TAIL_NODES`, `j = 1, ..., _TAIL_NODES`. The
+endpoint entry alone can vanish while the residual over the step does not (`T_2` with eigenvalue
+gap `2 pi / |step|` stops at depth 2 with an O(1) error). In real time the error is at most
+`|step| betak int_0^1 |[exp(s step T_k)]_{k,1}| ds`, which this samples. Other steps (imaginary
+time, loss) keep the endpoint value: their coefficients carry per-`s` shifts. A stop test passes
+its threshold as `above`: once the tail reaches it the answer is known, so a step that is not
+converging costs one coefficient evaluation, as without the guard.
+"""
+function _tail_sup(evalcoeff, step::ComplexF64, betak::Float64; above::Float64 = Inf)
+    tail = _tail(first(evalcoeff(step)), betak)
+    iszero(real(step)) || return tail
+    for node = 1:(_TAIL_NODES-1)
+        tail >= above && return tail
+        tail = max(tail, _tail(first(evalcoeff(step * (node / _TAIL_NODES))), betak))
+    end
+    return tail
+end
+
 """
     _pick_tau(evalcoeff, tau_rem, betak, conv_tol) -> ComplexF64
 
@@ -84,8 +109,7 @@ economy of the scheme: the basis is built once and then asked how far it can go.
 function _pick_tau(evalcoeff, tau_rem::ComplexF64, betak::Float64, conv_tol::Float64)
     # whether the basis integrates a step of `trial_tau` within tolerance and representably
     accepted(trial_tau) = begin
-        trial_coeff, _ = evalcoeff(trial_tau)
-        tl = _tail(trial_coeff, betak)
+        tl = _tail_sup(evalcoeff, trial_tau, betak; above = conv_tol > 0 ? conv_tol : Inf)
         # representability is a hard constraint even when `conv_tol` is off: an exponent past
         # `_EXPV_SAFE_EXPONENT` destroys the small coefficients whatever the tail estimate says
         isfinite(tl) && (conv_tol <= 0 || tl <= conv_tol)

@@ -98,7 +98,7 @@ end
     _arnoldi_chain(unit_seed, applyH, tau, allowance, score; maxdepth, amp, state_seed, fixed)
         -> (basis, weights, n_h1, closed, capped)
 
-Arnoldi from the unit seed `unit_seed`: each new vector weighed by `amp` times Saad's estimate
+Arnoldi from the unit seed `unit_seed`: each new vector weighed by `amp` times its residual integral
 (`_kry_weight`) and offered to `score`, closed once that weight is within `allowance`. `fixed`
 runs all `maxdepth` steps (the `fixed_depth` ablation of [`_krylov_enrich`](@ref)).
 """
