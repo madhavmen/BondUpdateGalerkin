@@ -43,7 +43,7 @@ function _dd_controller(
     left = side === :left
     # `fl` is the frame's new (growing) leg, `wleg` the probe-width leg of a sketch block.
     fl, wleg = left ? (3, 1) : (1, 3)
-    tags = frame.inds[fl].itags
+    tags = Telum.inds(frame)[fl].itags
     aug, dd_basis, direction_count, streamed = frame, nothing, 0, 0
     boost = Dict{Any,Int}()
     # QR the sketched block against the frame augmented so far, append the new directions to
@@ -51,10 +51,10 @@ function _dd_controller(
     function absorb!(sketched)
         new_basis, _ = _dd_select(aug, sketched, side, kc)
         new_basis === nothing && return 0
-        new_basis = to_concrete(setitag(new_basis, fl, tags))
+        new_basis = TLArray(setitag(new_basis, fl, tags))
         dd_basis =
-            dd_basis === nothing ? new_basis : to_concrete(oplus([dd_basis, new_basis], (fl,)))
-        aug = to_concrete(oplus([aug, new_basis], (fl,)))
+            dd_basis === nothing ? new_basis : TLArray(oplus([dd_basis, new_basis], (fl,)))
+        aug = TLArray(oplus([aug, new_basis], (fl,)))
         return leg_dim(new_basis, fl)
     end
     # Apply the MPO sketch to a probe block, counting its columns as streamed work (and in the
@@ -76,7 +76,7 @@ function _dd_controller(
     # Whether the basis reaches a charge sector the frame does not have yet.
     newsector() =
         dd_basis !== nothing &&
-        any(((charge, _),) -> sector_dim(frame, fl, charge) == 0, dd_basis.spaces[fl])
+        any(((charge, _),) -> sector_dim(frame, fl, charge) == 0, Telum.spaces(dd_basis)[fl])
 
     width = clamp(initial_width, 1, max(wcap, 1))
     last = draw(width, nothing)
@@ -211,17 +211,17 @@ function _dd_hybrid(
     # `fl` is the frame's new (growing) leg, `wleg` the probe-width leg of a sketch block.
     fl, wleg = left ? (3, 1) : (1, 3)
     oside = left ? :right : :left
-    tags = frame.inds[fl].itags
+    tags = Telum.inds(frame)[fl].itags
     aug, dd_basis, nq, streamed = frame, nothing, 0, 0
     # QR the sketched block against the frame augmented so far, append the new directions to
     # `dd_basis` and `aug`, and return how many were added.
     function absorb!(sketched)
         new_basis, _ = _dd_select(aug, sketched, side, kc)
         new_basis === nothing && return 0
-        new_basis = to_concrete(setitag(new_basis, fl, tags))
+        new_basis = TLArray(setitag(new_basis, fl, tags))
         dd_basis =
-            dd_basis === nothing ? new_basis : to_concrete(oplus([dd_basis, new_basis], (fl,)))
-        aug = to_concrete(oplus([aug, new_basis], (fl,)))
+            dd_basis === nothing ? new_basis : TLArray(oplus([dd_basis, new_basis], (fl,)))
+        aug = TLArray(oplus([aug, new_basis], (fl,)))
         return leg_dim(new_basis, fl)
     end
     # Apply the MPO sketch to a probe block, counting its columns as streamed work.

@@ -13,8 +13,8 @@ function move_right!(psi::SymMPS, site::Int)
     # Vd : (svdR, L,i+1)
     carried = res.S * res.Vd                                  # (svdL, L,i+1)
     next_tensor = contract(carried, (2,), psi[site+1], (1,))  # (svdL, S,i+1, L,i+2)
-    psi[site] = to_concrete(setitag(res.U, 3, "L,$(site + 1)"))
-    psi[site+1] = to_concrete(setitag(next_tensor, 1, "L,$(site + 1)"))
+    psi[site] = TLArray(setitag(res.U, 3, "L,$(site + 1)"))
+    psi[site+1] = TLArray(setitag(next_tensor, 1, "L,$(site + 1)"))
     return psi
 end
 
@@ -30,8 +30,8 @@ function move_left!(psi::SymMPS, site::Int)
     # Vd : (svdR, S,i, L,i+1)    -- the right isometry
     carried = res.U * res.S                                       # (L,i, svdR)
     previous_tensor = contract(psi[site-1], (3,), carried, (1,))  # (L,i-1, S,i-1, svdR)
-    psi[site-1] = to_concrete(setitag(previous_tensor, 3, "L,$site"))
-    psi[site] = to_concrete(setitag(res.Vd, 1, "L,$site"))
+    psi[site-1] = TLArray(setitag(previous_tensor, 3, "L,$site"))
+    psi[site] = TLArray(setitag(res.Vd, 1, "L,$site"))
     return psi
 end
 

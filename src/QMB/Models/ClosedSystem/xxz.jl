@@ -15,9 +15,9 @@ function xxz_chain(L::Int; J::Float64 = 1.0, delta::Float64 = 1.0)
     L >= 2 || throw(ArgumentError("xxz_chain needs at least two sites, got $L"))
     q = local_space()
     terms = XXZTerm[]
-    if length(q.Sp.inds) == 3
-        push!(terms, XXZTerm(q.Sp, to_concrete(q.Sp'), J))
-        push!(terms, XXZTerm(q.Sm, to_concrete(q.Sm'), J))
+    if length(Telum.inds(q.Sp)) == 3
+        push!(terms, XXZTerm(q.Sp, TLArray(q.Sp'), J))
+        push!(terms, XXZTerm(q.Sm, TLArray(q.Sm'), J))
     else
         push!(terms, XXZTerm(q.Sp, q.Sm, -J))
         push!(terms, XXZTerm(q.Sm, q.Sp, -J))
@@ -47,7 +47,7 @@ function heisenberg_su2_chain(L::Int; J::Float64 = 1.0)
     q = local_space(:SU2)
     # One term, op-leg contracted between the two halves -- the same shape the rank-3 `:U1`
     # branch of `xxz_chain` builds for `Sp`/`Sm`.
-    terms = [XXZTerm(q.S, to_concrete(q.S'), J)]
+    terms = [XXZTerm(q.S, TLArray(q.S'), J)]
     return XXZChain(L, terms, J, 1.0)
 end
 

@@ -198,7 +198,7 @@ function _shifted_gmres(
     tol::Float64,
 )
     beta = norm(rhs)
-    basis = Any[to_concrete((1.0 / beta) * rhs)]
+    basis = Any[TLArray((1.0 / beta) * rhs)]
     hess_matrix = zeros(ComplexF64, maxiter + 1, maxiter)
     ys, res, sig, nmv = Vector{Vector{ComplexF64}}(), Inf, zero(ComplexF64), 0
     for krylov_step = 1:maxiter
@@ -225,7 +225,7 @@ function _shifted_gmres(
         end
         res = norm(stage_residuals * transpose(Wt))
         (next_norm < tol || res <= target || krylov_step == maxiter) && break
-        push!(basis, to_concrete((1.0 / next_norm) * next_vector))
+        push!(basis, TLArray((1.0 / next_norm) * next_vector))
     end
     return ([_combine(coords, basis[1:length(coords)], 1.0) for coords in ys], res, nmv, sig)
 end
@@ -277,19 +277,19 @@ function radau2_gmres_expv(
     )
     # stage `stage_index` of `Y = (P ⊗ I) Z` from the decoupled solutions `Zs`
     stage(Zs, stage_index) =
-        to_concrete(stage_eigvecs[stage_index, 1] * Zs[1] + stage_eigvecs[stage_index, 2] * Zs[2])
+        TLArray(stage_eigvecs[stage_index, 1] * Zs[1] + stage_eigvecs[stage_index, 2] * Zs[2])
     stage_values = [stage(Zs, 1), stage(Zs, 2)]
     # the coupled system's residual `1 ⊗ x - stage_values + tau A ⊗ (B - sigma) stage_values`,
     # per stage and as one norm; two fresh actions
     function residual(stage_values)
         BY = [
             (image = apply(stage_value);
-            iszero(sigma) ? image : to_concrete(image - sigma * stage_value)) for
+            iszero(sigma) ? image : TLArray(image - sigma * stage_value)) for
             stage_value in stage_values
         ]
         nmv += 2
         stage_residuals = [
-            to_concrete(
+            TLArray(
                 xc - stage_values[stage_index] +
                 tau * (_RADAU2_A[stage_index, 1] * BY[1] + _RADAU2_A[stage_index, 2] * BY[2]),
             ) for stage_index = 1:2
@@ -304,7 +304,7 @@ function radau2_gmres_expv(
         cycles += 1
         dZ = Any[]
         for stage_index = 1:2
-            rho = to_concrete(
+            rho = TLArray(
                 stage_eigvecs_inv[stage_index, 1] * stage_residuals[1] +
                 stage_eigvecs_inv[stage_index, 2] * stage_residuals[2],
             )
@@ -328,7 +328,7 @@ function radau2_gmres_expv(
             push!(dZ, Zk[1])
         end
         stage_values =
-            [to_concrete(stage_values[stage_index] + stage(dZ, stage_index)) for stage_index = 1:2]
+            [TLArray(stage_values[stage_index] + stage(dZ, stage_index)) for stage_index = 1:2]
         stage_residuals, res = residual(stage_values)
     end
     _record_krylov(nmv)

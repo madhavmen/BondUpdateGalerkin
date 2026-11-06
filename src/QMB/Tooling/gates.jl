@@ -3,7 +3,7 @@
 # `apply_gate` and `_site_tag` are in BUG/Core/TensorNetworks/mpo.jl.
 
 "Retag both physical legs of a local operator, leaving any operator leg alone."
-_retag_site(O, tag) = to_concrete(setitag(setitag(O, 1, tag), 2, tag))
+_retag_site(O, tag) = TLArray(setitag(setitag(O, 1, tag), 2, tag))
 
 """
     heisenberg_bond_gate(site_l, site_r; J=1.0, delta=1.0) -> TLArray
@@ -21,7 +21,7 @@ function heisenberg_bond_gate(site_l, site_r; J::Float64 = 1.0, delta::Float64 =
     q = local_space()
 
     # (ket_l, bra_l, ket_r, bra_r) -> (ket_l, ket_r, bra_l, bra_r).
-    pair(A, B) = to_concrete(
+    pair(A, B) = TLArray(
         permutedims(contract(_retag_site(A, tl), (3,), _retag_site(B, tr)', (3,)), (1, 4, 2, 3)),
     )
 
@@ -37,9 +37,9 @@ function heisenberg_bond_gate(site_l, site_r; J::Float64 = 1.0, delta::Float64 =
                 "the symmetry down to U(1), so run that case under set_symmetry!(:U1)",
             ),
         )
-        return to_concrete(J * pair(q.S, q.S) * (1.0 + 0.0im))
+        return TLArray(J * pair(q.S, q.S) * (1.0 + 0.0im))
     end
-    outer(A, B) = to_concrete(
+    outer(A, B) = TLArray(
         permutedims(contract(_retag_site(A, tl), (), _retag_site(B, tr), ()), (1, 3, 2, 4)),
     )
 
@@ -47,13 +47,13 @@ function heisenberg_bond_gate(site_l, site_r; J::Float64 = 1.0, delta::Float64 =
     # header). Under :none they are plain matrices: Telum's Sp = -(1/√2) S⁺ and Sm = (1/√2) S⁻ make
     # the XY term an outer product with coefficient -1. The gate test pins this element for element
     # against :U1.
-    xy = if length(q.Sp.inds) == 3
+    xy = if length(Telum.inds(q.Sp)) == 3
         pair(q.Sp, q.Sp) + pair(q.Sm, q.Sm)
     else
-        to_concrete(-1.0 * (outer(q.Sp, q.Sm) + outer(q.Sm, q.Sp)))
+        TLArray(-1.0 * (outer(q.Sp, q.Sm) + outer(q.Sm, q.Sp)))
     end
     G = delta == 0.0 ? xy : xy + delta * outer(q.Sz, q.Sz)
-    return to_concrete(J * G * (1.0 + 0.0im))
+    return TLArray(J * G * (1.0 + 0.0im))
 end
 
 """
@@ -75,10 +75,10 @@ that pins U(1) charge conservation across a bond update.
 function magnetisation_gate(site_l, site_r)
     tl, tr = _site_tag(site_l), _site_tag(site_r)
     q = local_space()
-    outer(A, B) = to_concrete(
+    outer(A, B) = TLArray(
         permutedims(contract(_retag_site(A, tl), (), _retag_site(B, tr), ()), (1, 3, 2, 4)),
     )
-    return to_concrete((outer(q.Sz, q.I) + outer(q.I, q.Sz)) * (1.0 + 0.0im))
+    return TLArray((outer(q.Sz, q.I) + outer(q.I, q.Sz)) * (1.0 + 0.0im))
 end
 
 """
@@ -107,12 +107,12 @@ function dimer_state(L::Int)
     prev = (getvac(q.I, ("L,0", "L,1")), 2)
 
     for i = 1:L
-        F = to_concrete(getIdentity(prev, (q.I, 1); itag = "L,$(i + 1)"))
-        F = to_concrete(setitag(F, 2, "S,$i"))
+        F = TLArray(getIdentity(prev, (q.I, 1); itag = "L,$(i + 1)"))
+        F = TLArray(setitag(F, 2, "S,$i"))
         # Select on leg 3, the FUSED total spin, not on the physical leg.
         target = isodd(i) ? SECTOR_SU2_HALF : SECTOR_SU2_SINGLET
-        A = to_concrete(getsub(F, 3, s -> s == target ? Colon() : nothing))
-        A = to_concrete(A * (1.0 + 0.0im))
+        A = TLArray(getsub(F, 3, s -> s == target ? Colon() : nothing))
+        A = TLArray(A * (1.0 + 0.0im))
         push!(tensors, A)
         prev = (A, 3)
     end

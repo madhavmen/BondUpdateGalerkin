@@ -169,25 +169,25 @@ function frames_from_state(psi::SymMPS, mpo, root_link::Int)
     for site = 1:(root_link-1)
         left_frames[site] = left_gauged[site]
     end
-    left_frames[root_link] = to_concrete(svd(left_gauged[root_link], (1, 2); cutoff = 0.0).U)
+    left_frames[root_link] = TLArray(svd(left_gauged[root_link], (1, 2); cutoff = 0.0).U)
     # Right frames: the right-canonical sites, opened at the root by the SVD's right isometry.
     right_gauged = copy(psi)
     canonical!(right_gauged, root_link + 1)
     right_frames = Vector{Any}(undef, site_count - 1)
-    right_frames[root_link] = to_concrete(svd(right_gauged[root_link+1], (1,); cutoff = 0.0).Vd)
+    right_frames[root_link] = TLArray(svd(right_gauged[root_link+1], (1,); cutoff = 0.0).Vd)
     for bond = (root_link+1):(site_count-1)
         right_frames[bond] = right_gauged[bond+1]
     end
     # Frame tags on both ends of every frame link, as the half-sweeps write them.
     for site = 1:root_link
-        left_frames[site] = to_concrete(setitag(left_frames[site], 3, _tagW(site)))
+        left_frames[site] = TLArray(setitag(left_frames[site], 3, _tagW(site)))
         site < root_link &&
-            (left_frames[site+1] = to_concrete(setitag(left_frames[site+1], 1, _tagW(site))))
+            (left_frames[site+1] = TLArray(setitag(left_frames[site+1], 1, _tagW(site))))
     end
     for bond = root_link:(site_count-1)
-        right_frames[bond] = to_concrete(setitag(right_frames[bond], 1, _tagZ(bond)))
+        right_frames[bond] = TLArray(setitag(right_frames[bond], 1, _tagZ(bond)))
         bond > root_link &&
-            (right_frames[bond-1] = to_concrete(setitag(right_frames[bond-1], 3, _tagZ(bond))))
+            (right_frames[bond-1] = TLArray(setitag(right_frames[bond-1], 3, _tagZ(bond))))
     end
     lenv = boundary_channels(mpo)
     for site = 1:(root_link-1)
@@ -207,9 +207,9 @@ contraction, any gauge.
 function _overlap_left(psi::SymMPS, left_frames, root_link::Int)
     AL = nothing
     for site = 1:root_link
-        carried = AL === nothing ? psi[site] : to_concrete!(contract(AL, (2,), psi[site], (1,)))
+        carried = AL === nothing ? psi[site] : contract(AL, (2,), psi[site], (1,))
         # (b_L, link_{site+1})
-        AL = to_concrete!(contract(left_frames[site]', (1, 2), carried, (1, 2)))
+        AL = contract(left_frames[site]', (1, 2), carried, (1, 2))
     end
     return AL
 end
@@ -221,9 +221,9 @@ full contraction, any gauge.
 function _overlap_right(psi::SymMPS, right_frames, root_link::Int)
     AR = nothing
     for bond = (length(psi)-1):-1:root_link
-        carried = AR === nothing ? psi[bond+1] : to_concrete!(contract(psi[bond+1], (3,), AR, (1,)))
+        carried = AR === nothing ? psi[bond+1] : contract(psi[bond+1], (3,), AR, (1,))
         # (link_bond, b_bond)
-        AR = to_concrete!(contract(carried, (2, 3), right_frames[bond]', (2, 3)))
+        AR = contract(carried, (2, 3), right_frames[bond]', (2, 3))
     end
     return AR
 end
@@ -246,53 +246,53 @@ function _projection_miss(psi::SymMPS, left_frames, right_frames, root_link::Int
     for site = site_count:-1:2
         carried =
             site == site_count ? psi[site_count] :
-            to_concrete!(contract(psi[site], (3,), right_factor[site+1], (1,)))
+            contract(psi[site], (3,), right_factor[site+1], (1,))
         res = svd(carried, (1,); cutoff = 0.0)
-        right_factor[site] = to_concrete(res.U * res.S)
+        right_factor[site] = TLArray(res.U * res.S)
     end
     miss2 = 0.0
     # Left side: the part of each carried site outside its left frame, weighted by the rest.
     AL = nothing
     for site = 1:root_link
-        carried = AL === nothing ? psi[site] : to_concrete!(contract(AL, (2,), psi[site], (1,)))
+        carried = AL === nothing ? psi[site] : contract(AL, (2,), psi[site], (1,))
         outside = perp_component(left_frames[site], carried)
-        miss2 += norm(to_concrete!(contract(outside, (3,), right_factor[site+1], (1,))))^2
+        miss2 += norm(contract(outside, (3,), right_factor[site+1], (1,)))^2
         # (b_site, link_{site+1})
-        AL = to_concrete!(contract(left_frames[site]', (1, 2), carried, (1, 2)))
+        AL = contract(left_frames[site]', (1, 2), carried, (1, 2))
     end
     # left_factor[bond]' left_factor[bond] = Gram of P_L psi on link_{bond+1}
     left_factor = Vector{Any}(undef, site_count - 1)
     res = svd(AL, (1,); cutoff = 0.0)
-    left_factor[root_link] = to_concrete(res.S * res.Vd)
+    left_factor[root_link] = TLArray(res.S * res.Vd)
     for bond = (root_link+1):(site_count-1)
         res = svd(
-            to_concrete!(contract(left_factor[bond-1], (2,), psi[bond], (1,))),
+            contract(left_factor[bond-1], (2,), psi[bond], (1,)),
             (1, 2);
             cutoff = 0.0,
         )
-        left_factor[bond] = to_concrete(res.S * res.Vd)
+        left_factor[bond] = TLArray(res.S * res.Vd)
     end
     # Right side, inside the left frames: each carried site's part outside its right frame.
     AR = nothing
     for bond = (site_count-1):-1:root_link
-        carried = AR === nothing ? psi[bond+1] : to_concrete!(contract(psi[bond+1], (3,), AR, (1,)))
+        carried = AR === nothing ? psi[bond+1] : contract(psi[bond+1], (3,), AR, (1,))
         outside = perp_component_right(right_frames[bond], carried)
-        miss2 += norm(to_concrete!(contract(left_factor[bond], (2,), outside, (1,))))^2
+        miss2 += norm(contract(left_factor[bond], (2,), outside, (1,)))^2
         # (link_{bond+1}, b_bond)
-        AR = to_concrete!(contract(carried, (2, 3), right_frames[bond]', (2, 3)))
+        AR = contract(carried, (2, 3), right_frames[bond]', (2, 3))
     end
     return sqrt(miss2)
 end
 
 "`S = (W ⊗ Z)' psi`, the root coefficients of `P psi`."
-_project_root(psi::SymMPS, fr::KLFrames) = to_concrete!(
+_project_root(psi::SymMPS, fr::KLFrames) = 
     contract(
         _overlap_left(psi, fr.left_frames, fr.root_link),
         (2,),
         _overlap_right(psi, fr.right_frames, fr.root_link),
         (1,),
     ),
-)
+
 
 "`B = P H P` at the root, from the frames' cached environments."
 _root_generator(mpo, fr::KLFrames) = shift_h(
@@ -309,7 +309,7 @@ _root_generator(mpo, fr::KLFrames) = shift_h(
 
 # `factor * coefficients`: broadcast for the dense test vectors, a concrete tensor otherwise.
 _scaled(factor::Number, coefficients::Array{<:Number}) = factor .* coefficients
-_scaled(factor::Number, coefficients) = to_concrete(factor * coefficients)
+_scaled(factor::Number, coefficients) = TLArray(factor * coefficients)
 
 """
     _projected_frontiers(apply_generator, root_start, tau, frontier_count) -> Vector
@@ -339,17 +339,17 @@ function _frontier_mps(psi::SymMPS, fr::KLFrames, core)
     site_tensors = Vector{Any}(undef, site_count)
     for site = 1:(root_link-1)
         site_tensors[site] =
-            _relink(fr.left_frames[site], psi[site].inds[1].itags, psi[site].inds[3].itags)
+            _relink(fr.left_frames[site], Telum.inds(psi[site])[1].itags, Telum.inds(psi[site])[3].itags)
     end
     # The root core sits on the last left frame.
     site_tensors[root_link] = _relink(
-        to_concrete(fr.left_frames[root_link] * core),
-        psi[root_link].inds[1].itags,
-        psi[root_link].inds[3].itags,
+        TLArray(fr.left_frames[root_link] * core),
+        Telum.inds(psi[root_link])[1].itags,
+        Telum.inds(psi[root_link])[3].itags,
     )
     for bond = root_link:(site_count-1)
         site_tensors[bond+1] =
-            _relink(fr.right_frames[bond], psi[bond+1].inds[1].itags, psi[bond+1].inds[3].itags)
+            _relink(fr.right_frames[bond], Telum.inds(psi[bond+1])[1].itags, Telum.inds(psi[bond+1])[3].itags)
     end
     return SymMPS(site_tensors, root_link)
 end

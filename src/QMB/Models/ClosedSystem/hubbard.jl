@@ -43,8 +43,8 @@ Returns 1-based indices. `:none` only; under `:U1` the four states are separate 
 sectors and are selected by label.
 """
 function hub4_basis_index(q)
-    nu = diag(Matrix(to_concrete(lock(q.Fu', 2) * q.Fu).RMTs[1]))
-    nd = diag(Matrix(to_concrete(lock(q.Fd', 2) * q.Fd).RMTs[1]))
+    nu = diag(Matrix(_sector_block(TLArray(lock(q.Fu', 2) * q.Fu), 1)))
+    nd = diag(Matrix(_sector_block(TLArray(lock(q.Fd', 2) * q.Fd), 1)))
     length(nu) == 4 || error("hub4_basis_index: local dimension $(length(nu)), expected 4")
     find(a, b) = begin
         hits = findall(k -> isapprox(nu[k], a; atol = 1e-10) && isapprox(nd[k], b; atol = 1e-10), 1:4)
@@ -94,8 +94,8 @@ function hub4_product_state(occ::Vector{Symbol})
     tensors = Any[]
     prev = (getvac(q.I, ("L,0", "L,1")), 2)
     for i = 1:L
-        F = to_concrete(getIdentity(prev, (q.I, 1); itag = "L,$(i + 1)"))
-        F = to_concrete(setitag(F, 2, "S,$i"))
+        F = TLArray(getIdentity(prev, (q.I, 1); itag = "L,$(i + 1)"))
+        F = TLArray(setitag(F, 2, "S,$i"))
         A = if sym === :none
             k = getfield(
                 idx,
@@ -105,19 +105,19 @@ function hub4_product_state(occ::Vector{Symbol})
                 occ[i] === :both ? :both :
                 throw(ArgumentError("bad occupation $(occ[i]) at site $i")),
             )
-            to_concrete(getsub(F, 3, s -> k))
+            TLArray(getsub(F, 3, s -> k))
         else
             target = hub4_sector(occ[i])
             B = getsub(F, 2, s -> s == target ? Colon() : nothing; preserve_space = true)
-            B = to_concrete(B)
-            isempty(B.qlabels) && error(
+            B = TLArray(B)
+            isempty(Telum.logical_qlabels(B)) && error(
                 "hub4_product_state: site $i sector $target matches " *
                 "none of the site leg's labels $(first.(F.spaces[2]))",
             )
-            present = Set(ql[3] for ql in B.qlabels)
-            to_concrete(getsub(B, 3, s -> s in present ? Colon() : nothing))
+            present = Set(ql[3] for ql in Telum.logical_qlabels(B))
+            TLArray(getsub(B, 3, s -> s in present ? Colon() : nothing))
         end
-        A = to_concrete(A * (1.0 + 0.0im))
+        A = TLArray(A * (1.0 + 0.0im))
         push!(tensors, A)
         prev = (A, 3)
     end
@@ -140,11 +140,11 @@ channel and gives a smooth but wrong imbalance decay.
 function _hub4_channels(q)
     chans = Any[]
     for A in (q.Fu, q.Fd)
-        ZA = to_concrete(lock(q.Z, 1) * A)          # Z · f4σ   (opens channel A)
-        Ad = to_concrete(A')                        # f4σ†      (closes channel A)
-        AdZ = to_concrete(A' * lock(q.Z, 2))         # f4σ† · Z  (opens channel B)
+        ZA = TLArray(lock(q.Z, 1) * A)          # Z · f4σ   (opens channel A)
+        Ad = TLArray(A')                        # f4σ†      (closes channel A)
+        AdZ = TLArray(A' * lock(q.Z, 2))         # f4σ† · Z  (opens channel B)
         push!(chans, (_hub4_half(ZA, :left), _hub4_half(Ad, :right)))
-        push!(chans, (_hub4_half(AdZ, :left), _hub4_half(to_concrete(A), :right)))
+        push!(chans, (_hub4_half(AdZ, :left), _hub4_half(TLArray(A), :right)))
     end
     return chans
 end
@@ -160,11 +160,11 @@ annihilators only, so channel B opens on `f'` and closes on `f`, both pointing t
 `legflip` takes each to the dual, exact for U(1), which leaves their contraction unchanged.
 """
 function _hub4_half(O, side::Symbol)
-    length(O.inds) == 3 || return O
-    k = findfirst(l -> occursin("op", O.inds[l].itags.value), 1:3)
+    length(Telum.inds(O)) == 3 || return O
+    k = findfirst(l -> occursin("op", Telum.inds(O)[l].itags.value), 1:3)
     k === nothing && error("_hub4_half: no op-leg among the legs $(O.inds)")
-    O = to_concrete(permutedims(O, (filter(!=(k), 1:3)..., k)))
-    O.inds[3].dir == (side === :left ? '-' : '+') || (O = to_concrete(legflip(O, 3)))
+    O = TLArray(permutedims(O, (filter(!=(k), 1:3)..., k)))
+    Telum.inds(O)[3].dir == (side === :left ? '-' : '+') || (O = TLArray(legflip(O, 3)))
     return O
 end
 
@@ -208,10 +208,10 @@ function hubbard_aa_mpo_d4(
     sym = symmetry_mode()
     q = hub4_space(sym)
 
-    nu = to_concrete(lock(q.Fu', 2) * q.Fu)
-    nd = to_concrete(lock(q.Fd', 2) * q.Fd)
-    ntot = to_concrete(nu + nd)
-    nupdn = to_concrete(lock(nu, 1) * nd)              # n↑ n↓ -- the Hubbard interaction
+    nu = TLArray(lock(q.Fu', 2) * q.Fu)
+    nd = TLArray(lock(q.Fd', 2) * q.Fd)
+    ntot = TLArray(nu + nd)
+    nupdn = TLArray(lock(nu, 1) * nd)              # n↑ n↓ -- the Hubbard interaction
 
     chans = _hub4_channels(q)
     n = length(chans)                                  # 4
@@ -226,7 +226,7 @@ function hubbard_aa_mpo_d4(
     for i = 1:L
         tl, tr = "W,$(i - 1)", "W,$i"
         Iid = _mpo_block(q.I, i, tl, tr, :none)
-        Znil = to_concrete(0.0 * Iid)
+        Znil = TLArray(0.0 * Iid)
 
         # ── under :none every slot filled, then overwritten ──
         # `oplus` infers an omitted entry's spaces from its row and column, which fails on a row that is
@@ -240,16 +240,16 @@ function hubbard_aa_mpo_d4(
         i < L && (mat[1, 1] = Iid)                     # stay `id`
         i > 1 && (mat[ncol, ncol] = Iid)               # stay `done`
 
-        onsite = to_concrete(h[i] * ntot)
-        U == 0.0 || (onsite = to_concrete(onsite + U * nupdn))
-        Vup === nothing || (onsite = to_concrete(onsite + Vup[i] * nu))
-        Vdn === nothing || (onsite = to_concrete(onsite + Vdn[i] * nd))
+        onsite = TLArray(h[i] * ntot)
+        U == 0.0 || (onsite = TLArray(onsite + U * nupdn))
+        Vup === nothing || (onsite = TLArray(onsite + Vup[i] * nu))
+        Vdn === nothing || (onsite = TLArray(onsite + Vdn[i] * nd))
         mat[1, ncol] = _mpo_block(onsite, i, tl, tr, :none)
 
         for (t, (open_op, close_op)) in enumerate(chans)
             i < L && (mat[1, 1+t] = _mpo_block(open_op, i, tl, tr, _side(open_op, :left)))
             i > 1 && (
-                mat[1+t, ncol] = to_concrete(
+                mat[1+t, ncol] = TLArray(
                     -Jb[i-1] * _mpo_block(close_op, i, tl, tr, _side(close_op, :right)),
                 )
             )
@@ -260,7 +260,7 @@ function hubbard_aa_mpo_d4(
         elseif i == L
             mat = reshape(mat[:, ncol], ncol, 1)       # the `done` column only
         end
-        push!(Ws, to_concrete(oplus(mat, (1, 4))))
+        push!(Ws, TLArray(oplus(mat, (1, 4))))
     end
     return MPO(Ws)
 end
@@ -293,13 +293,13 @@ function hub4_current_mpo(L::Int, b::Int, s::Int; J::Real = 1.0)
         elseif i == b + 1
             mat = Matrix{Any}(nothing, 2, 1)
             for (t, (_, cl)) in enumerate(chans)
-                mat[t, 1] = to_concrete(w[t] * _mpo_block(cl, i, tl, tr, _side(cl, :right)))
+                mat[t, 1] = TLArray(w[t] * _mpo_block(cl, i, tl, tr, _side(cl, :right)))
             end
             oplus(mat, (1, 4))
         else
             _mpo_block(q.I, i, tl, tr, :none)
         end
-        push!(Ws, to_concrete(W))
+        push!(Ws, TLArray(W))
     end
     return MPO(Ws)
 end
@@ -318,7 +318,7 @@ issue in any mode this file supports.
 """
 function hub4_density(psi::SymMPS, i::Int)
     q = hub4_space()
-    nt = to_concrete(lock(q.Fu', 2) * q.Fu + lock(q.Fd', 2) * q.Fd)
+    nt = TLArray(lock(q.Fu', 2) * q.Fu + lock(q.Fd', 2) * q.Fd)
     return real(site_expval(psi, i, nt))
 end
 

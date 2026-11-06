@@ -38,19 +38,18 @@ function _mpo_left_step(environment, site_tensor, mpo_tensor, bra_tensor = site_
         # is the dim-1 leg left by trimming, dropped rather than contracted.
         contracted = contract(mpo_tensor, (2,), site_tensor, (2,))  # (w_l, s_bra, w_r, ℓ_l, ℓ_r)
         contracted =
-            contract(to_concrete!(contracted), (2, 4), _bra_left_boundary(bra_tensor), (2, 1))
-        contracted = to_concrete(deleteSingleton(to_concrete!(contracted), 1))  # (w_r, ℓ_r, ℓ_r')
-        return to_concrete(permutedims(contracted, (3, 1, 2)))
+            contract(contracted, (2, 4), _bra_left_boundary(bra_tensor), (2, 1))
+        contracted = TLArray(deleteSingleton(contracted, 1))  # (w_r, ℓ_r, ℓ_r')
+        return TLArray(permutedims(contracted, (3, 1, 2)))
     end
-    # `to_concrete!` on each fresh `contract` result: the copying form deep-copied the
-    # chi^2*w*d intermediates nobody else holds, on the most-called kernel of every sweep.
-    # The outer `to_concrete` stays -- `permutedims`/`deleteSingleton` return views.
+    # The `contract` results are concrete and used as they are (the most-called kernel of every
+    # sweep); the returned permutation is a view of the last one.
     contracted = contract(environment, (3,), site_tensor, (1,))         # (bra, w, s, ℓ_r)
     # (bra, ℓ_r, s_bra, w_r)
-    contracted = contract(to_concrete!(contracted), (2, 3), mpo_tensor, (1, 2))
+    contracted = contract(contracted, (2, 3), mpo_tensor, (1, 2))
     # (ℓ_r, w_r, ℓ_r')
-    contracted = contract(to_concrete!(contracted), (1, 3), _bra_interior(bra_tensor), (1, 2))
-    return to_concrete(permutedims(to_concrete!(contracted), (3, 2, 1)))
+    contracted = contract(contracted, (1, 3), _bra_interior(bra_tensor), (1, 2))
+    return TLArray(permutedims(contracted, (3, 2, 1)))
 end
 
 """
@@ -68,16 +67,16 @@ function _mpo_right_step(environment, site_tensor, mpo_tensor)
         # is dropped.
         contracted = contract(mpo_tensor, (2,), site_tensor, (2,))  # (w_l, s_bra, w_r, ℓ_l, ℓ_r)
         contracted =
-            contract(to_concrete!(contracted), (2, 5), _bra_right_boundary(site_tensor), (2, 3))
-        contracted = to_concrete(deleteSingleton(to_concrete!(contracted), 2))  # (w_l, ℓ_l, ℓ_l')
-        return to_concrete(permutedims(contracted, (3, 1, 2)))
+            contract(contracted, (2, 5), _bra_right_boundary(site_tensor), (2, 3))
+        contracted = TLArray(deleteSingleton(contracted, 2))  # (w_l, ℓ_l, ℓ_l')
+        return TLArray(permutedims(contracted, (3, 1, 2)))
     end
     contracted = contract(site_tensor, (3,), environment, (3,))         # (ℓ_l, s, bra, w)
     # (ℓ_l, bra, w_l, s_bra)
-    contracted = contract(to_concrete!(contracted), (2, 4), mpo_tensor, (2, 4))
+    contracted = contract(contracted, (2, 4), mpo_tensor, (2, 4))
     # (ℓ_l, w_l, ℓ_l')
-    contracted = contract(to_concrete!(contracted), (2, 4), _bra_interior(site_tensor), (3, 2))
-    return to_concrete(permutedims(to_concrete!(contracted), (3, 2, 1)))
+    contracted = contract(contracted, (2, 4), _bra_interior(site_tensor), (3, 2))
+    return TLArray(permutedims(contracted, (3, 2, 1)))
 end
 
 "Carry the left environment on link `site` through `site` onto link `site+1`. `open_next` is
@@ -165,10 +164,10 @@ assertion that the trimming really did leave a singleton there.
 function _mpo_left_close(environment, site_tensor, mpo_tensor, bra_tensor = site_tensor)
     contracted = contract(environment, (3,), site_tensor, (1,))         # (bra, w, s, ℓ_r)
     # (bra, ℓ_r, s_bra, w_r)
-    contracted = contract(to_concrete!(contracted), (2, 3), mpo_tensor, (1, 2))
-    contracted = to_concrete(deleteSingleton(to_concrete!(contracted), 4))  # (bra, ℓ_r, s_bra)
+    contracted = contract(contracted, (2, 3), mpo_tensor, (1, 2))
+    contracted = TLArray(deleteSingleton(contracted, 4))  # (bra, ℓ_r, s_bra)
     scalar = contract(contracted, (1, 3, 2), _bra_right_boundary(bra_tensor), (1, 2, 3))
-    return ComplexF64(to_concrete(scalar)[])
+    return ComplexF64(TLArray(scalar)[])
 end
 
 """
@@ -213,30 +212,30 @@ identical tags, which Telum refuses as a duplicate index.
 """
 # `inc = 5`: far above any prime level the inner copy, the state or the bra carries, so the
 # outer layer's virtual legs cannot coincide with any other leg whatever their direction.
-_mpo_outer(mpo_tensor) = to_concrete(prime(prime(mpo_tensor, 1; inc = 5), 4; inc = 5))
+_mpo_outer(mpo_tensor) = TLArray(prime(prime(mpo_tensor, 1; inc = 5), 4; inc = 5))
 
 function _mpo2_left_step(environment, site_tensor, mpo_tensor)
     Wa = _mpo_outer(mpo_tensor)
     if environment === nothing
         contracted = contract(mpo_tensor, (2,), site_tensor, (2,))  # (wb_l, s1, wb_r, ℓ_l, ℓ_r)
         # (wb_l, wb_r, ℓ_l, ℓ_r, wa_l, s2, wa_r)
-        contracted = contract(to_concrete!(contracted), (2,), Wa, (2,))
+        contracted = contract(contracted, (2,), Wa, (2,))
         contracted =
-            contract(to_concrete!(contracted), (6, 3), _bra_left_boundary(site_tensor), (2, 1))
+            contract(contracted, (6, 3), _bra_left_boundary(site_tensor), (2, 1))
         #                                                   (wb_l, wb_r, ℓ_r, wa_l, wa_r, ℓ_r')
         # (wb_r, ℓ_r, wa_l, wa_r, ℓ_r')
-        contracted = to_concrete(deleteSingleton(to_concrete!(contracted), 1))
-        contracted = to_concrete(deleteSingleton(contracted, 3))  # (wb_r, ℓ_r, wa_r, ℓ_r')
-        return to_concrete(permutedims(contracted, (4, 3, 1, 2)))
+        contracted = TLArray(deleteSingleton(contracted, 1))
+        contracted = TLArray(deleteSingleton(contracted, 3))  # (wb_r, ℓ_r, wa_r, ℓ_r')
+        return TLArray(permutedims(contracted, (4, 3, 1, 2)))
     end
     contracted = contract(environment, (4,), site_tensor, (1,))  # (bra, wa, wb, s, ℓ_r)
     # (bra, wa, ℓ_r, s1, wb_r)
-    contracted = contract(to_concrete!(contracted), (3, 4), mpo_tensor, (1, 2))
+    contracted = contract(contracted, (3, 4), mpo_tensor, (1, 2))
     # (bra, ℓ_r, wb_r, s2, wa_r)
-    contracted = contract(to_concrete!(contracted), (2, 4), Wa, (1, 2))
+    contracted = contract(contracted, (2, 4), Wa, (1, 2))
     # (ℓ_r, wb_r, wa_r, ℓ_r')
-    contracted = contract(to_concrete!(contracted), (1, 4), _bra_interior(site_tensor), (1, 2))
-    return to_concrete(permutedims(to_concrete!(contracted), (4, 3, 2, 1)))
+    contracted = contract(contracted, (1, 4), _bra_interior(site_tensor), (1, 2))
+    return TLArray(permutedims(contracted, (4, 3, 2, 1)))
 end
 
 """
@@ -262,13 +261,13 @@ function mpo_variance(psi::SymMPS, mpo::MPO)
     last_tensor, last_mpo = psi[site_count], mpo[site_count]
     contracted = contract(environment, (4,), last_tensor, (1,))  # (bra, wa, wb, s, ℓ_r)
     # (bra, wa, ℓ_r, s1, wb_r)
-    contracted = contract(to_concrete!(contracted), (3, 4), last_mpo, (1, 2))
-    contracted = to_concrete(deleteSingleton(to_concrete!(contracted), 5))  # (bra, wa, ℓ_r, s1)
+    contracted = contract(contracted, (3, 4), last_mpo, (1, 2))
+    contracted = TLArray(deleteSingleton(contracted, 5))  # (bra, wa, ℓ_r, s1)
     contracted = contract(contracted, (2, 4), _mpo_outer(last_mpo), (1, 2))  # (bra, ℓ_r, s2, wa_r)
-    contracted = to_concrete(deleteSingleton(to_concrete!(contracted), 4))  # (bra, ℓ_r, s2)
+    contracted = TLArray(deleteSingleton(contracted, 4))  # (bra, ℓ_r, s2)
     h_squared = real(
         ComplexF64(
-            to_concrete(
+            TLArray(
                 contract(contracted, (1, 3, 2), _bra_right_boundary(last_tensor), (1, 2, 3)),
             )[],
         ),
@@ -299,21 +298,21 @@ function apply_h_two_site(Theta, mpo::MPO, bond::Int, lenv::MPOLink, renv::MPOLi
     # leg and drop the MPO's dim-1 boundary leg.
     contracted = if lenv.E === nothing
         # (ℓ_l, s_r, ℓ_r, w_l, s_bra, w_mid)
-        partial = to_concrete!(contract(Theta, (2,), left_mpo_tensor, (2,)))
-        to_concrete(deleteSingleton(partial, 4))
+        partial = contract(Theta, (2,), left_mpo_tensor, (2,))
+        TLArray(deleteSingleton(partial, 4))
     else
-        partial = to_concrete!(contract(lenv.E, (3,), Theta, (1,)))  # (bra,w,s_l,s_r,ℓ_r)
-        to_concrete!(contract(partial, (2, 3), left_mpo_tensor, (1, 2)))
+        partial = contract(lenv.E, (3,), Theta, (1,))  # (bra,w,s_l,s_r,ℓ_r)
+        contract(partial, (2, 3), left_mpo_tensor, (1, 2))
     end                                                  # (link_l, s_r, ℓ_r, s_bra_l, w)
     # (link_l, ℓ_r, s_bra_l, s_bra_r, w)
-    contracted = to_concrete!(contract(contracted, (5, 2), right_mpo_tensor, (1, 2)))
+    contracted = contract(contracted, (5, 2), right_mpo_tensor, (1, 2))
 
     contracted = if renv.E === nothing
-        partial = to_concrete(deleteSingleton(contracted, 5))  # (link_l, ℓ_r, s_bra_l, s_bra_r)
-        to_concrete(permutedims(partial, (1, 3, 4, 2)))
+        partial = TLArray(deleteSingleton(contracted, 5))  # (link_l, ℓ_r, s_bra_l, s_bra_r)
+        TLArray(permutedims(partial, (1, 3, 4, 2)))
     else
         # (link_l, s_bra_l, s_bra_r, bra_r)
-        to_concrete!(contract(contracted, (5, 2), renv.E, (2, 3)))
+        contract(contracted, (5, 2), renv.E, (2, 3))
     end
 
     # Each environment's bra leg replaced a link leg: give it that link's prime level back.
@@ -336,9 +335,8 @@ from the ket while both are open (`environment_stacks.jl`); once it has replaced
 must carry that link's original prime level again.
 """
 #
-# `to_concrete!`, not `to_concrete`: `prime` already returns a deep copy the caller owns, so a second
-# copy is pure waste.
-_unprime(tensor, leg::Int) = to_concrete!(prime(tensor, leg; inc = -1))
+# `prime` returns a tensor the caller owns; it needs no further copy.
+_unprime(tensor, leg::Int) = prime(tensor, leg; inc = -1)
 
 """
     _env_on_link(tensor, environment, leg) -> TLArray
@@ -353,7 +351,7 @@ at an END of the tensor, so the bra comes back out in exactly the position it va
 and no permutation is needed beyond the two written below.
 """
 function _env_on_link(tensor, environment, leg::Int)
-    nT, nE = length(tensor.inds), length(environment.inds)
+    nT, nE = length(Telum.inds(tensor)), length(Telum.inds(environment))
     out = if nE == 3 && nT == 4
         contract(tensor, (leg, nT), environment, (2, 3))
     elseif nE == 2 && nT == 3
@@ -368,9 +366,9 @@ function _env_on_link(tensor, environment, leg::Int)
     #   leg == 1 (K0): (site_l, bond, bra) -> bra first
     #   leg == 3 (V0): (bond, site_r, bra) -> already in place
     if leg == 1
-        return _unprime(to_concrete(permutedims(out, (3, 1, 2))), 1)
+        return _unprime(TLArray(permutedims(out, (3, 1, 2))), 1)
     elseif leg == 3
-        return _unprime(to_concrete(out), 3)
+        return _unprime(TLArray(out), 3)
     end
     throw(ArgumentError("_env_on_link: leg must be 1 or 3, got $leg"))
 end
@@ -400,23 +398,23 @@ function _stream_left(
     # Close the sketch against the right environment and the right MPO tensor.
     right_closure = if renv.E === nothing
         # (g, bra_r, w_mid, s_ket_r, w_r)
-        partial = to_concrete!(contract(Omd, (2,), right_mpo_tensor, (3,)))
-        to_concrete(deleteSingleton(partial, 5))             # (g, bra_r, w_mid, s_ket_r)
+        partial = contract(Omd, (2,), right_mpo_tensor, (3,))
+        TLArray(deleteSingleton(partial, 5))             # (g, bra_r, w_mid, s_ket_r)
     else
-        partial = to_concrete!(contract(Omd, (3,), renv.E, (1,)))   # (g, s_bra_r, w, ket_r)
+        partial = contract(Omd, (3,), renv.E, (1,))   # (g, s_bra_r, w, ket_r)
         # (g, ket_r, w_mid, s_ket_r)
-        to_concrete!(contract(partial, (2, 3), right_mpo_tensor, (3, 4)))
+        contract(partial, (2, 3), right_mpo_tensor, (3, 4))
     end
     # (bond, g, w_mid), then (ℓ_l, s_l, g, w_mid), then (ℓ_l, g, w_l, s_bra_l)
-    bond_partial = to_concrete!(contract(right_isometry, (2, 3), right_closure, (4, 2)))
-    site_partial = to_concrete!(contract(left_amplitude, (3,), bond_partial, (1,)))
-    with_left_mpo = to_concrete!(contract(site_partial, (2, 4), left_mpo_tensor, (2, 4)))
+    bond_partial = contract(right_isometry, (2, 3), right_closure, (4, 2))
+    site_partial = contract(left_amplitude, (3,), bond_partial, (1,))
+    with_left_mpo = contract(site_partial, (2, 4), left_mpo_tensor, (2, 4))
     if lenv.E === nothing
-        partial = to_concrete(deleteSingleton(with_left_mpo, 3))   # (ℓ_l, g, s_bra_l)
-        return to_concrete(permutedims(partial, (1, 3, 2)))  # (ℓ_l, s_bra_l, g)
+        partial = TLArray(deleteSingleton(with_left_mpo, 3))   # (ℓ_l, g, s_bra_l)
+        return TLArray(permutedims(partial, (1, 3, 2)))  # (ℓ_l, s_bra_l, g)
     end
-    partial = to_concrete!(contract(with_left_mpo, (1, 3), lenv.E, (3, 2)))  # (g, s_bra_l, bra)
-    return _unprime(to_concrete(permutedims(partial, (3, 2, 1))), 1)
+    partial = contract(with_left_mpo, (1, 3), lenv.E, (3, 2))  # (g, s_bra_l, bra)
+    return _unprime(TLArray(permutedims(partial, (3, 2, 1))), 1)
 end
 
 """
@@ -440,22 +438,22 @@ function _stream_right(
     # Close the sketch against the left environment and the left MPO tensor.
     left_closure = if lenv.E === nothing
         # (bra_l, g, w_l, s_ket_l, w_mid)
-        partial = to_concrete!(contract(Omd, (2,), left_mpo_tensor, (3,)))
-        to_concrete(deleteSingleton(partial, 3))             # (bra_l, g, s_ket_l, w_mid)
+        partial = contract(Omd, (2,), left_mpo_tensor, (3,))
+        TLArray(deleteSingleton(partial, 3))             # (bra_l, g, s_ket_l, w_mid)
     else
-        partial = to_concrete!(contract(Omd, (1,), lenv.E, (1,)))   # (s_bra_l, g, w, ket_l)
+        partial = contract(Omd, (1,), lenv.E, (1,))   # (s_bra_l, g, w, ket_l)
         # (g, ket_l, s_ket_l, w_mid)
-        g_first = to_concrete!(contract(partial, (1, 3), left_mpo_tensor, (3, 1)))
-        to_concrete(permutedims(g_first, (2, 1, 3, 4)))     # (ket_l, g, s_ket_l, w_mid)
+        g_first = contract(partial, (1, 3), left_mpo_tensor, (3, 1))
+        TLArray(permutedims(g_first, (2, 1, 3, 4)))     # (ket_l, g, s_ket_l, w_mid)
     end
     # (bond, g, w_mid), then (s_r, ℓ_r, g, w_mid), then (ℓ_r, g, s_bra_r, w_r)
-    bond_partial = to_concrete!(contract(left_isometry, (1, 2), left_closure, (1, 3)))
-    site_partial = to_concrete!(contract(right_amplitude, (1,), bond_partial, (1,)))
-    with_right_mpo = to_concrete!(contract(site_partial, (1, 4), right_mpo_tensor, (2, 1)))
+    bond_partial = contract(left_isometry, (1, 2), left_closure, (1, 3))
+    site_partial = contract(right_amplitude, (1,), bond_partial, (1,))
+    with_right_mpo = contract(site_partial, (1, 4), right_mpo_tensor, (2, 1))
     if renv.E === nothing
-        partial = to_concrete(deleteSingleton(with_right_mpo, 4))  # (ℓ_r, g, s_bra_r)
-        return to_concrete(permutedims(partial, (2, 3, 1)))  # (g, s_bra_r, ℓ_r)
+        partial = TLArray(deleteSingleton(with_right_mpo, 4))  # (ℓ_r, g, s_bra_r)
+        return TLArray(permutedims(partial, (2, 3, 1)))  # (g, s_bra_r, ℓ_r)
     end
-    partial = to_concrete!(contract(with_right_mpo, (1, 4), renv.E, (3, 2)))  # (g, s_bra_r, bra_r)
+    partial = contract(with_right_mpo, (1, 4), renv.E, (3, 2))  # (g, s_bra_r, bra_r)
     return _unprime(partial, 3)
 end

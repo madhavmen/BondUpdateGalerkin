@@ -25,13 +25,23 @@
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
-_eig_sector_qlabels(q::TLArray{T, 2, N}, sector_index::Int) where {T, N} =
+_eig_sector_qlabels(q::AbstractTLArray{T, 2, N}, sector_index::Int) where {T, N} =
     ntuple(n -> sector_qlabel(q, sector_index, 1)[n], Val(N))
 
 _eig_sort_value(ev::Real, hermitian::Bool) = hermitian ? real(ev) : abs(ev)
 _eig_sort_value(ev::Complex, hermitian::Bool) = hermitian ? real(ev) : abs(ev)
 const _EIG_HERMITIAN_RTOL = sqrt(eps(Float64))
 
+"""
+Container for a symmetry-aware eigendecomposition.
+
+# Fields
+
+- `V`: right-eigenvector TLArray.
+- `D`: diagonal eigenvalue TLArray.
+- `V_inv`: inverse/left-eigenvector factor, or `nothing` when not constructed.
+- `eig_list`: globally ordered eigenvalue/sector/local-index bookkeeping used by `discard_eigen`.
+"""
 struct EigenResult{TV, TD, TVI, TL}
     V::TV
     D::TD
@@ -118,35 +128,39 @@ end
 _retag_qindex(idx::TLIndex, tag::AbstractString) = TLIndex(tag, idx.dir, idx.plev, idx.lock, idx.dual)
 
 function _retag_eigen_result(result::EigenResult, eig_tag::AbstractString)
-    d_inds = (_retag_qindex(result.D.inds[1], eig_tag), _retag_qindex(result.D.inds[2], eig_tag))
+    d_inds = (_retag_qindex(inds(result.D)[1], eig_tag), _retag_qindex(inds(result.D)[2], eig_tag))
     D = TLArray(result.D, d_inds)
 
-    v_inds = (result.V.inds[1], _retag_qindex(result.V.inds[2], eig_tag))
+    v_inds = (inds(result.V)[1], _retag_qindex(inds(result.V)[2], eig_tag))
     V = TLArray(result.V, v_inds)
 
     V_inv = if isnothing(result.V_inv)
         nothing
     else
-        vinv_inds = (_retag_qindex(result.V_inv.inds[1], eig_tag), result.V_inv.inds[2])
+        vinv_inds = (_retag_qindex(inds(result.V_inv)[1], eig_tag), inds(result.V_inv)[2])
         TLArray(result.V_inv, vinv_inds)
     end
 
     return EigenResult(V, D, V_inv, result.eig_list)
 end
 
-function _prepare_eigen_input(q::TLArray{T, 2, N, RD},
+"""Validate and orient rank-two tensor `q` for eigenvalue routines. `opname` is used in diagnostics; the result has incoming/outgoing leg order and identical space lists, with a lazy permutation applied when needed."""
+function _prepare_eigen_input(q::AbstractTLArray{T, 2, N, RD},
                               opname::AbstractString) where {T, N, RD}
-    dirs = (q.inds[1].dir, q.inds[2].dir)
+    qinds = inds(q)
+    dirs = (qinds[1].dir, qinds[2].dir)
     @assert (dirs == ('+', '-') || dirs == ('-', '+')) "$opname requires one incoming ('+') and one outgoing ('-') leg"
 
-    q_work = dirs == ('+', '-') ? q : copy(permutedims(q, (2, 1)))
-    @assert q_work.spaces[1] == q_work.spaces[2] "$opname: both legs of input TLArray must have the same space list (same sectors and dimensions)"
+    q_work = dirs == ('+', '-') ? q : permutedims(q, (2, 1))
+    qspaces = spaces(q_work)
+    @assert qspaces[1] == qspaces[2] "$opname: both legs of input TLArray must have the same space list (same sectors and dimensions)"
     return q_work
 end
 
-function _check_hermitian_eigen_legs(q::TLArray,
+"""Validate that the two legs of rank-two `q` carry matching tag, prime, lock, and dual metadata required by a Hermitian eigendecomposition. `opname` labels assertion messages."""
+function _check_hermitian_eigen_legs(q::AbstractTLArray,
                                      opname::AbstractString)
-    idx1, idx2 = q.inds
+    idx1, idx2 = inds(q)
     @assert idx1.itags == idx2.itags "$opname: Hermitian eigendecomposition requires both legs to have the same itag"
     @assert idx1.plev == idx2.plev "$opname: Hermitian eigendecomposition requires both legs to have the same plev"
     @assert idx1.lock == idx2.lock "$opname: Hermitian eigendecomposition requires both legs to have the same lock"
@@ -154,12 +168,36 @@ function _check_hermitian_eigen_legs(q::TLArray,
     return nothing
 end
 
-function _hermiticity_ratio(q::TLArray{T, 2, N, RD}) where {T, N, RD}
-    q_adj = permutedims(q', (2, 1))
-    q_adj = TLArray(q_adj, q.inds)
+"""Materialize one eigenproblem sector as a dense matrix. Applies deferred RMT view/scale state for stable `sector_index` and returns `(matrix, left_dim, right_dim)` for block eigensolvers."""
+function _eig_scaled_matrix(q::AbstractTLArray{T, 2, N, RD}, sector_index::Int) where {T, N, RD}
+    rmt, scale = sector_rmt_permuted(q, sector_index, _identity_rmt_perm(Val(RD)))
+    rmt_size = sector_rmt_dim(q, sector_index)
+    sL, sR = rmt_size[1], rmt_size[2]
+    mat = Matrix(reshape(rmt, sL, sR))
+    scale != one(typeof(scale)) && (mat .*= scale)
+    return mat, sL, sR
+end
 
-    qnorm = norm(q)
-    diffnorm = norm(q - q_adj)
+function _hermiticity_ratio(q::AbstractTLArray{T, 2, N, RD}) where {T, N, RD}
+    idx1, idx2 = inds(q)
+    if !(idx1.itags == idx2.itags &&
+         idx1.plev == idx2.plev &&
+         idx1.lock == idx2.lock &&
+         idx1.dual == idx2.dual)
+        return Inf
+    end
+
+    qnorm2 = 0.0
+    diffnorm2 = 0.0
+    for sector_index in sector_slots(q)
+        is_sector_zero(q, sector_index) && continue
+        mat, sL, sR = _eig_scaled_matrix(q, sector_index)
+        sL == sR || return Inf
+        qnorm2 += sum(abs2, mat)
+        diffnorm2 += sum(abs2, mat - adjoint(mat))
+    end
+    qnorm = sqrt(qnorm2)
+    diffnorm = sqrt(diffnorm2)
     if iszero(qnorm)
         return iszero(diffnorm) ? 0.0 : Inf
     end
@@ -187,20 +225,23 @@ function _select_eig_sectors(template::TLArray{T, 2, N, RD, QT, PS, M, RMT},
         isempty(idxs) && continue
 
         idxs_sorted = sort(idxs)
-        rmt = sector_rmt(template, sector_index)
-        s1, s2 = size(rmt, 1), size(rmt, 2)
+        rmt, scale = sector_rmt(template, sector_index)
+        s1, s2 = sector_rmt_axis_dim(template, sector_index, 1), sector_rmt_axis_dim(template, sector_index, 2)
         rmt_new = if mode == :diag
             if rmt isa DiagRMT
-                DiagRMT(T[rmt.diag[i] for i in idxs_sorted], Val(RD), (1, 2))
+                DiagRMT(T[scale * rmt.diag[i] for i in idxs_sorted], Val(RD), (1, 2))
             else
-                mat = reshape(rmt, s1, s2)
+                mat = Matrix(reshape(rmt, s1, s2))
+                scale != one(typeof(scale)) && (mat .*= scale)
                 reshape(mat[idxs_sorted, idxs_sorted], length(idxs_sorted), length(idxs_sorted), ones(Int, N)...)
             end
         elseif mode == :cols
-            mat = reshape(rmt, s1, s2)
+            mat = Matrix(reshape(rmt, s1, s2))
+            scale != one(typeof(scale)) && (mat .*= scale)
             reshape(mat[:, idxs_sorted], s1, length(idxs_sorted), ones(Int, N)...)
         elseif mode == :firstdim
-            mat = reshape(rmt, s1, s2)
+            mat = Matrix(reshape(rmt, s1, s2))
+            scale != one(typeof(scale)) && (mat .*= scale)
             reshape(mat[idxs_sorted, :], length(idxs_sorted), s2, ones(Int, N)...)
         else
             error("Unknown eig sector selection mode: $mode")
@@ -222,18 +263,18 @@ function _select_eig_sectors(template::TLArray{T, 2, N, RD, QT, PS, M, RMT},
 
     spaces_out = if mode == :diag
         (
-            build_selected_space(template.spaces[1], (_, count) -> count),
-            build_selected_space(template.spaces[2], (_, count) -> count),
+            build_selected_space(spaces(template)[1], (_, count) -> count),
+            build_selected_space(spaces(template)[2], (_, count) -> count),
         )
     elseif mode == :cols
         (
-            copy(template.spaces[1]),
-            build_selected_space(template.spaces[2], (_, count) -> count),
+            copy(spaces(template)[1]),
+            build_selected_space(spaces(template)[2], (_, count) -> count),
         )
     elseif mode == :firstdim
         (
-            build_selected_space(template.spaces[1], (_, count) -> count),
-            copy(template.spaces[2]),
+            build_selected_space(spaces(template)[1], (_, count) -> count),
+            copy(spaces(template)[2]),
         )
     else
         error("Unknown eig sector selection mode: $mode")
@@ -245,41 +286,85 @@ function _select_eig_sectors(template::TLArray{T, 2, N, RD, QT, PS, M, RMT},
         qlabels_mat[2, sector_index] = sector
     end
     wmatdata_out, wmatinfo_out = _copy_wmat_storage(template, source_wmat_sectors; deep=true)
-    return TLArray(symm(template), qlabels_mat, wmatdata_out, wmatinfo_out, RMTs_out, template.inds, spaces_out)
+    return TLArray(symm(template), qlabels_mat, wmatdata_out, wmatinfo_out, RMTs_out, inds(template), spaces_out)
 end
 
+"""
+    _effective_eigen_keep_count(eig_entries, Nkeep, tol; keep_low=true)
+
+Choose a retained count from the count-expansion window. Entries must already
+be stably sorted in the selection direction. Use signed adjacent gaps, choosing
+the earliest cut on ties; a window reaching the spectrum end keeps everything.
+Callers validate the nonnegative count and finite, nonnegative `tol`.
+"""
 function _effective_eigen_keep_count(eig_entries,
                                      Nkeep::Integer,
                                      tol::Real;
-                                     hermitian::Bool)
+                                     keep_low::Bool=true)
     total = length(eig_entries)
-    nkeep_eff = min(Nkeep, total)
-    if !(tol > 0) || nkeep_eff == 0 || nkeep_eff == total
+    nkeep_eff = Int(min(Nkeep, total))
+    if iszero(tol) || nkeep_eff == 0 || nkeep_eff == total
         return nkeep_eff
     end
 
-    candidate_end = min(total, ceil(Int, Nkeep * (1 + Float64(tol))))
+    # Clamp before converting to Int, even if a large finite tol overflows the product.
+    candidate_end = ceil(Int, min(total, nkeep_eff * (1 + Float64(tol))))
     candidate_end <= nkeep_eff && return nkeep_eff
     candidate_end == total && return candidate_end
 
-    sort_vals = [_eig_sort_value(eig_entries[i][1], hermitian) for i in nkeep_eff:candidate_end+1]
-    _, gap_idx = findmax(diff(sort_vals))
-    return nkeep_eff + gap_idx - 1
+    best_cut = nkeep_eff
+    gap = first(eig_entries[best_cut + 1]) - first(eig_entries[best_cut])
+    best_gap = keep_low ? gap : -gap
+    for i in nkeep_eff+1:candidate_end
+        gap = first(eig_entries[i + 1]) - first(eig_entries[i])
+        directed_gap = keep_low ? gap : -gap
+        if directed_gap > best_gap
+            best_gap = directed_gap
+            best_cut = i
+        end
+    end
+    return best_cut
 end
 
-function _split_eigen_result(result::EigenResult,
-                             Nkeep::Integer;
-                             tol::Real=0.1,
-                             hermitian::Bool = isnothing(result.V_inv))
-    @assert Nkeep >= 0 "Nkeep must be non-negative"
-    @assert isfinite(tol) && tol >= 0 "tol must be finite and nonnegative"
+"""
+    _split_eigen_result(result; Nkeep=nothing, threshold=nothing,
+                        keep_low=true, tol=0.1)
+
+Partition real eigenvalues globally by a count window or an inclusive threshold.
+Exactly one selection argument is required. Preserve ascending output lists and
+renumber local indices to match the selected factor storage without mutating
+`result`. Irrep degeneracy does not multiply the selection count.
+"""
+function _split_eigen_result(result::EigenResult;
+                             Nkeep::Union{Nothing, Integer}=nothing,
+                             threshold::Union{Nothing, Real}=nothing,
+                             keep_low::Bool=true,
+                             tol::Real=0.1)
+    isnothing(Nkeep) != isnothing(threshold) ||
+        throw(ArgumentError("supply exactly one of Nkeep and threshold"))
+    isfinite(tol) && tol >= 0 ||
+        throw(ArgumentError("tol must be finite and nonnegative"))
+    if !isnothing(Nkeep)
+        Nkeep >= 0 || throw(ArgumentError("Nkeep must be nonnegative"))
+    else
+        isfinite(threshold) || throw(ArgumentError("threshold must be finite"))
+    end
 
     eig_entries = copy(result.eig_list)
-    sort!(eig_entries; by = x -> _eig_sort_value(x[1], hermitian))
-
-    nkeep_eff = _effective_eigen_keep_count(eig_entries, Nkeep, tol; hermitian=hermitian)
+    # Stable sorting preserves the source order of ties in either direction.
+    sort!(eig_entries; by=first, rev=!keep_low, alg=Base.Sort.MergeSort)
+    nkeep_eff = if isnothing(threshold)
+        _effective_eigen_keep_count(eig_entries, Nkeep, tol; keep_low=keep_low)
+    else
+        count(entry -> keep_low ? first(entry) <= threshold : first(entry) >= threshold,
+              eig_entries)
+    end
     kept_entries = eig_entries[1:nkeep_eff]
     discarded_entries = eig_entries[nkeep_eff+1:end]
+    if !keep_low
+        sort!(kept_entries; by=first, alg=Base.Sort.MergeSort)
+        sort!(discarded_entries; by=first, alg=Base.Sort.MergeSort)
+    end
 
     N = length(symm(result.D))
     kept_picks = Dict{NTuple{N, Tuple{Vararg{Int}}}, Vector{Int}}()
@@ -305,13 +390,15 @@ function _split_eigen_result(result::EigenResult,
     return kept, discarded
 end
 
-function _eigen_hermitian(q::TLArray{T, 2, N, RD, QT},
+function _eigen_hermitian(q::AbstractTLArray{T, 2, N, RD, QT},
                           eig_tag::AbstractString = "eig") where {T, N, RD, QT}
 
     _check_hermitian_eigen_legs(q, "eigen")
 
     symmetries = symm(q)
-    dirs = (q.inds[1].dir, q.inds[2].dir)
+    qinds = inds(q)
+    qspaces = spaces(q)
+    dirs = (qinds[1].dir, qinds[2].dir)
     out_leg = 2
     cgp = (1, 2)
 
@@ -325,7 +412,7 @@ function _eigen_hermitian(q::TLArray{T, 2, N, RD, QT},
     eig_list = Tuple{T_out, Int, NTuple{N, Tuple{Vararg{Int}}}, Int}[]
 
     for sector_index in sector_slots(q)
-        q.iszero[sector_index] && continue
+        is_sector_zero(q, sector_index) && continue
         sector_qlabels = _eig_sector_qlabels(q, sector_index)
 
         # Degeneracy = product of irrep dims across all symmetries for this sector
@@ -334,11 +421,10 @@ function _eigen_hermitian(q::TLArray{T, 2, N, RD, QT},
             for n in 1:N)
         cgt_scale = sqrt(Float64(cgt_dim))
 
-        rmt = sector_rmt(q, sector_index)
-        sL, sR = size(rmt, 1), size(rmt, 2)
+        rmt_mat, sL, sR = _eig_scaled_matrix(q, sector_index)
         @assert sL == sR "eigen: RMT must be square for eigendecomposition, got ($sL, $sR)"
 
-        mat = reshape(rmt, sL, sR) ./ cgt_scale
+        mat = rmt_mat ./ cgt_scale
 
         F = eigen(Hermitian(mat))
         eigenvalues  = T_out.(F.values)
@@ -359,8 +445,8 @@ function _eigen_hermitian(q::TLArray{T, 2, N, RD, QT},
         push!(RMTs_V, rmt_V)
     end
 
-    covered = Set(_eig_sector_qlabels(q, sector_index) for sector_index in sector_slots(q) if !q.iszero[sector_index])
-    _append_missing_eig_sectors!(symmetries, q.spaces[1], covered,
+    covered = Set(_eig_sector_qlabels(q, sector_index) for sector_index in sector_slots(q) if !is_sector_zero(q, sector_index))
+    _append_missing_eig_sectors!(symmetries, qspaces[1], covered,
         qlabels_D, RMTs_D,
         qlabels_V, RMTs_V,
         nothing, nothing,
@@ -370,13 +456,13 @@ function _eigen_hermitian(q::TLArray{T, 2, N, RD, QT},
     sort!(eig_list; by = x -> _eig_sort_value(x[1], true))
 
     # ── Inherit spaces from original q ──────────────────────────────────────
-    spaces_D = (q.spaces[1], q.spaces[1])
-    spaces_V = (q.spaces[1], q.spaces[1])
+    spaces_D = (qspaces[1], qspaces[1])
+    spaces_V = (qspaces[1], qspaces[1])
 
     # ── Build output TLIndex tuples ───────────────────────────────────────────
     inds_D = (TLIndex(eig_tag, dirs[1]), TLIndex(eig_tag, dirs[2]))
 
-    orig_out_ind = q.inds[out_leg]
+    orig_out_ind = qinds[out_leg]
     inds_V = (TLIndex(orig_out_ind.itags, dirs[1], orig_out_ind.plev, orig_out_ind.lock, orig_out_ind.dual),
               TLIndex(eig_tag, dirs[2]))
 
@@ -390,11 +476,13 @@ function _eigen_hermitian(q::TLArray{T, 2, N, RD, QT},
     return EigenResult(V, D, nothing, eig_list)
 end
 
-function _eigen_general(q::TLArray{T, 2, N, RD, QT},
+function _eigen_general(q::AbstractTLArray{T, 2, N, RD, QT},
                         eig_tag::AbstractString = "eig") where {T, N, RD, QT}
 
     symmetries = symm(q)
-    dirs = (q.inds[1].dir, q.inds[2].dir)
+    qinds = inds(q)
+    qspaces = spaces(q)
+    dirs = (qinds[1].dir, qinds[2].dir)
     cgp = (1, 2)
 
     in_leg  = 1
@@ -410,7 +498,7 @@ function _eigen_general(q::TLArray{T, 2, N, RD, QT},
     eig_list  = Tuple{T_out, Int, NTuple{N, Tuple{Vararg{Int}}}, Int}[]
 
     for sector_index in sector_slots(q)
-        q.iszero[sector_index] && continue
+        is_sector_zero(q, sector_index) && continue
         sector_qlabels = _eig_sector_qlabels(q, sector_index)
 
         cgt_dim = prod(
@@ -418,11 +506,10 @@ function _eigen_general(q::TLArray{T, 2, N, RD, QT},
             for n in 1:N)
         cgt_scale = sqrt(Float64(cgt_dim))
 
-        rmt = sector_rmt(q, sector_index)
-        sL, sR = size(rmt, 1), size(rmt, 2)
+        rmt_mat, sL, sR = _eig_scaled_matrix(q, sector_index)
         @assert sL == sR "eigen_general: RMT must be square"
 
-        mat = reshape(rmt, sL, sR) ./ cgt_scale
+        mat = rmt_mat ./ cgt_scale
 
         F = eigen(mat)
         eigenvalues      = T_out.(F.values)
@@ -448,8 +535,8 @@ function _eigen_general(q::TLArray{T, 2, N, RD, QT},
         push!(RMTs_Vinv, rmt_Vinv)
     end
 
-    covered = Set(_eig_sector_qlabels(q, sector_index) for sector_index in sector_slots(q) if !q.iszero[sector_index])
-    _append_missing_eig_sectors!(symmetries, q.spaces[1], covered,
+    covered = Set(_eig_sector_qlabels(q, sector_index) for sector_index in sector_slots(q) if !is_sector_zero(q, sector_index))
+    _append_missing_eig_sectors!(symmetries, qspaces[1], covered,
         qlabels_D, RMTs_D,
         qlabels_V, RMTs_V,
         qlabels_Vinv, RMTs_Vinv,
@@ -457,17 +544,17 @@ function _eigen_general(q::TLArray{T, 2, N, RD, QT},
 
     sort!(eig_list; by = x -> _eig_sort_value(x[1], false))
 
-    spaces_D    = (q.spaces[1], q.spaces[1])
-    spaces_V    = (q.spaces[1], q.spaces[1])
-    spaces_Vinv = (q.spaces[1], q.spaces[1])
+    spaces_D    = (qspaces[1], qspaces[1])
+    spaces_V    = (qspaces[1], qspaces[1])
+    spaces_Vinv = (qspaces[1], qspaces[1])
 
     inds_D = (TLIndex(eig_tag, dirs[1]), TLIndex(eig_tag, dirs[2]))
 
-    orig_out_ind = q.inds[out_leg]
+    orig_out_ind = qinds[out_leg]
     inds_V = (TLIndex(orig_out_ind.itags, dirs[1], orig_out_ind.plev, orig_out_ind.lock, orig_out_ind.dual),
               TLIndex(eig_tag, dirs[2]))
 
-    orig_in_ind = q.inds[in_leg]
+    orig_in_ind = qinds[in_leg]
     inds_Vinv = (TLIndex(eig_tag, dirs[1]),
                  TLIndex(orig_in_ind.itags, dirs[2], orig_in_ind.plev, orig_in_ind.lock, orig_in_ind.dual))
 
@@ -484,48 +571,93 @@ function _eigen_general(q::TLArray{T, 2, N, RD, QT},
     return EigenResult(V, D, Vinv, eig_list)
 end
 
-function LinearAlgebra.eigen(q::TLArray{T, 2, N, RD},
+function _eigen_unsymmetric(q::AbstractTLArray{T, 2, 0, RD},
+                            eig_tag::AbstractString = "eig";
+                            hermitian::Bool=false) where {T, RD}
+    qinds = inds(q)
+    dirs = (qinds[1].dir, qinds[2].dir)
+    sL, sR = size(q)
+    sL == sR || throw(ArgumentError("eigen: RMT must be square for eigendecomposition, got ($sL, $sR)"))
+    # Unsymmetric TLArrays have no sector decomposition. In particular, a
+    # zero tensor can have no evaluated RMT at all, so read its logical dense
+    # value (which supplies zeros for absent sectors) instead of requesting
+    # sector 1 directly.
+    mat = Matrix(reshape(_unsymmetric_dense_data(q), sL, sR))
+
+    F = hermitian ? eigen(Hermitian(mat)) : eigen(mat)
+    vals = F.values
+    vectors = F.vectors
+    vectors_inv = hermitian ? nothing : inv(vectors)
+    T_out = eltype(vals)
+    eig_list = Tuple{T_out, Int, Tuple{}, Int}[(vals[j], 1, (), j) for j in eachindex(vals)]
+    sort!(eig_list; by = x -> _eig_sort_value(x[1], hermitian))
+
+    orig_out = qinds[2]
+    orig_in = qinds[1]
+    inds_D = (TLIndex(eig_tag, dirs[1]), TLIndex(eig_tag, dirs[2]))
+    inds_V = (TLIndex(orig_out.itags, dirs[1], orig_out.plev, orig_out.lock, orig_out.dual),
+              TLIndex(eig_tag, dirs[2]))
+    D = TLArray(Matrix(Diagonal(vals)), inds_D)
+    V = TLArray(vectors, inds_V)
+    Vinv = if hermitian
+        nothing
+    else
+        inds_Vinv = (TLIndex(eig_tag, dirs[1]),
+                     TLIndex(orig_in.itags, dirs[2], orig_in.plev, orig_in.lock, orig_in.dual))
+        TLArray(vectors_inv, inds_Vinv)
+    end
+    return EigenResult(V, D, Vinv, eig_list)
+end
+
+function LinearAlgebra.eigen(q::AbstractTLArray{T, 2, N, RD},
                              eig_tag::AbstractString = "eig";
                              hermitian::Bool = false) where {T, N, RD}
     q_work = _prepare_eigen_input(q, "eigen")
+    materialize(q_work)
 
     use_hermitian = hermitian
     if !use_hermitian
         use_hermitian = _hermiticity_ratio(q_work) <= _EIG_HERMITIAN_RTOL
     end
 
+    N == 0 && return _eigen_unsymmetric(q_work, eig_tag; hermitian=use_hermitian)
+
     return use_hermitian ? _eigen_hermitian(q_work, eig_tag) : _eigen_general(q_work, eig_tag)
 end
 
-LinearAlgebra.eigen(q::TLArrayView, args...; kwargs...) =
-    eigen(_eager_tlarray(q), args...; kwargs...)
-
 """
-    discard_eigen(result::EigenResult, Nkeep, tol, kept_tag, discarded_tag; hermitian=isnothing(result.V_inv))
+    discard_eigen(result::EigenResult, kept_tag="eigK", discarded_tag="eigD";
+                  Nkeep=nothing, threshold=nothing, keep_low=true, tol=0.1)
 
-Keep the `Nkeep` smallest eigenvalues, ignoring degeneracy, and return two
-`EigenResult` objects: the kept part and the discarded part.
+Return `(kept, discarded)` eigen-subspaces without mutating `result`. Supply
+exactly one of `Nkeep` and `threshold`. Compare real eigenvalues by signed value:
+`keep_low=true` selects the lowest values, and `false` selects the highest.
+Each eigenvalue entry counts once regardless of its irrep degeneracy.
 
-If `tol > 0`, keep at least `Nkeep` eigenvalues and consider up to
-`ceil(Int, Nkeep * (1 + tol))` total next-smallest eigenvalues, capped by the
-total number available. The actual cut is chosen from that window by the largest
-adjacent gap, so the truncation can move later but never earlier than `Nkeep`.
+With a nonnegative integer `Nkeep`, retain that many entries (or all available).
+`tol=0` uses the exact count; positive `tol` chooses the largest adjacent gap
+between cuts at `Nkeep` and `ceil(Nkeep * (1 + tol))`. Equal gaps choose the
+smaller count. A window reaching the spectrum end keeps everything. `Nkeep=0`
+keeps nothing; eigenvalues equal to zero are counted normally.
+
+With a finite real `threshold`, keep values `<= threshold` when `keep_low=true`
+or `>= threshold` otherwise, using direct comparisons. `tol` does not adjust an
+explicit threshold, but must be finite and nonnegative in either mode. Invalid
+selection combinations, negative counts, or invalid bounds raise `ArgumentError`.
+
+Both results have ascending eigenvalue lists and matching renumbered factor
+indices. `kept_tag` and `discarded_tag` label their eigenvector bonds. Preserve
+`V_inv === nothing` when absent in the input. Complex spectra are outside this
+interface's current scope.
 """
 function discard_eigen(result::EigenResult,
-                       Nkeep::Integer,
-                       tol::Real,
                        kept_tag::AbstractString = "eigK",
                        discarded_tag::AbstractString = "eigD";
-                       hermitian::Bool = isnothing(result.V_inv))
-    kept, discarded = _split_eigen_result(result, Nkeep; tol=tol, hermitian=hermitian)
+                       Nkeep::Union{Nothing, Integer}=nothing,
+                       threshold::Union{Nothing, Real}=nothing,
+                       keep_low::Bool=true,
+                       tol::Real=0.1)
+    kept, discarded = _split_eigen_result(result; Nkeep=Nkeep, threshold=threshold,
+                                         keep_low=keep_low, tol=tol)
     return _retag_eigen_result(kept, kept_tag), _retag_eigen_result(discarded, discarded_tag)
-end
-
-function discard_eigen(result::EigenResult,
-                       Nkeep::Integer,
-                       kept_tag::AbstractString = "eigK",
-                       discarded_tag::AbstractString = "eigD";
-                       tol::Real=0.1,
-                       hermitian::Bool = isnothing(result.V_inv))
-    return discard_eigen(result, Nkeep, tol, kept_tag, discarded_tag; hermitian=hermitian)
 end

@@ -151,7 +151,7 @@ function _union_fresh(frame, candidates, side::Symbol; tol::Float64 = 0.0, room:
     # The legs the frame spans, and the tags of the new bond leg's two ends.
     legs, left_tag, right_tag = left ? ((1, 2), _TAG_L, _TAG_LR) : ((2, 3), _TAG_R, _TAG_RR)
     # The SVD puts the new bond leg last; a right frame wants it first.
-    orient = vectors -> to_concrete(left ? vectors : permutedims(vectors, (3, 1, 2)))
+    orient = vectors -> TLArray(left ? vectors : permutedims(vectors, (3, 1, 2)))
     residual = perp(frame, candidates)
     residual_norm = norm(residual)
     residual_norm <= _CBE_EPS * max(norm(candidates), 1.0) && return nothing
@@ -163,7 +163,7 @@ function _union_fresh(frame, candidates, side::Symbol; tol::Float64 = 0.0, room:
         max(_rank_cut(0.0, candidates, residual_norm), tol * norm(candidates) / residual_norm)
     orthonormal_basis = orient(
         svd(
-            to_concrete((1.0 / residual_norm) * residual),
+            TLArray((1.0 / residual_norm) * residual),
             legs,
             left_tag,
             right_tag;
@@ -194,16 +194,16 @@ which is the ordinary case once the two already span the same space.
 function _union_left(cbe_frame, krylov_frame; tol::Float64 = 0.0, room::Int = typemax(Int))
     fresh = _union_fresh(cbe_frame, krylov_frame, :left; tol = tol, room = room)
     fresh === nothing && return cbe_frame
-    return to_concrete(
-        oplus([cbe_frame, to_concrete(setitag(fresh, 3, cbe_frame.inds[3].itags))], (3,)),
+    return TLArray(
+        oplus([cbe_frame, TLArray(setitag(fresh, 3, Telum.inds(cbe_frame)[3].itags))], (3,)),
     )
 end
 "Row mirror of [`_union_left`](@ref): the bond leg is 1 and the direct sum is over it."
 function _union_right(cbe_frame, krylov_frame; tol::Float64 = 0.0, room::Int = typemax(Int))
     fresh = _union_fresh(cbe_frame, krylov_frame, :right; tol = tol, room = room)
     fresh === nothing && return cbe_frame
-    return to_concrete(
-        oplus([cbe_frame, to_concrete(setitag(fresh, 1, cbe_frame.inds[1].itags))], (1,)),
+    return TLArray(
+        oplus([cbe_frame, TLArray(setitag(fresh, 1, Telum.inds(cbe_frame)[1].itags))], (1,)),
     )
 end
 
@@ -241,7 +241,7 @@ function _half_left!(
     for bond = 1:root_link
         # The bond's left site with everything to its left already in the new frames.
         carried_site =
-            carry === nothing ? psiL[bond] : to_concrete!(contract(carry, (2,), psiL[bond], (1,)))
+            carry === nothing ? psiL[bond] : contract(carry, (2,), psiL[bond], (1,))
         _fr = (frame_start = time_ns();
         built_frame = _frame_from(carried_site, psiL[bond+1]);
         acc.tframe += (time_ns() - frame_start) / 1e9;
@@ -264,8 +264,8 @@ function _half_left!(
         # The CBE frame is KEPT (old directions verbatim, CBE directions reused) and a Krylov
         # direction is appended only when its weighted residual outside the frame matters.
         # The right site projected onto the expanded right isometry, then joined to the left one.
-        right_projected = to_concrete!(contract(psiL[bond+1], (2, 3), ex.V_ex', (2, 3)))
-        Kex = to_concrete!(contract(carried_site, (3,), right_projected, (1,)))
+        right_projected = contract(psiL[bond+1], (2, 3), ex.V_ex', (2, 3))
+        Kex = contract(carried_site, (3,), right_projected, (1,))
         rch1 = push_right_channels(right_channels(rstack, bond + 2), mpo, ex.V_ex, bond + 1)
         site_operator =
             OneSiteOp(shift_h(one_site_h(mpo, bond, lch, rch1), cx.eshift), bond, acc.kc)
@@ -285,12 +285,12 @@ function _half_left!(
         acc.tkry += (time_ns() - tk0) / 1e9
         _record_krylov!(bondlg, kst, cx.alloc)
         _peak!(acc, held + _state_stored(psiL), Wkry)
-        left_frames[bond] = to_concrete(setitag(Wkry, 3, _tagW(bond)))
+        left_frames[bond] = TLArray(setitag(Wkry, 3, _tagW(bond)))
         # Union every kept state first: a later union widens `left_frames[bond]`, so a carry taken
         # before it would hold a stale bond leg.
         KXs = [
             kcar[state_index] === nothing ? kept_state[bond] :
-            to_concrete!(contract(kcar[state_index], (2,), kept_state[bond], (1,))) for
+            contract(kcar[state_index], (2,), kept_state[bond], (1,)) for
             (state_index, kept_state) in pairs(cx.keep_states)
         ]
         for (state_index, KX) in pairs(KXs)
@@ -299,7 +299,7 @@ function _half_left!(
             left_frames[bond] = _union_left(left_frames[bond], KX; tol = tol, room = room)
         end
         for (state_index, KX) in pairs(KXs)
-            kcar[state_index] = to_concrete!(contract(left_frames[bond]', (1, 2), KX, (1, 2)))
+            kcar[state_index] = contract(left_frames[bond]', (1, 2), KX, (1, 2))
         end
         _check_frame(left_frames[bond], :left, "half-sweep W[$bond]")
         expanded[bond] = leg_dim(left_frames[bond], 3)
@@ -309,7 +309,7 @@ function _half_left!(
         # (d) carry the ORIGINAL amplitude into the new basis. `carried_site`, not `Kex`: the
         # frame touches only legs 1-2, so this lands on `(b_i, link_i)` and composes with
         # `psiL[bond+1]`.
-        carry = to_concrete!(contract(left_frames[bond]', (1, 2), carried_site, (1, 2)))
+        carry = contract(left_frames[bond]', (1, 2), carried_site, (1, 2))
         bond == root_link && (lroot = lch)         # captured BEFORE pushing through the root frame
         bond < root_link &&
             (lch = _env_timed!(acc, push_left_channels, lch, mpo, left_frames[bond], bond))
@@ -354,7 +354,7 @@ function _half_right!(
         # The bond's right site with everything to its right already in the new frames.
         carried_site =
             carry === nothing ? psiR[bond+1] :
-            to_concrete!(contract(psiR[bond+1], (3,), carry, (1,)))
+            contract(psiR[bond+1], (3,), carry, (1,))
         _fr = (frame_start = time_ns();
         built_frame = _frame_from(psiR[bond], carried_site);
         acc.tframe += (time_ns() - frame_start) / 1e9;
@@ -375,8 +375,8 @@ function _half_right!(
         _peak!(acc, held + _state_stored(psiR), ex.U_ex, ex.V_ex)
         # Row mirror of the left sweep's Stage 3; see the comment there.
         # (b_L, link_j)
-        left_projected = to_concrete!(contract(ex.U_ex', (1, 2), psiR[bond], (1, 2)))
-        Bex = to_concrete!(contract(left_projected, (2,), carried_site, (1,)))
+        left_projected = contract(ex.U_ex', (1, 2), psiR[bond], (1, 2))
+        Bex = contract(left_projected, (2,), carried_site, (1,))
         lch1 = push_left_channels(left_channels(lstack, bond), mpo, ex.U_ex, bond)
         site_operator =
             OneSiteOp(shift_h(one_site_h(mpo, bond + 1, lch1, rch), cx.eshift), bond, acc.kc)
@@ -396,10 +396,10 @@ function _half_right!(
         acc.tkry += (time_ns() - tk0) / 1e9
         _record_krylov!(bondlg, kst, cx.alloc)
         _peak!(acc, held + _state_stored(psiR), Zkry)
-        right_frames[bond] = to_concrete(setitag(Zkry, 1, _tagZ(bond)))
+        right_frames[bond] = TLArray(setitag(Zkry, 1, _tagZ(bond)))
         BXs = [
             kcar[state_index] === nothing ? kept_state[bond+1] :
-            to_concrete!(contract(kept_state[bond+1], (3,), kcar[state_index], (1,))) for
+            contract(kept_state[bond+1], (3,), kcar[state_index], (1,)) for
             (state_index, kept_state) in pairs(cx.keep_states)
         ]
         for (state_index, BX) in pairs(BXs)     # all unions before any carry, as on the left
@@ -408,7 +408,7 @@ function _half_right!(
             right_frames[bond] = _union_right(right_frames[bond], BX; tol = tol, room = room)
         end
         for (state_index, BX) in pairs(BXs)
-            kcar[state_index] = to_concrete!(contract(BX, (2, 3), right_frames[bond]', (2, 3)))
+            kcar[state_index] = contract(BX, (2, 3), right_frames[bond]', (2, 3))
         end
         _check_frame(right_frames[bond], :right, "half-sweep Z[$bond]")
         bond != root_link && (expanded[bond] = leg_dim(right_frames[bond], 1))
@@ -416,7 +416,7 @@ function _half_right!(
         held += tensor_elements(right_frames[bond])
 
         # (link_j, b_j)
-        carry = to_concrete!(contract(carried_site, (2, 3), right_frames[bond]', (2, 3)))
+        carry = contract(carried_site, (2, 3), right_frames[bond]', (2, 3))
         bond == root_link && (rroot = rch)
         bond > root_link &&
             (rch = _env_timed!(acc, push_right_channels, rch, mpo, right_frames[bond], bond + 1))

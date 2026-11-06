@@ -11,6 +11,11 @@ Vectorized form uses `axis[2] == 0`: `axis[1]` has size `length(diag)^2`, all
 other axes are singleton, and only vectorized diagonal positions of the logical
 `d x d` matrix are nonzero. This form is for prepared contraction data only;
 `TLArray` sector storage must reject it.
+
+# Fields
+
+- `diag`: the `d` stored diagonal entries, where `d = length(diag)`.
+- `axis`: either the two physical axes carrying the diagonal, or `(a, 0)` for the prepared vectorized form.
 """
 struct DiagRMT{T, N} <: AbstractArray{T, N}
     diag::Vector{T}

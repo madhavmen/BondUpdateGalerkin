@@ -42,12 +42,12 @@ function _mps_distance(a::SymMPS, b::SymMPS)
     L = length(a)
     length(b) == L || throw(DimensionMismatch("_mps_distance: $L sites against $(length(b))"))
     L == 1 && return norm(
-        to_concrete(to_concrete(ComplexF64(1) * a[1]) + to_concrete(ComplexF64(-1) * b[1])),
+        TLArray(TLArray(ComplexF64(1) * a[1]) + TLArray(ComplexF64(-1) * b[1])),
     )
     Ts = Any[]
     for i = 1:L
-        Ai = to_concrete(ComplexF64(1) * a[i])
-        Bi = to_concrete(ComplexF64(i == 1 ? -1 : 1) * b[i])
+        Ai = TLArray(ComplexF64(1) * a[i])
+        Bi = TLArray(ComplexF64(i == 1 ? -1 : 1) * b[i])
         T = if i == 1 || i == L
             oplus(Any[Ai, Bi], (i == 1 ? 3 : 1,))
         else
@@ -55,7 +55,7 @@ function _mps_distance(a::SymMPS, b::SymMPS)
             mat[1, 1], mat[2, 2] = Ai, Bi
             oplus(mat, (1, 3))
         end
-        push!(Ts, to_concrete(T))
+        push!(Ts, TLArray(T))
     end
     d = SymMPS(Ts, 1)
     canonical!(d, L)
@@ -80,7 +80,7 @@ function _jt_normalise!(psi::SymMPS)
     n2 = norm(psi)^2
     (isfinite(n2) && n2 > 0) ||
         throw(ErrorException("quantum-jump segment: the state has norm^2 $n2 -- not representable"))
-    psi[psi.center] = to_concrete((1.0 / sqrt(n2)) * psi[psi.center])
+    psi[psi.center] = TLArray((1.0 / sqrt(n2)) * psi[psi.center])
     return n2
 end
 

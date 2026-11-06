@@ -33,11 +33,11 @@ using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
         end
 
         @testset "leg handles name the right legs" begin
-            @test f.link_l == psi[2].inds[1]
-            @test f.site_l == psi[2].inds[2]
-            @test f.link_mid == psi[2].inds[3]
-            @test f.site_r == psi[3].inds[2]
-            @test f.link_r == psi[3].inds[3]
+            @test f.link_l == Telum.inds(psi[2])[1]
+            @test f.site_l == Telum.inds(psi[2])[2]
+            @test f.link_mid == Telum.inds(psi[2])[3]
+            @test f.site_r == Telum.inds(psi[3])[2]
+            @test f.link_r == Telum.inds(psi[3])[3]
         end
     end
 
@@ -52,7 +52,7 @@ using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
             ts = Any[]
             for i = 1:L
                 dims = i == 1 ? (3,) : (i == L ? (1,) : (1, 3))
-                push!(ts, to_concrete(oplus(a[i], b[i], dims)))
+                push!(ts, TLArray(oplus(a[i], b[i], dims)))
             end
             return SymMPS(ts, L)
         end
@@ -65,7 +65,7 @@ using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
         canonical!(psi, 4)
 
         @test any(bond_dims(psi) .> 1)
-        @test maximum(length(psi[i].spaces[3]) for i = 1:3) > 1   # multi-sector bond
+        @test maximum(length(Telum.spaces(psi[i])[3]) for i = 1:3) > 1   # multi-sector bond
 
         for i = 1:3
             canonical!(psi, i)

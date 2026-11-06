@@ -330,7 +330,7 @@ function cbe_bug_step!(
     end
 
     AL = _overlap_left(psi, left_frames, root_link)          # (b_L, link_{root_link+1})
-    root_start = to_concrete!(contract(AL, (2,), AR, (1,)))  # (b_L, b_R)
+    root_start = contract(AL, (2,), AR, (1,))  # (b_L, b_R)
 
     # ── GENERAL ORDER: for `order > 1` close the root generator's frontiers j = 1..order-1,
     # growing both frame vectors in place; `closure_probe` only measures (`bug_step_stages.jl`).

@@ -36,7 +36,7 @@ steps reproduce the unshifted arithmetic bit for bit and nothing already measure
 const _EXPV_SHIFT_TRIGGER = 30.0
 
 "Promote a tensor to ComplexF64 so real inputs can take a complex `tau`."
-_as_complex(tensor) = to_concrete(tensor * (1.0 + 0.0im))
+_as_complex(tensor) = TLArray(tensor * (1.0 + 0.0im))
 
 """
     _shift(vals, tau) -> Float64
@@ -183,7 +183,7 @@ function lanczos_expv(
         nsub += 1
         cur_norm = norm(cur)
         cur_norm == 0 && break
-        basis_vector = to_concrete((1.0 / cur_norm) * cur)
+        basis_vector = TLArray((1.0 / cur_norm) * cur)
         basis = Any[basis_vector]
         alpha = Float64[]
         betas = Float64[]
@@ -194,7 +194,7 @@ function lanczos_expv(
         total += 1
         diag_entry = real(tensor_inner(basis_vector, residual))
         push!(alpha, diag_entry)
-        residual = to_concrete(residual + (-diag_entry) * basis_vector)
+        residual = TLArray(residual + (-diag_entry) * basis_vector)
 
         # the step this basis will actually take; set once the loop ends (or converges early)
         for _ = 2:maxiter
@@ -211,7 +211,7 @@ function lanczos_expv(
                 trial_tail < conv_tol && break
             end
             push!(betas, offdiag_entry)
-            basis_vector = to_concrete((1.0 / offdiag_entry) * residual)
+            basis_vector = TLArray((1.0 / offdiag_entry) * residual)
             push!(basis, basis_vector)
             residual = apply(basis_vector)
             total += 1
@@ -221,7 +221,7 @@ function lanczos_expv(
             # residual grew by one term per step and made the loop O(k^3 N). Modified Gram-Schmidt
             # is sequential, so this changes only when each subtraction is evaluated, not the
             # arithmetic.
-            residual = to_concrete(
+            residual = TLArray(
                 residual + (-diag_entry) * basis_vector + (-offdiag_entry) * basis[end-1],
             )
             if reorth
@@ -238,7 +238,7 @@ function lanczos_expv(
                             corr === nothing ? overlap_coeff * previous :
                             corr + overlap_coeff * previous
                     end
-                    corr === nothing || (residual = to_concrete(residual - corr))
+                    corr === nothing || (residual = TLArray(residual - corr))
                 end
             end
         end
@@ -306,7 +306,7 @@ function _apply_scale(cur, logscale::ComplexF64)
     (isfinite(abs(sc)) && sc != 0) || return cur
     cur_norm = norm(cur)
     (isfinite(cur_norm) && cur_norm > 0 && abs(sc) * cur_norm > _EXPV_MAX_NORM) && return cur
-    return to_concrete(sc * cur)
+    return TLArray(sc * cur)
 end
 
 "Recombine `out = beta0 * sum_column coeff[column] * basis[column]`."
@@ -315,7 +315,7 @@ function _combine(coeff, basis, beta0::Float64)
     for column = 2:length(coeff)
         out = out + (coeff[column] * beta0) * basis[column]
     end
-    return to_concrete(out)
+    return TLArray(out)
 end
 
 """
@@ -334,7 +334,7 @@ function _cgs2!(hess_matrix::AbstractMatrix{ComplexF64}, column::Int, basis, vec
             hess_matrix[row, column] += overlap_coeff
             corr = corr === nothing ? overlap_coeff * basis[row] : corr + overlap_coeff * basis[row]
         end
-        corr === nothing || (vector = to_concrete(vector - corr))
+        corr === nothing || (vector = TLArray(vector - corr))
     end
     return vector
 end
@@ -395,7 +395,7 @@ function arnoldi_expv(
         nsub += 1
         cur_norm = norm(cur)
         cur_norm == 0 && break
-        basis_vector = to_concrete((1.0 / cur_norm) * cur)
+        basis_vector = TLArray((1.0 / cur_norm) * cur)
         basis = Any[basis_vector]
         hess_matrix = zeros(ComplexF64, maxiter + 1, maxiter)
         basis_dim = 0                      # columns of `hess_matrix` filled so far
@@ -420,7 +420,7 @@ function arnoldi_expv(
             end
             hess_matrix[krylov_step+1, krylov_step] = residual_norm
             krylov_step == maxiter && break
-            push!(basis, to_concrete((1.0 / residual_norm) * residual))
+            push!(basis, TLArray((1.0 / residual_norm) * residual))
         end
 
         Hm = hess_matrix[1:basis_dim, 1:basis_dim]

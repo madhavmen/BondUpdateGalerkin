@@ -45,7 +45,7 @@ function TwoSiteSketchOp(
     version::Int = 0,
     counters::KernelCounters = KernelCounters(),
 )
-    core = adjoint ? to_concrete(frame.S0 * frame.V0) : to_concrete(frame.U0 * frame.S0)
+    core = adjoint ? TLArray(frame.S0 * frame.V0) : TLArray(frame.U0 * frame.S0)
     return TwoSiteSketchOp(
         mpo,
         bond,
@@ -174,7 +174,7 @@ function _dd_probe(
         _trim_per_sector(_randomize_like(fused_basis, rng), 3, cols)
     end
     probe === nothing && return nothing
-    Om = side === :left ? probe : to_concrete(permutedims(probe, (3, 1, 2)))
+    Om = side === :left ? probe : TLArray(permutedims(probe, (3, 1, 2)))
     perp = side === :left ? perp_component : perp_component_right
     projected, dt, db = _measure(() -> perp(frame, Om))
     kc.t_input_dd += dt
@@ -204,26 +204,29 @@ The new leg is built in `ref`'s arrow convention (`align_charge`), so
 is then a plain matrix); callers use `_thin_orth_nonabelian` otherwise.
 """
 function _thin_qr(sketch, fl::Int, ref::TLIndex, tag::AbstractString, thr::Float64)
-    QD = length(sketch.inds)
+    QD = length(Telum.inds(sketch))
     syms = symm(sketch)
-    ydir = sketch.inds[fl].dir
+    ydir = Telum.inds(sketch)[fl].dir
     others = Tuple(leg for leg = 1:QD if leg != fl)
     # Group the defined blocks by their charge on leg `fl`, in first-seen order.
     groups = Dict{Any,Vector{Int}}()
     order = Any[]
-    for block in eachindex(sketch.qlabels)
+    for block in eachindex(Telum.logical_qlabels(sketch))
         sketch.isdefined[block] || continue
-        charge = sketch.qlabels[block][fl]
+        charge = Telum.logical_qlabels(sketch)[block][fl]
         haskey(groups, charge) || (groups[charge] = Int[]; push!(order, charge))
         push!(groups[charge], block)
     end
-    newq = similar(sketch.qlabels, 0)
-    newR = similar(sketch.RMTs, 0)
+    # every defined block in logical leg order (Telum keeps permutation/conjugation/scale deferred)
+    blocks = Dict(block => _sector_block(sketch, block) for charge in order for block in groups[charge])
+    isempty(blocks) && return nothing
+    newq = similar(Telum.logical_qlabels(sketch), 0)
+    newR = Array{eltype(first(values(blocks))),ndims(first(values(blocks)))}[]
     keep = Int[]
-    space = similar(sketch.spaces[fl], 0)
+    space = similar(Telum.spaces(sketch)[fl], 0)
     for charge in order
         ks = groups[charge]
-        rmt1 = sketch.RMTs[ks[1]]
+        rmt1 = blocks[ks[1]]
         nd = ndims(rmt1)
         all(size(rmt1, leg) == 1 for leg = (QD+1):nd) || throw(
             ArgumentError(
@@ -235,9 +238,9 @@ function _thin_qr(sketch, fl::Int, ref::TLIndex, tag::AbstractString, thr::Float
         dfl = size(rmt1, fl)
         mats = [
             _block_matrix(
-                sketch.RMTs[block],
+                blocks[block],
                 perm,
-                prod(size(sketch.RMTs[block], leg) for leg in others),
+                prod(size(blocks[block], leg) for leg in others),
                 dfl,
             ) for block in ks
         ]
@@ -253,7 +256,7 @@ function _thin_qr(sketch, fl::Int, ref::TLIndex, tag::AbstractString, thr::Float
         row = 0
         for (block, Mk) in zip(ks, mats)
             nr = size(Mk, 1)
-            sz = size(sketch.RMTs[block])
+            sz = size(blocks[block])
             blk = reshape(
                 Qm[(row+1):(row+nr), :],
                 (map(leg -> sz[leg], others)..., rank_kept, sz[(QD+1):nd]...),
@@ -261,17 +264,17 @@ function _thin_qr(sketch, fl::Int, ref::TLIndex, tag::AbstractString, thr::Float
             row += nr
             push!(keep, block)
             push!(newR, permutedims(blk, invperm(collect(perm))))
-            lab = sketch.qlabels[block]
+            lab = Telum.logical_qlabels(sketch)[block]
             push!(newq, ntuple(leg -> leg == fl ? qn : lab[leg], QD))
         end
     end
     isempty(keep) && return nothing
     wd, wi = Telum._copy_wmat_storage(sketch, keep; deep = true)
     inds = ntuple(
-        leg -> leg == fl ? TLIndex(tag, ref.dir, ref.plev, 0, ref.dual) : sketch.inds[leg],
+        leg -> leg == fl ? TLIndex(tag, ref.dir, ref.plev, 0, ref.dual) : Telum.inds(sketch)[leg],
         QD,
     )
-    spaces = ntuple(leg -> leg == fl ? space : copy(sketch.spaces[leg]), QD)
+    spaces = ntuple(leg -> leg == fl ? space : copy(Telum.spaces(sketch)[leg]), QD)
     return TLArray(syms, newq, wd, wi, newR, inds, spaces)
 end
 
@@ -321,7 +324,7 @@ function _dd_select(frame, sketch, side::Symbol, kc::KernelCounters)
     kc.b_output_dd += db
     nz, ny = norm(sketch), norm(projected)
     ny <= _CBE_EPS * max(nz, 1.0) && return (nothing, :householder)
-    ref = frame.inds[fl]
+    ref = Telum.inds(frame)[fl]
     tag = left ? _TAG_DD_L : _TAG_DD_R
     orthonormal_basis, dt, db = _measure(
         () -> begin

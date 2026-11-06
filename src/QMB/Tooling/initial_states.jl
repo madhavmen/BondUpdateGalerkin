@@ -54,24 +54,23 @@ function sector_product_state(q, sectors::AbstractVector; eltype::Type{<:Number}
     for i = 1:L
         target = sectors[i]
 
-        # Fuse the incoming link with a fresh physical leg. getIdentity returns
-        # a lazy TLArrayView and getsub only accepts a concrete TLArray.
-        F = to_concrete(getIdentity(prev, (q.I, 1); itag = "L,$(i + 1)"))
-        F = to_concrete(setitag(F, 2, "S,$i"))
+        # Fuse the incoming link with a fresh physical leg (a concrete TLArray for getsub).
+        F = TLArray(getIdentity(prev, (q.I, 1); itag = "L,$(i + 1)"))
+        F = TLArray(setitag(F, 2, "S,$i"))
 
         # Keep only the requested spin, but preserve the physical leg's space.
         A = getsub(F, 2, s -> s == target ? Colon() : nothing; preserve_space = true)
 
         # Trim the outgoing link to the sectors that survived.
-        A = to_concrete(A)
+        A = TLArray(A)
         # a label the site does not carry selects nothing, silently -- refuse it
-        isempty(A.qlabels) &&
+        isempty(Telum.logical_qlabels(A)) &&
             throw(ArgumentError("site $i: sector $target is not a state of the local space"))
-        present = Set(ql[3] for ql in A.qlabels)
-        A = to_concrete(getsub(A, 3, s -> s in present ? Colon() : nothing))
+        present = Set(ql[3] for ql in Telum.logical_qlabels(A))
+        A = TLArray(getsub(A, 3, s -> s in present ? Colon() : nothing))
 
         # BUG evolves complex amplitudes; promote once, here (unless a real state was asked for).
-        A = to_concrete(A * one(T))
+        A = TLArray(A * one(T))
 
         push!(tensors, A)
         prev = (A, 3)
@@ -88,7 +87,7 @@ read off the sign of `Sz`'s diagonal. Avoids hard-coding the basis order that
 `get_SU2_symmops` happens to produce.
 """
 function _dense_up_index(q)
-    Sz = Matrix(q.Sz.RMTs[1])
+    Sz = Matrix(_sector_block(q.Sz, 1))
     return real(Sz[1, 1]) > real(Sz[2, 2]) ? 1 : 2
 end
 
@@ -116,12 +115,12 @@ function _product_state_none(spins::Vector{Symbol}, T::Type{<:Number} = ComplexF
             throw(ArgumentError("spin $i must be :up or :down, got $(spins[i])"))
         end
 
-        F = to_concrete(getIdentity(prev, (q.I, 1); itag = "L,$(i + 1)"))
-        F = to_concrete(setitag(F, 2, "S,$i"))
+        F = TLArray(getIdentity(prev, (q.I, 1); itag = "L,$(i + 1)"))
+        F = TLArray(setitag(F, 2, "S,$i"))
         # One trivial sector on the outgoing link; keep the chosen spin index,
         # which trims that link to dimension 1 (product state ⇒ bond dim 1).
-        A = to_concrete(getsub(F, 3, s -> idx))
-        A = to_concrete(A * one(T))
+        A = TLArray(getsub(F, 3, s -> idx))
+        A = TLArray(A * one(T))
 
         push!(tensors, A)
         prev = (A, 3)

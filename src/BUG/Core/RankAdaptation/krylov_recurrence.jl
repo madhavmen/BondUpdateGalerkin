@@ -6,7 +6,7 @@
 _kinner(left_vector, right_vector) = tensor_inner(left_vector, right_vector)
 _kinner(left_vector::Vector{<:Number}, right_vector::Vector{<:Number}) =
     dot(left_vector, right_vector)
-_kconc(vector) = to_concrete(vector)
+_kconc(vector) = TLArray(vector)
 _kconc(vector::Vector{<:Number}) = vector
 
 "A recycled vector whose part outside the block is below this fraction of it adds nothing new."

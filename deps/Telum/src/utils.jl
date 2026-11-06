@@ -15,6 +15,17 @@ Returns `(U, SV, S)` where:
 - `SV` has shape `(size(arr,1), ..., size(arr,leg-1), χ, size(arr,leg+1), ..., size(arr,N))`
   i.e. same leg order as the original array with the `leg`-th dimension replaced by `χ`
 - `S` is the kept singular value vector of length `χ`
+
+Arguments:
+- `arr` is the dense input tensor.
+- `leg` is the one-based axis to isolate on the left side of the SVD.
+- `cutoff` discards singular values `<= cutoff`.
+- `maxdim` optionally caps the number of kept singular values after cutoff
+  filtering.
+
+The sign convention flips the first kept singular vector pair when the first
+nonzero entry of the first `U` column is negative, making repeated decompositions
+more deterministic.
 """
 function svd_leg(arr::AbstractArray{T, N}, 
     leg::Integer;
@@ -65,7 +76,7 @@ function svd_leg(arr::AbstractArray{T, N},
 	# The first element of U can be zero
 	if !isempty(S) && U[findfirst(!iszero, U), 1] < 0
 		U .= -U; 
-		SV .= -SV;
+		SV .= -SV; 
 	end
 	return U, SV, S
 end
@@ -75,10 +86,9 @@ end
 
 `svd(mat; full)` with LAPACK's divide-and-conquer driver (`gesdd`), falling back to QR iteration
 (`gesvd`) when `gesdd` fails to converge (`LAPACKException`). `gesdd` is faster but occasionally
-does not converge on matrices `gesvd` handles -- in BUG-Julia's imaginary-time closure, exact
-isometries with every singular value 1 (d50g16 17346776, d50g20 17346777); the fallback is the one
-ITensors uses. A matrix with non-finite entries is an upstream defect, so it is reported rather
-than retried. Ported from the cluster fork `~/Telum-fork` (247a5bd, svd-qr-fallback).
+does not converge on matrices `gesvd` handles (in BUG's imaginary-time closure: exact isometries
+with every singular value 1); the fallback is the one ITensors uses. A matrix with non-finite
+entries is an upstream defect, so it is reported rather than retried.
 """
 function _robust_svd(mat::AbstractMatrix; full::Bool=false)
 	try

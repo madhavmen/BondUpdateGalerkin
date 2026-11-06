@@ -36,7 +36,7 @@ function sector_graded_sketch(
     perp_of = side === :left ? perp_component : perp_component_right
     # `fusion_basis` returns (first_leg, second_leg, fused); a right frame carries its bond leg
     # first.
-    tolayout(tensor) = side === :left ? tensor : to_concrete(permutedims(tensor, (3, 1, 2)))
+    tolayout(tensor) = side === :left ? tensor : TLArray(permutedims(tensor, (3, 1, 2)))
 
     fused_basis = fusion_basis(frame, first_leg, second_leg; tag = tag)
     dfull, dT = _frame_sector_dims(frame, side, fused_basis, "sector_graded_sketch")
@@ -49,7 +49,7 @@ function sector_graded_sketch(
         boost === nothing || _boost!(cols, boost, dfull)
         random_fused = _trim_per_sector(_randomize_like(fused_basis, rng), 3, cols)
         random_fused === nothing && return nothing
-        Rl = to_concrete(tolayout(random_fused))
+        Rl = TLArray(tolayout(random_fused))
         return norm(Rl) > 0 ? Rl : nothing
     end
 
@@ -95,13 +95,13 @@ function sector_graded_sketch(
     RT = _trim_per_sector(_randomize_like(fused_basis, rng), 3, ct)
     if RT !== nothing
         random_probe = tolayout(RT)
-        isometry_block = to_concrete(random_probe - perp_of(frame, random_probe))
+        isometry_block = TLArray(random_probe - perp_of(frame, random_probe))
         norm(isometry_block) > 0 && push!(blocks, isometry_block)
     end
 
     isempty(blocks) && return nothing
     length(blocks) == 1 && return blocks[1]
-    return to_concrete(oplus(blocks, (sk,)))
+    return TLArray(oplus(blocks, (sk,)))
 end
 
 # ── preselection and final selection (`RSVDpreBE0SiQS.m`) ──
@@ -145,25 +145,25 @@ function _sample_residual(basis, project, sketch, draw, nh::Int, wleg::Int, side
     nh >= 1 || return (0.0, per, cols)
     Om = draw(nh)
     Om === nothing && return (0.0, per, cols)
-    for (sector, sector_size) in Om.spaces[wleg]
+    for (sector, sector_size) in Telum.spaces(Om)[wleg]
         sector_size > 0 && (cols[sector] = sector_size)
     end
     isempty(cols) && return (0.0, per, cols)
     sketched = sketch(Om)
     sketched === nothing && return (0.0, per, cols)
-    residual = to_concrete(project(sketched))
+    residual = TLArray(project(sketched))
     norm(residual) <= _CBE_EPS && return (0.0, per, cols)
     if basis !== nothing
         off =
             side === :left ? perp_component(basis, residual) : perp_component_right(basis, residual)
         # `project` is reapplied so the estimate cannot be polluted by a component along the
         # frame, which `basis` is not meant to cover.
-        residual = to_concrete(project(to_concrete(off)))
+        residual = TLArray(project(TLArray(off)))
     end
     # The sketch contracts the probe's local legs and leaves its width leg free, so the
     # residual's width sectors ARE the probe's sectors, label for label.
     rleg = side === :left ? 3 : 1
-    for (sector, sector_size) in residual.spaces[rleg]
+    for (sector, sector_size) in Telum.spaces(residual)[rleg]
         n_q = get(cols, sector, 0)
         n_q > 0 || error(
             "Test B: residual sector $sector has no holdout column -- the sketch " *
@@ -172,8 +172,8 @@ function _sample_residual(basis, project, sketch, draw, nh::Int, wleg::Int, side
         )
         # The residual restricted to this one width sector.
         Rq =
-            length(residual.spaces[rleg]) == 1 ? residual :
-            to_concrete(
+            length(Telum.spaces(residual)[rleg]) == 1 ? residual :
+            TLArray(
                 getsub(residual, rleg, label -> label == sector ? (1:sector_size) : nothing),
             )
         per[sector] = norm(Rq)^2 / n_q
@@ -191,7 +191,7 @@ function _target_sectors!(boost::Dict, per::Dict, Om, wleg::Int, alloc::BasisAll
     isempty(per) && return 0
     have =
         Om === nothing ? Dict{Any,Int}() :
-        Dict{Any,Int}(sector => sector_size for (sector, sector_size) in Om.spaces[wleg])
+        Dict{Any,Int}(sector => sector_size for (sector, sector_size) in Telum.spaces(Om)[wleg])
     share = alloc.sample^2 / length(per)
     targeted_count = 0
     for (sector, sector_residual_sq) in per
@@ -218,7 +218,7 @@ function _one_sided_tail(
     stol::Float64,
     ledger::Union{Nothing,AdaptiveLedger},
 )
-    (length(candidate_weights.qlabels) == 0 || norm(candidate_weights) == 0) && return nothing
+    (length(Telum.logical_qlabels(candidate_weights)) == 0 || norm(candidate_weights) == 0) && return nothing
     res = svd(candidate_weights, (1,); Nkeep = kmax, cutoff = stol, get_lists = true)
     nk = length(res.kept_list)
     tail_rank, tail =
@@ -230,7 +230,7 @@ function _one_sided_tail(
     tail_rank == 0 && return nothing
     # Re-cut at the tail rank so the returned vectors are exactly the ranked directions kept.
     tail_rank < nk && (res = svd(candidate_weights, (1,); Nkeep = tail_rank, cutoff = stol))
-    return to_concrete(res.U)
+    return TLArray(res.U)
 end
 
 """
@@ -283,7 +283,7 @@ function _record_sample!(
             holdout = copy(hcols),
             sketch = sketch === nothing ? Dict{Any,Int}() :
                      Dict{Any,Int}(
-                sector => sector_size for (sector, sector_size) in sketch.spaces[wleg]
+                sector => sector_size for (sector, sector_size) in Telum.spaces(sketch)[wleg]
             ),
         ),
     )

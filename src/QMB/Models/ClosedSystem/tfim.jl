@@ -27,7 +27,7 @@ function tfim_mpo(L::Int; J::Float64 = 1.0, h::Float64 = 1.0)
     )
     ops = ising_local_space(sym)
     # The two halves of `Z_i Z_{i+1}`, as an ADJOINT pair -- see the arrow note above.
-    Zl, Zr = ops.Z, to_concrete(ops.Z')
+    Zl, Zr = ops.Z, TLArray(ops.Z')
     W = 3
 
     Ws = Any[]
@@ -41,10 +41,10 @@ function tfim_mpo(L::Int; J::Float64 = 1.0, h::Float64 = 1.0)
         # `id -> open`: place the first Z. Charged under :Z2, so its op-leg becomes w_r.
         i < L && (mat[1, 2] = _mpo_block(Zl, i, tl, tr, _side(Zl, :left)))
         # `open -> done`: the partner Z', one site later, carrying the coupling.
-        i > 1 && (mat[2, W] = to_concrete(-J * _mpo_block(Zr, i, tl, tr, _side(Zr, :right))))
+        i > 1 && (mat[2, W] = TLArray(-J * _mpo_block(Zr, i, tl, tr, _side(Zr, :right))))
         # `id -> done`: the on-site field. Neutral, so no channel is opened at all -- this is
         # why the field costs nothing in virtual dimension.
-        mat[1, W] = to_concrete(-h * _mpo_block(ops.X, i, tl, tr, :none))
+        mat[1, W] = TLArray(-h * _mpo_block(ops.X, i, tl, tr, :none))
 
         # No boundary zeroing, unlike `long_range_mpo`: mat[1,W] is the on-site field here, and blanking it
         # would silently weaken the fields at sites 1 and L.
@@ -53,7 +53,7 @@ function tfim_mpo(L::Int; J::Float64 = 1.0, h::Float64 = 1.0)
         elseif i == L
             mat = reshape(mat[:, W], W, 1)
         end
-        push!(Ws, to_concrete(oplus(mat, (1, 4))))
+        push!(Ws, TLArray(oplus(mat, (1, 4))))
     end
     return MPO(Ws)
 end

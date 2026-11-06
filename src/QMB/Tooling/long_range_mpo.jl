@@ -31,7 +31,7 @@ function long_range_mpo(L::Int, nn::XXZChain, lr::Vector{LongRangeTerm})
     length(nn) == L ||
         throw(DimensionMismatch("nn term list is for $(length(nn)) sites, asked for $L"))
     for (k, t) in pairs(lr)
-        (length(t.left.inds) == 2 && length(t.right.inds) == 2) || throw(
+        (length(Telum.inds(t.left)) == 2 && length(Telum.inds(t.right)) == 2) || throw(
             ArgumentError(
                 "long_range_mpo: term $k carries a rank-3 operator, so its channel would need " *
                 "a CHARGED self-loop identity. Only charge-neutral (rank-2) long-range " *
@@ -48,7 +48,7 @@ function long_range_mpo(L::Int, nn::XXZChain, lr::Vector{LongRangeTerm})
     for i = 1:L
         tl, tr = "W,$(i - 1)", "W,$i"
         Iid = _mpo_block(Iloc, i, tl, tr, :none)
-        Znil = to_concrete(0.0 * Iid)
+        Znil = TLArray(0.0 * Iid)
         mat = Matrix{Any}(nothing, W, W)
         i < L && (mat[1, 1] = Iid)
         i > 1 && (mat[W, W] = Iid)
@@ -56,7 +56,7 @@ function long_range_mpo(L::Int, nn::XXZChain, lr::Vector{LongRangeTerm})
             i < L &&
                 (mat[1, 1+t] = _mpo_block(terms[t].left, i, tl, tr, _side(terms[t].left, :left)))
             i > 1 && (
-                mat[1+t, W] = to_concrete(
+                mat[1+t, W] = TLArray(
                     terms[t].coeff *
                     _mpo_block(terms[t].right, i, tl, tr, _side(terms[t].right, :right)),
                 )
@@ -68,9 +68,9 @@ function long_range_mpo(L::Int, nn::XXZChain, lr::Vector{LongRangeTerm})
             # THE SELF-LOOP. Needs both a predecessor and a successor site, so it exists
             # only in the interior -- at `i = 1` nothing has opened yet and at `i = L`
             # nothing may still be open, which the boundary trimming below enforces anyway.
-            1 < i < L && lr[k].decay != 0.0 && (mat[c, c] = to_concrete(lr[k].decay * Iid))
+            1 < i < L && lr[k].decay != 0.0 && (mat[c, c] = TLArray(lr[k].decay * Iid))
             i > 1 &&
-                (mat[c, W] = to_concrete(lr[k].coeff * _mpo_block(lr[k].right, i, tl, tr, :none)))
+                (mat[c, W] = TLArray(lr[k].coeff * _mpo_block(lr[k].right, i, tl, tr, :none)))
         end
         if i == 1
             mat = reshape(mat[1, :], 1, W)
@@ -79,7 +79,7 @@ function long_range_mpo(L::Int, nn::XXZChain, lr::Vector{LongRangeTerm})
             mat = reshape(mat[:, W], W, 1)
             mat[1, 1] = Znil                        # nothing may stay `id` past the end
         end
-        push!(Ws, to_concrete(oplus(mat, (1, 4))))
+        push!(Ws, TLArray(oplus(mat, (1, 4))))
     end
     return MPO(Ws)
 end

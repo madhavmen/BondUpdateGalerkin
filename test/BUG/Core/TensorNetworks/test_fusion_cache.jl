@@ -21,7 +21,7 @@ const BUGCORE = BondUpdateGalerkin.BUG
 # expensive rather than broken. Correctness gates alone would never have caught it -- every number
 # the campaign printed was RIGHT, just unaffordable.
 
-norm_diff(a, b) = sqrt(abs(tensor_inner(to_concrete(a - b), to_concrete(a - b))))
+norm_diff(a, b) = sqrt(abs(tensor_inner(TLArray(a - b), TLArray(a - b))))
 
 # Bond frames spanning several states, deliberately including links that carry a NON-ZERO charge.
 # A vacuum link is a FALSE PASS here: its reachable set {+q,-q} is its own dual, so a wrong
@@ -35,7 +35,7 @@ function sample_frames()
         for i = 1:(length(psi)-1)
             canonical!(psi, i)
             t = bond_frame(psi, i).U0
-            any(q != dual_charge(symm(t), q) for (q, _) in t.spaces[1]) && (charged[] = true)
+            any(q != dual_charge(symm(t), q) for (q, _) in Telum.spaces(t)[1]) && (charged[] = true)
             push!(out, t)
         end
     end
@@ -66,8 +66,8 @@ end
         @test st.misses < st.calls
 
         for (c, w) in zip(cold, warm)
-            @test c.spaces == w.spaces
-            @test string.(c.inds) == string.(w.inds)
+            @test Telum.spaces(c) == Telum.spaces(w)
+            @test string.(Telum.inds(c)) == string.(Telum.inds(w))
             @test norm_diff(c, w) < 1e-12
         end
     end
@@ -82,7 +82,7 @@ end
         # handing back the wrong one is how `cbe_bug` broke under U(1) before ("Duplicate TLIndex
         # with non-empty itag"). Two keys, and the labels genuinely differ.
         @test fusion_stats().misses == 2
-        @test string(a.inds[3]) != string(b.inds[3])
+        @test string(Telum.inds(a)[3]) != string(Telum.inds(b)[3])
     end
 
     @testset "the symmetry mode is part of the key" begin
@@ -130,7 +130,7 @@ end
             end
             @test fusion_stats().keys < length(seen)
             for (c, w) in zip(cold, warm)                  # eviction never changes a result
-                @test c.spaces == w.spaces
+                @test Telum.spaces(c) == Telum.spaces(w)
                 @test norm_diff(c, w) < 1e-12
             end
             # `nothing` is the unbounded memo

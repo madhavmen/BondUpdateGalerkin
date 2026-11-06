@@ -6,7 +6,7 @@ Telum = "206e1281-4cfe-4f93-80c6-84968ba7c8d5"
 
 [sources]
 BondUpdateGalerkin = {path = ".."}
-LurCGT = {url = "https://github.com/lurlurlurrrrr/LurCGT.jl", rev = "1375987561c3393cf7b45e66a129ecb6a4fae1d7"}
+LurCGT = {url = "https://github.com/lurlurlurrrrr/LurCGT.jl", rev = "1bb74d61451163030eee14e15451fb3082f60ba0"}
 Telum = {path = "../deps/Telum"}
 
 [compat]

@@ -1,3 +1,11 @@
+"""
+    _covers_all_channels(channs, N::Int) -> Bool
+
+Return whether `channs` is exactly the full channel set `1:N`.
+
+This controls IROP naming: operators covering all channels omit the channel
+suffix, while partial-channel operators include their selected channel numbers.
+"""
 function _covers_all_channels(channs::AbstractVector{<:Integer}, N::Int)
     return length(channs) == N && Set(channs) == Set(1:N)
 end
@@ -12,6 +20,14 @@ _spin_symbol(channs::AbstractVector{<:Integer}, N::Int, component::AbstractStrin
 _fermion_symbol(channs::AbstractVector{<:Integer}, N::Int, component::AbstractString="") =
     Symbol("F", _channel_suffix(channs, N), component)
 
+"""
+    _check_channels(channs, N::Int, label)
+
+Validate a channel list from a local-space option.
+
+`channs` must be non-empty, duplicate-free, and contained in `1:N`. `label` is
+used only to identify the failing option in error messages.
+"""
 function _check_channels(channs::AbstractVector{<:Integer}, N::Int, label)
     isempty(channs) && error("$label must contain at least one channel")
     length(unique(channs)) == length(channs) ||
@@ -20,6 +36,15 @@ function _check_channels(channs::AbstractVector{<:Integer}, N::Int, label)
         error("$label contains channels outside 1:$N: $channs")
 end
 
+"""
+    _check_disjoint_channel_groups(groups, N::Int, label::AbstractString) -> Set{Int}
+
+Validate a collection of channel groups and return all selected channels.
+
+`groups` contains `(symmetry_symbol, channs)` pairs. Each group is checked with
+`_check_channels`, and overlap between groups is rejected because fused local
+operators would otherwise be ambiguous.
+"""
 function _check_disjoint_channel_groups(groups, N::Int, label::AbstractString)
     seen = Set{Int}()
     for (ssymbol, channs) in groups
@@ -32,6 +57,15 @@ function _check_disjoint_channel_groups(groups, N::Int, label::AbstractString)
     return seen
 end
 
+"""
+    _parse_su_channel_symbol(ssymbol::Symbol, channs) -> Int
+
+Parse and validate an SU channel-symmetry symbol.
+
+`ssymbol` may be `:SU`, `:SU2`, `:SU3`, and so on. With no numeric suffix, the
+rank is inferred from `length(channs)`; otherwise the suffix must match the
+number of selected channels and be at least two.
+"""
 function _parse_su_channel_symbol(ssymbol::Symbol, channs::AbstractVector{<:Integer})
     str = String(ssymbol)
     startswith(str, "SU") || error("Unsupported channel symmetry: $ssymbol")
@@ -43,6 +77,16 @@ function _parse_su_channel_symbol(ssymbol::Symbol, channs::AbstractVector{<:Inte
 end
 
 # N: The number of spinless fermion channels
+"""
+    Fermion_basicops(N::Int)
+
+Build elementary spinless-fermion operators for `N` channels.
+
+Returns `(FF, NN, chan_l, chan_z)`. `FF[i]` annihilates channel `i`, `NN[i]` is
+its number operator, `chan_l[i]` lowers SU(N) channel weight from channel `i`
+toward `i + 1`, and `chan_z[i]` is the corresponding Cartan weight vector over
+the local Fock basis.
+"""
 function Fermion_basicops(N::Int)
     @assert N > 0 "Number of channels must be positive"
 
@@ -105,6 +149,11 @@ end
 
 Build SU(N) channel-symmetry data for each channel group in
 `opts.channel_symm`.
+
+Each group is `(ssymbol, channs)`, where `ssymbol` is parsed as an SU rank and
+`channs` chooses the physical channels in that representation. The returned
+weights are Dynkin-basis tuples for every local Fock state, and the lowering
+operators connect adjacent selected channels.
 """
 function chan_symmops(opts::FermionOptions, basic_ops)
     Ntot = opts.nchannels
@@ -127,6 +176,15 @@ function chan_symmops(opts::FermionOptions, basic_ops)
     return weights, symms, lops
 end
 
+"""
+    _fermion_annihilation_primary_blocks(opts::FermionOptions, N::Int)
+
+Create initial channel blocks for spinless annihilation IROPs from charge groups.
+
+`opts.charge_symm` determines which channels should be fused into shared
+annihilation operators. Each returned block has fields `channs` and
+`channel_symm`; channel-symmetry refinement is applied later.
+"""
 function _fermion_annihilation_primary_blocks(opts::FermionOptions, N::Int)
     charge_groups = opts.charge_symm === nothing ? Tuple{Symbol, Vector{Int}}[] : opts.charge_symm
 
@@ -141,6 +199,15 @@ function _fermion_annihilation_primary_blocks(opts::FermionOptions, N::Int)
     return blocks
 end
 
+"""
+    _split_fermion_annihilation_blocks_by_channel_symmetry(blocks, opts, N)
+
+Refine spinless annihilation blocks using SU(N) channel symmetry groups.
+
+`blocks` is modified in place. A channel-symmetry group may create a new block
+on otherwise unselected channels or split one existing multi-channel charge
+block. Crossing or partial overlaps are rejected.
+"""
 function _split_fermion_annihilation_blocks_by_channel_symmetry(blocks, opts::FermionOptions, N::Int)
     channel_groups = opts.channel_symm === nothing ? Tuple{Symbol, Vector{Int}}[] : opts.channel_symm
     channel_selected = Set{Int}()
@@ -187,6 +254,16 @@ function _split_fermion_annihilation_blocks_by_channel_symmetry(blocks, opts::Fe
     return blocks
 end
 
+"""
+    _add_fermion_annihilation_block!(mwirops, block, N::Int, basic_ops)
+
+Emit one spinless annihilation IROP into `mwirops`.
+
+`block.channs` controls the operator name and channel support. If
+`block.channel_symm` is true, only `last(block.channs)` contributes because it
+is the maximal-weight channel component; otherwise all block channels are
+summed.
+"""
 function _add_fermion_annihilation_block!(
     mwirops::Dict{Symbol, SparseMatrixCSC{Float64, Int}},
     block,
@@ -203,7 +280,11 @@ end
     add_annihilation_irop!(mwirops, opts::FermionOptions, basic_ops)
 
 Add spinless fermion annihilation IROPs to the maximal-weight IROP dictionary.
-When a generated operator covers all channels, the channel suffix is omitted.
+
+`mwirops` is mutated. `opts` supplies charge and channel symmetry groups, and
+`basic_ops` supplies the elementary annihilation matrices. When a generated
+operator covers all channels, the channel suffix is omitted; otherwise the name
+is `F<channels>`.
 """
 function add_annihilation_irop!(
     mwirops::Dict{Symbol, SparseMatrixCSC{Float64, Int}},
@@ -227,6 +308,16 @@ function add_annihilation_irop!(
     end
 end
 
+"""
+    getSymmetryInfo(opts::FermionOptions)
+
+Build symmetry metadata and maximal-weight IROPs for a spinless fermion space.
+
+`opts.nchannels` determines the local Fock dimension `2^N`. `opts.charge_symm`
+adds Abelian charge weights, and `opts.channel_symm` adds SU(N) channel weights
+and lowering operators. Returns `(symms, weights, lowering_ops, mwirops)`, with
+`mwirops` containing annihilation operators plus parity `Z` and identity `I`.
+"""
 function getSymmetryInfo(opts::FermionOptions)
     N = opts.nchannels
     basic_ops = Fermion_basicops(N)

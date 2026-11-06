@@ -42,6 +42,19 @@
 
 # TODO: Implement a version that get left_legs by predicates or various keyword arguments
 # TODO: Test svd with trunction for TLArray object (This is not rigorous yet)
+"""
+Container for a symmetry-aware SVD.
+
+# Fields
+
+- `U`: left TLArray factor.
+- `S`: diagonal/bond singular-value TLArray.
+- `Vd`: right TLArray factor in the package's directed-bond convention.
+- `kept_list`: globally ordered singular-value entries retained by truncation.
+- `trunc_list`: corresponding discarded entries/truncation bookkeeping.
+
+Its iteration order matches the public SVD return convention.
+"""
 struct SVDResult{TU, TS, TVD, TKL, TTL}
     U::TU
     S::TS
@@ -80,7 +93,7 @@ _is_zero_array(arr::AbstractArray) = all(iszero, arr)
 
 function _svd_symmetry_stored_leg_order(
     ::Type{QT},
-    q::TLArray{T, QD, N, RD, QT, PS, M, RMT},
+    q::AbstractTLArray{T, QD, N, RD, QT, PS, M, RMT},
     sector_index::Int,
     ::Val{n},
 ) where {T, QD, N, RD, QT, PS, M, RMT, n}
@@ -91,7 +104,7 @@ function _svd_symmetry_stored_leg_order(
     sizehint!(incoming, QD)
     sizehint!(outgoing, QD)
     for leg in 1:QD
-        if q.inds[leg].dir == '+'
+        if inds(q)[leg].dir == '+'
             push!(incoming, leg)
         else
             push!(outgoing, leg)
@@ -112,13 +125,13 @@ function _svd_symmetry_stored_leg_order(
 end
 
 @inline _svd_physical_qlabel_key(::Type{QT},
-                                 q::TLArray{T, QD, N, RD, QT, PS, M, RMT},
+                                 q::AbstractTLArray{T, QD, N, RD, QT, PS, M, RMT},
                                  sector_index::Int,
                                  ::Val{n}) where {T, QD, N, RD, QT, PS, M, RMT, n} =
     ntuple(leg -> sector_qlabel(QT, q, sector_index, leg)[n], Val(QD))
 
 @inline _svd_physical_product_key(::Type{QT},
-                                  q::TLArray{T, QD, N, RD, QT, PS, M, RMT},
+                                  q::AbstractTLArray{T, QD, N, RD, QT, PS, M, RMT},
                                   sector_index::Int) where {T, QD, N, RD, QT, PS, M, RMT} =
     ntuple(leg -> sector_qlabel(QT, q, sector_index, leg), Val(QD))
 
@@ -167,6 +180,14 @@ end
     return left_signature, right_signature
 end
 
+"""Internal SVD row-to-symmetry split descriptor.
+
+# Fields
+
+- `sector_index`: source TLArray sector slot.
+- `q`: product-symmetry q-label tuple for that slot.
+- `left_signature`, `right_signature`: canonical q-label tuples defining each split side.
+"""
 struct _SVDSplitRow{L, R, QT}
     sector_index::Int
     q::QT
@@ -174,6 +195,15 @@ struct _SVDSplitRow{L, R, QT}
     right_signature::NTuple{R, QT}
 end
 
+"""Internal SVD decomposition of one sector into symmetry isometries and core.
+
+# Fields
+
+- `sector_index`, `q`: source slot and q-label tuple.
+- `left_signature`, `right_signature`: canonical side signatures.
+- `left_iso`, `right_iso`: symmetry basis isometries.
+- `core`: reduced dense coefficient core.
+"""
 struct _SVDSymmetrySplit{L, R, QTN}
     sector_index::Int
     q::QTN
@@ -184,6 +214,14 @@ struct _SVDSymmetrySplit{L, R, QTN}
     core::Array{Float64, 3}
 end
 
+"""Internal SVD CGT block descriptor.
+
+# Fields
+
+- `q`: intermediate q-label.
+- `omL`, `omR`: left/right outer-multiplicity dimensions.
+- `coeffs`: dense CGT coefficient block coupling those OM axes.
+"""
 struct _SVDCGTBlockInfo{NZ}
     q::NTuple{NZ, Int}
     omL::Int
@@ -191,6 +229,15 @@ struct _SVDCGTBlockInfo{NZ}
     coeffs::Array{Float64, 3}
 end
 
+"""Internal packed-side layout descriptor for an SVD class.
+
+# Fields
+
+- `signature`: canonical q-label signature.
+- `row_index`, `sector_index`: source split-row and sector identifiers.
+- `phys_dims`, `om_dims`: physical and OM extents.
+- `range`: contiguous packed-matrix range.
+"""
 struct _SVDClassSideInfo{Sig, L, N}
     signature::Sig
     row_index::Int
@@ -200,6 +247,16 @@ struct _SVDClassSideInfo{Sig, L, N}
     range::UnitRange{Int}
 end
 
+"""Internal grouping metadata for one SVD CGT class.
+
+# Fields
+
+- `sector`: class intermediate q-label.
+- `rows`: split-row range in the class.
+- `left_infos`, `right_infos`: packed-side descriptors.
+- `left_ranges`, `right_ranges`: signature-to-range maps.
+- `total_left`, `total_right`: packed matrix dimensions.
+"""
 struct _SVDCGTClassMetadata{QT, LI, LR, RI, RR}
     sector::QT
     rows::UnitRange{Int}
@@ -211,6 +268,14 @@ struct _SVDCGTClassMetadata{QT, LI, LR, RI, RR}
     total_right::Int
 end
 
+"""Internal dense SVD result for one CGT equivalence class.
+
+# Fields
+
+- `sector`: class intermediate q-label.
+- `left_infos`, `right_infos`: descriptors needed to scatter factors.
+- `U`, `S`, `Vt`: dense factor matrices/vector before TLArray sector assembly.
+"""
 struct _SVDCGTClassResult{QT, LI, RI, U, S, Vt}
     sector::QT
     left_infos::LI
@@ -378,7 +443,7 @@ end
 
 @generated function _svd_cgtsvd_row_keys(::Type{PS},
                                          ::Type{QT},
-                                         q::TLArray{T, QD, N, RD, QT, PS, M, RMT},
+                                         q::AbstractTLArray{T, QD, N, RD, QT, PS, M, RMT},
                                          sector_index::Int,
                                          ::Val{M}) where {T, QD, N, RD, QT, PS<:ProductSymm, M, RMT}
     exprs = Expr[]
@@ -448,7 +513,7 @@ end
     return Expr(:tuple, exprs...)
 end
 
-_new_cgtsvd_caches(::TLArray{T, QD, N, RD, QT, PS}) where {T, QD, N, RD, QT, PS} =
+_new_cgtsvd_caches(::AbstractTLArray{T, QD, N, RD, QT, PS}) where {T, QD, N, RD, QT, PS} =
     _new_cgtsvd_caches(PS, QT, Val(QD))
 
 @generated function _new_irrepdim_caches(::Type{PS}, ::Type{QT}) where {PS<:ProductSymm, QT}
@@ -466,7 +531,7 @@ _new_cgtsvd_caches(::TLArray{T, QD, N, RD, QT, PS}) where {T, QD, N, RD, QT, PS}
     return Expr(:tuple, exprs...)
 end
 
-_new_irrepdim_caches(::TLArray{T, QD, N, RD, QT, PS}) where {T, QD, N, RD, QT, PS} =
+_new_irrepdim_caches(::AbstractTLArray{T, QD, N, RD, QT, PS}) where {T, QD, N, RD, QT, PS} =
     _new_irrepdim_caches(PS, QT)
 
 @inline _svd_irrep_dimension(::Type{S}, qlabel, cache) where {S<:AbelianSymm} =
@@ -512,7 +577,7 @@ end
 @inline _svd_cgtsvd_split_count(cgtsvd::LurCGT.CGTSVD) = length(cgtsvd.bond_sps)
 @inline _svd_cgtsvd_split_count(::Bool) = 1
 
-function _count_svd_symmetry_splits(q::TLArray{T, QD, N, RD, QT, PS, M, RMT},
+function _count_svd_symmetry_splits(q::AbstractTLArray{T, QD, N, RD, QT, PS, M, RMT},
                                     sector_index::Int,
                                     left_legs::NTuple{L, Int},
                                     cgtsvd_caches::CT,
@@ -521,13 +586,13 @@ function _count_svd_symmetry_splits(q::TLArray{T, QD, N, RD, QT, PS, M, RMT},
     isabelian(S) && return 1
     physical_key = _svd_physical_qlabel_key(QT, q, sector_index, Val(n))
     upsp, dnsp, left_legs_canon =
-        _svd_physical_key_split_args(S, physical_key, q.inds, left_legs)
+        _svd_physical_key_split_args(S, physical_key, inds(q), left_legs)
     cache = _cgtsvd_cache_for(cgtsvd_caches, S, PS, Val(n))
     cgtsvd = _svd_get_cgtsvd(S, physical_key, upsp, dnsp, left_legs_canon, cache)
     return _svd_cgtsvd_split_count(cgtsvd)
 end
 
-function _count_svd_sector_product_splits(q::TLArray{T, QD, N, RD, QT, PS, M, RMT},
+function _count_svd_sector_product_splits(q::AbstractTLArray{T, QD, N, RD, QT, PS, M, RMT},
                                           sector_index::Int,
                                           left_legs::NTuple{L, Int},
                                           cgtsvd_caches::CT,
@@ -540,12 +605,12 @@ function _count_svd_sector_product_splits(q::TLArray{T, QD, N, RD, QT, PS, M, RM
     return count
 end
 
-function _prepare_svd_counted_preassembly(q::TLArray{T, QD, N, RD, QT, PS, M, RMT},
+function _prepare_svd_counted_preassembly(q::AbstractTLArray{T, QD, N, RD, QT, PS, M, RMT},
                                           left_legs::NTuple{L, Int},
                                           ::Val{N}) where {T, QD, N, RD, QT, PS, M, RMT, L}
     cgtsvd_caches = _new_cgtsvd_caches(q)
     KeyTuple = _svd_cgtsvd_key_tuple_type(PS, QT, Val(QD))
-    nactive = count(sector_index -> !q.iszero[sector_index], sector_slots(q))
+    nactive = count(sector_index -> !is_sector_zero(q, sector_index), sector_slots(q))
     active_sector_indices = Vector{Int}(undef, nactive)
     keys_by_row = Vector{KeyTuple}(undef, nactive)
     sector_row_ranges = Vector{UnitRange{Int}}(undef, nactive)
@@ -553,7 +618,7 @@ function _prepare_svd_counted_preassembly(q::TLArray{T, QD, N, RD, QT, PS, M, RM
     total_rows = 0
     active_position = 0
     for sector_index in sector_slots(q)
-        q.iszero[sector_index] && continue
+        is_sector_zero(q, sector_index) && continue
         active_position += 1
         active_sector_indices[active_position] = sector_index
         keys_by_row[active_position] = _svd_cgtsvd_row_keys(PS, QT, q, sector_index, Val(M))
@@ -736,7 +801,7 @@ function _compact_svd_rows_by_valid!(rows::Vector{Row},
     return rows, left_isos, right_isos, cores
 end
 
-function _get_svd_split_rows(q::TLArray{T, QD, N, RD, QT, PS, M, RMT},
+function _get_svd_split_rows(q::AbstractTLArray{T, QD, N, RD, QT, PS, M, RMT},
                              splits_by_symm::Tuple{Vararg{AbstractVector, N}},
                              sector_indices::Vector{Int},
                              sector_row_ranges::Vector{UnitRange{Int}},
@@ -794,7 +859,7 @@ function _get_svd_split_rows(q::TLArray{T, QD, N, RD, QT, PS, M, RMT},
     return rows[perm], left_isos[perm], right_isos[perm], cores[perm]
 end
 
-function _get_svd_split_rows(q::TLArray{T, QD, N, RD, QT, PS, M, RMT},
+function _get_svd_split_rows(q::AbstractTLArray{T, QD, N, RD, QT, PS, M, RMT},
                              splits_by_symm::Tuple{Vararg{AbstractVector, N}},
                              sector_indices::Vector{Int},
                              left_legs::NTuple{L, Int},
@@ -873,7 +938,7 @@ end
     end
 end
 
-function _get_svd_split_rows(q::TLArray{T, QD, N, RD, QT, PS, M, RMT},
+function _get_svd_split_rows(q::AbstractTLArray{T, QD, N, RD, QT, PS, M, RMT},
                              active_sector_indices::Vector{Int},
                              keys_by_row,
                              sector_row_ranges::Vector{UnitRange{Int}},
@@ -1179,10 +1244,10 @@ function _sort_svd_split_rows_by_class!(::Type{QT},
     return class_ranges
 end
 
-function _get_svd_sector_spaces(q::TLArray{T, QD, N, RD, QT},
+function _get_svd_sector_spaces(q::AbstractTLArray{T, QD, N, RD, QT},
     left_legs,
     right_legs) where {T, QD, N, RD, QT}
-    active_indices = [sector_index for sector_index in sector_slots(q) if !q.iszero[sector_index]]
+    active_indices = [sector_index for sector_index in sector_slots(q) if !is_sector_zero(q, sector_index)]
     sector_spaces = [begin
         split_spaces = ntuple(N) do n
             qlabels, cgp, _, legdir =
@@ -1210,7 +1275,7 @@ end
 nth_symm(::Type{ProductSymm{Syms}}, ::Val{n}) where {Syms, n} = 
     product_symms(ProductSymm{Syms})[n]
 
-function _get_svd_symmetry_splits(q::TLArray{T, QD, N, RD, QT, PS, M, RMT},
+function _get_svd_symmetry_splits(q::AbstractTLArray{T, QD, N, RD, QT, PS, M, RMT},
                                   sector_index::Int,
                                   active_position::Int,
                                   keys_by_row,
@@ -1241,7 +1306,7 @@ function _get_svd_symmetry_splits(q::TLArray{T, QD, N, RD, QT, PS, M, RMT},
     return splits
 end
 
-function _get_svd_cgt_split_sectors(q::TLArray{T, QD, N, RD, QT, PS, M, RMT},
+function _get_svd_cgt_split_sectors(q::AbstractTLArray{T, QD, N, RD, QT, PS, M, RMT},
                                     active_sector_indices::Vector{Int},
                                     keys_by_row,
                                     cgtsvd_caches::CT,
@@ -1262,7 +1327,7 @@ function _get_svd_cgt_split_sectors(q::TLArray{T, QD, N, RD, QT, PS, M, RMT},
     return splits_by_symm
 end
 
-function _get_svd_cgt_split_sectors(q::TLArray{T, QD, N, RD, QT, PS, M, RMT},
+function _get_svd_cgt_split_sectors(q::AbstractTLArray{T, QD, N, RD, QT, PS, M, RMT},
                                     left_legs::NTuple{L, Int},
                                     right_legs::NTuple{R, Int};
                                     tol::Float64 = 1e-12) where {T, QD, N, RD, QT, PS, M, RMT, L, R}
@@ -1373,7 +1438,7 @@ function _svd_permutedims_to_buffer!(permute_buffer::Matrix{ComplexF64},
 end
 
 function _svd_sector_class_matrix!(dest::AbstractMatrix{Tbuf},
-                                   q::TLArray{T, QD, N, RD, QT, PS},
+                                   q::AbstractTLArray{T, QD, N, RD, QT, PS},
                                    sector_index::Int,
                                    left_payload,
                                    right_payload,
@@ -1382,8 +1447,8 @@ function _svd_sector_class_matrix!(dest::AbstractMatrix{Tbuf},
                                    right_legs::NTuple{NR, Int},
                                    product_buffer::Matrix{Tbuf},
                                    permute_buffer::Matrix{Tbuf}) where {T, QD, N, RD, QT, PS, NL, NR, Tbuf}
-    rmt = sector_rmt(q, sector_index)
-    rmt_size = size(rmt)
+    rmt, rmt_scale = sector_rmt_permuted(q, sector_index, _identity_rmt_perm(Val(RD)))
+    rmt_size = sector_rmt_dim(q, sector_index)
     phys_dim = prod(rmt_size[i] for i in 1:QD)
     om_dim = prod(rmt_size[QD + n] for n in 1:N; init = 1)   # init=1: N=0 (no symmetry)
     cores = _svd_core_tuple(core_payload, PS, Val(N))
@@ -1394,7 +1459,7 @@ function _svd_sector_class_matrix!(dest::AbstractMatrix{Tbuf},
     product_size = phys_dim * expanded_om_dim
     @assert length(product_buffer) >= product_size
     product_mat = reshape(view(product_buffer, 1:product_size), phys_dim, expanded_om_dim)
-    mul!(product_mat, reshape(rmt, phys_dim, om_dim), transpose(core_mat), one(Tbuf), zero(Tbuf))
+    mul!(product_mat, reshape(rmt, phys_dim, om_dim), transpose(core_mat), Tbuf(rmt_scale), zero(Tbuf))
 
     expanded_dims = _svd_expanded_core_dims(rmt_size, cores, Val(QD), Val(N))
     perm = _svd_expanded_class_perm(left_legs, right_legs, Val(QD), Val(N))
@@ -1429,7 +1494,7 @@ function _svd_ordered_unique_split_rows(rows::Vector{Row},
     return ordered
 end
 
-function _svd_class_side_infos(q::TLArray{T, QD, N, RD, QT, PS},
+function _svd_class_side_infos(q::AbstractTLArray{T, QD, N, RD, QT, PS},
                                rows::Vector{Row},
                                class_row_indices::UnitRange{Int},
                                left_payloads,
@@ -1447,7 +1512,7 @@ function _svd_class_side_infos(q::TLArray{T, QD, N, RD, QT, PS},
         row = rows[row_index]
         sig = _svd_row_signature(row, side)
         ri = row.sector_index
-        rmt_size = size(sector_rmt(q, ri))
+        rmt_size = sector_rmt_dim(q, ri)
         phys_dims = ntuple(i -> rmt_size[legs[i]], L)
         om_dims = ntuple(Val(N)) do n
             side === Val(:left) ?
@@ -1506,7 +1571,7 @@ function _svd_build_side_cgt_metadata(source_qlabels::NTuple{QD},
     return (qlabels = qlabels, wmat = wmat, cgp = final_cgp, legdir = legdir)
 end
 
-function _svd_cgtsvd_class_metadata(q::TLArray{T, QD, N, RD, QT, PS, M, RMT},
+function _svd_cgtsvd_class_metadata(q::AbstractTLArray{T, QD, N, RD, QT, PS, M, RMT},
                                     rows::Vector{Row},
                                     class_row_indices::UnitRange{Int},
                                     left_payloads,
@@ -1526,7 +1591,7 @@ function _svd_cgtsvd_class_metadata(q::TLArray{T, QD, N, RD, QT, PS, M, RMT},
 end
 
 function _svd_cgtsvd_class_metadata(
-    q::TLArray{T, QD, N, RD, QT, PS, M, RMT},
+    q::AbstractTLArray{T, QD, N, RD, QT, PS, M, RMT},
     rows::Vector{Row},
     class_ranges::Vector{UnitRange{Int}},
     left_payloads,
@@ -1551,7 +1616,94 @@ function _svd_cgtsvd_class_metadata(
     return metadata, max_left, max_right
 end
 
-function _build_svd_cgtsvd_class(q::TLArray{T, QD, N, RD, QT, PS, M, RMT},
+"""
+    _validate_random_svd(randomize, Nkeep, random_mode, random_tol,
+                         random_niter, random_oversampling, random_rng)
+
+Validate randomized SVD options, throwing `ArgumentError` for a missing or
+nonpositive rank, unsupported allocation mode, nonfinite/nonpositive candidate
+fraction, negative/noninteger iteration or oversampling count, or invalid RNG.
+Exact mode ignores all randomized options without validating them.
+"""
+function _validate_random_svd(randomize::Bool, Nkeep, random_mode, random_tol,
+                              random_niter, random_oversampling, random_rng)
+    randomize || return nothing
+    !isnothing(Nkeep) && Nkeep > 0 ||
+        throw(ArgumentError("randomized SVD requires Nkeep > 0; supply a target rank"))
+    random_mode in (:proportional, :per_class) ||
+        throw(ArgumentError("random_mode must be :proportional or :per_class"))
+    random_tol isa Real && isfinite(random_tol) && random_tol > 0 ||
+        throw(ArgumentError("random_tol must be finite and positive"))
+    random_niter isa Integer && random_niter >= 0 ||
+        throw(ArgumentError("random_niter must be a nonnegative integer"))
+    random_oversampling isa Integer && random_oversampling >= 0 ||
+        throw(ArgumentError("random_oversampling must be a nonnegative integer"))
+    random_rng isa AbstractRNG || throw(ArgumentError("random_rng must be an AbstractRNG"))
+    return nothing
+end
+
+"""
+    _svd_random_candidate_count(d, total, Nkeep, random_mode, random_tol)
+
+Return the number of largest singular-value candidates requested from a class
+with `d` available values. `total` is the sum of available counts derived from
+class metadata before dense assembly. Proportional allocation rounds up;
+per-class allocation requests up to `Nkeep`. Empty classes request zero.
+"""
+function _svd_random_candidate_count(d::Int, total::Int, Nkeep::Int,
+                                     random_mode, random_tol)
+    d == 0 && return 0
+    random_mode === :per_class && return min(d, Nkeep)
+    # Cap before conversion to Int, including when a large budget overflows to Inf.
+    return ceil(Int, min(d, Nkeep * (1 + random_tol) * d / total))
+end
+
+"""
+    _svd_matrix(A, candidate_count; randomize=false, random_niter=2,
+                random_oversampling=10, random_rng=Random.default_rng())
+
+Return an `SVD` with descending singular values without mutating dense matrix
+`A`. Exact mode computes the usual thin SVD. Randomized mode returns up to
+`candidate_count` leading approximate singular pairs using a Gaussian range
+finder and QR on both sides of each power iteration. The sketch width is the
+requested candidate count plus `random_oversampling` (default `10`), capped
+at the smaller matrix dimension;
+only the requested number of pairs is returned. Zero oversampling preserves
+the original sketch width. Full-rank requests use exact SVD. Empty and zero
+matrices contribute no candidates in randomized mode. Callers validate
+randomized options first.
+"""
+function _svd_matrix(A::AbstractMatrix{T}, candidate_count::Int;
+                     randomize::Bool=false, random_niter=2, random_oversampling=10,
+                     random_rng=Random.default_rng()) where {T}
+    randomize || return _robust_svd(A; full=false)
+    Tf = typeof(float(zero(T)))
+    T === Tf || return _svd_matrix(Matrix{Tf}(A), candidate_count;
+                                   randomize=true, random_niter=random_niter,
+                                   random_oversampling=random_oversampling,
+                                   random_rng=random_rng)
+    m, n = size(A)
+    k = min(candidate_count, m, n)
+    if k == 0 || iszero(A)
+        return SVD(zeros(T, m, 0), real(T)[], zeros(T, 0, n))
+    end
+    k == min(m, n) && return _robust_svd(A; full=false)
+
+    # Cap before adding so even very large oversampling counts cannot overflow.
+    width = k + Int(min(random_oversampling, min(m, n) - k))
+    Q = Matrix(qr(A * randn(random_rng, T, n, width)).Q)
+    for _ in 1:random_niter
+        # Orthogonalize both products to avoid losing smaller singular directions.
+        Z = Matrix(qr(A' * Q).Q)
+        Q = Matrix(qr(A * Z).Q)
+    end
+    F = _robust_svd(Q' * A; full=false)
+    width == k && return SVD(Q * F.U, F.S, F.Vt)
+    # Oversampling improves the basis without changing class candidate allocation.
+    return SVD(Q * view(F.U, :, 1:k), F.S[1:k], F.Vt[1:k, :])
+end
+
+function _build_svd_cgtsvd_class(q::AbstractTLArray{T, QD, N, RD, QT, PS, M, RMT},
                                  class_metadata::Meta,
                                  rows::Vector{Row},
                                  left_payloads,
@@ -1562,7 +1714,10 @@ function _build_svd_cgtsvd_class(q::TLArray{T, QD, N, RD, QT, PS, M, RMT},
                                  irrepdim_caches::ICT,
                                  buffer::AbstractMatrix{Tbuf},
                                  product_buffer::Matrix{Tbuf},
-                                 permute_buffer::Matrix{Tbuf}) where {T, QD, N, RD, QT, PS, M, RMT, NL, NR, Row, Meta, ICT<:Tuple, Tbuf}
+                                 permute_buffer::Matrix{Tbuf},
+                                 candidate_count::Int;
+                                 randomize::Bool=false, random_niter=2, random_oversampling=10,
+                                 random_rng=Random.default_rng()) where {T, QD, N, RD, QT, PS, M, RMT, NL, NR, Row, Meta, ICT<:Tuple, Tbuf}
     sector = class_metadata.sector
     class_row_indices = class_metadata.rows
     left_ranges = class_metadata.left_ranges
@@ -1586,7 +1741,8 @@ function _build_svd_cgtsvd_class(q::TLArray{T, QD, N, RD, QT, PS, M, RMT},
     m, n = size(mat)
     k = min(m, n)
     _add_svd_cost!(4 * max(m, n) * k^2 + 8 * k^3)
-    F = _robust_svd(mat; full=false)
+    F = _svd_matrix(mat, candidate_count; randomize=randomize,
+                    random_niter=random_niter, random_oversampling=random_oversampling, random_rng=random_rng)
     dimq = Float64(_svd_sector_degeneracy(PS, sector, irrepdim_caches, Val(N)))
     scale = sqrt(dimq)
     Result = _svd_cgtsvd_class_result_type(Meta, Tbuf)
@@ -1595,7 +1751,7 @@ function _build_svd_cgtsvd_class(q::TLArray{T, QD, N, RD, QT, PS, M, RMT},
         F.U .* scale, F.S ./ scale, F.Vt .* scale)
 end
 
-function _build_svd_cgtsvd_classes(q::TLArray{T, QD, N, RD, QT, PS, M, RMT},
+function _build_svd_cgtsvd_classes(q::AbstractTLArray{T, QD, N, RD, QT, PS, M, RMT},
                                    class_metadata::Vector{Meta},
                                    max_left::Int,
                                    max_right::Int,
@@ -1605,8 +1761,20 @@ function _build_svd_cgtsvd_classes(q::TLArray{T, QD, N, RD, QT, PS, M, RMT},
                                    core_payloads,
                                    left_legs::NTuple{NL, Int},
                                    right_legs::NTuple{NR, Int},
-                                   irrepdim_caches::ICT) where {T, QD, N, RD, QT, PS, M, RMT, Meta, Row, NL, NR, ICT<:Tuple}
+                                   irrepdim_caches::ICT;
+                                   randomize::Bool=false, Nkeep=nothing,
+                                   random_mode=:proportional, random_tol=0.1,
+                                   random_niter=2, random_oversampling=10, random_rng=Random.default_rng()) where {T, QD, N, RD, QT, PS, M, RMT, Meta, Row, NL, NR, ICT<:Tuple}
     isempty(class_metadata) && throw(ArgumentError("svd produced no CGTSVD classes"))
+    # Allocate from metadata before constructing any dense class matrices.
+    candidates = [min(meta.total_left, meta.total_right) for meta in class_metadata]
+    if randomize
+        total = sum(candidates)
+        for ci in eachindex(candidates)
+            candidates[ci] = _svd_random_candidate_count(
+                candidates[ci], total, Nkeep, random_mode, random_tol)
+        end
+    end
     Tmat = promote_type(T, Float64)
     buffer = Matrix{Tmat}(undef, max_left, max_right)
     product_buffer = similar(buffer)
@@ -1616,7 +1784,9 @@ function _build_svd_cgtsvd_classes(q::TLArray{T, QD, N, RD, QT, PS, M, RMT},
     for ci in eachindex(class_metadata)
         class_results[ci] = _build_svd_cgtsvd_class(
             q, class_metadata[ci], rows, left_payloads, right_payloads, core_payloads,
-            left_legs, right_legs, irrepdim_caches, buffer, product_buffer, permute_buffer)
+            left_legs, right_legs, irrepdim_caches, buffer, product_buffer, permute_buffer,
+            candidates[ci]; randomize=randomize, random_niter=random_niter,
+            random_oversampling=random_oversampling, random_rng=random_rng)
     end
     return class_results
 end
@@ -1825,16 +1995,42 @@ function _svd_right_legs(::Val{QD}, left_legs::NTuple{L, Int}) where {QD, L}
     end
 end
 
-function svd_std(q::TLArray{T, QD, N, RD, QT, PS, M, RMT},
+"""
+    svd_std(q, left_legs, left_tag="svdL", right_tag="svdR";
+            cutoff=1e-12, Nkeep=nothing, get_lists=false, randomize=false,
+            random_mode=:proportional, random_tol=0.1, random_niter=2,
+            random_oversampling=10, random_rng=Random.default_rng())
+
+Internal implementation of Telum's symmetry-aware SVD. `left_legs` is a
+sorted, unique tuple of logical legs; remaining legs form the right side.
+`left_tag`/`right_tag` label generated bond indices; `cutoff` removes small
+singular values; `Nkeep` caps retained global values; and `get_lists` requests
+kept/discarded bookkeeping. It materializes lazy input, assembles CGT classes,
+factorizes independent dense blocks (or one dense matrix for unsymmetric input),
+and returns the public SVD factors without mutating `q`. Randomized options
+follow the public `svd` contract and are validated before materialization.
+"""
+function svd_std(q::AbstractTLArray{T, QD, N, RD, QT, PS, M, RMT},
                  left_legs::NTuple{L, Int},
                  left_tag::AbstractString = "svdL",
                  right_tag::AbstractString = "svdR";
                  cutoff::Float64 = 1e-12,
                  Nkeep::Union{Nothing, Int} = nothing,
-                 get_lists::Bool = false) where {T, QD, N, RD, QT, PS, M, RMT, L}
+                 get_lists::Bool = false,
+                 randomize::Bool = false, random_mode = :proportional,
+                 random_tol = 0.1, random_niter = 2, random_oversampling = 10,
+                 random_rng = Random.default_rng()) where {T, QD, N, RD, QT, PS, M, RMT, L}
+    _validate_random_svd(randomize, Nkeep, random_mode, random_tol, random_niter,
+                         random_oversampling, random_rng)
+    materialize(q)
     @assert isnothing(Nkeep) || Nkeep >= 0 "Nkeep must be non-negative"
     @assert issorted(left_legs)
     @assert length(unique(left_legs)) == length(left_legs)
+    N == 0 && return _svd_unsymmetric(q, left_legs, left_tag, right_tag;
+                                      cutoff=cutoff, Nkeep=Nkeep, get_lists=get_lists,
+                                      randomize=randomize, random_niter=random_niter,
+                                      random_oversampling=random_oversampling,
+                                      random_rng=random_rng)
     symmetries = product_symms(PS)
 
     R = QD - L
@@ -1857,7 +2053,9 @@ function svd_std(q::TLArray{T, QD, N, RD, QT, PS, M, RMT},
     class_results = _build_svd_cgtsvd_classes(
         q, class_metadata, max_left, max_right, split_rows,
         left_payloads, right_payloads, core_payloads, left_legs, right_legs,
-        irrepdim_caches)
+        irrepdim_caches; randomize=randomize, Nkeep=Nkeep,
+        random_mode=random_mode, random_tol=random_tol,
+        random_niter=random_niter, random_oversampling=random_oversampling, random_rng=random_rng)
 
     keep_per_class, kept_list, trunc_list =
         _select_svd_cgtsvd_entries(class_results, PS, irrepdim_caches, cutoff, Nkeep;
@@ -1990,11 +2188,11 @@ function svd_std(q::TLArray{T, QD, N, RD, QT, PS, M, RMT},
     ]
     sort!(dual_bond_splist; by = first, alg=MergeSort)
 
-    inds_U = (ntuple(i -> q.inds[left_legs[i]], Val(L))..., TLIndex(left_tag, '-'))
-    inds_Vd = (TLIndex(right_tag, '-'), ntuple(i -> q.inds[right_legs[i]], Val(R))...)
+    inds_U = (ntuple(i -> inds(q)[left_legs[i]], Val(L))..., TLIndex(left_tag, '-'))
+    inds_Vd = (TLIndex(right_tag, '-'), ntuple(i -> inds(q)[right_legs[i]], Val(R))...)
 
-    spaces_U = (ntuple(i -> q.spaces[left_legs[i]], Val(L))..., bond_splist)
-    spaces_Vd = (dual_bond_splist, ntuple(i -> q.spaces[right_legs[i]], Val(R))...)
+    spaces_U = (ntuple(i -> spaces(q)[left_legs[i]], Val(L))..., bond_splist)
+    spaces_Vd = (dual_bond_splist, ntuple(i -> spaces(q)[right_legs[i]], Val(R))...)
 
     U_qlabels = Matrix{QT}(undef, L + 1, length(qlabels_U))
     for sector_index in eachindex(qlabels_U), leg in 1:(L + 1)
@@ -2012,33 +2210,134 @@ function svd_std(q::TLArray{T, QD, N, RD, QT, PS, M, RMT},
     return SVDResult(U, S, Vd, kept_list, trunc_list)
 end
 
+function _svd_unsymmetric(q::AbstractTLArray{T, QD, 0},
+                          left_legs::NTuple{L, Int},
+                          left_tag::AbstractString,
+                          right_tag::AbstractString;
+                          cutoff::Float64,
+                          Nkeep::Union{Nothing, Int},
+                          get_lists::Bool,
+                          randomize::Bool=false, random_niter=2, random_oversampling=10,
+                          random_rng=Random.default_rng()) where {T, QD, L}
+    right_legs = _svd_right_legs(Val(QD), left_legs)
+    rmt, scale = sector_rmt_permuted(q, 1, _identity_rmt_perm(Val(QD)))
+    dense = Array(scale .* rmt)
+    perm = (left_legs..., right_legs...)
+    left_dims = Tuple(size(q, leg) for leg in left_legs)
+    right_dims = Tuple(size(q, leg) for leg in right_legs)
+    m = prod(left_dims; init=1)
+    n = prod(right_dims; init=1)
+    matrix = reshape(permutedims(dense, perm), m, n)
+    candidates = randomize ? min(Nkeep, m, n) : min(m, n)
+    F = _svd_matrix(matrix, candidates; randomize=randomize,
+                    random_niter=random_niter, random_oversampling=random_oversampling, random_rng=random_rng)
+
+    threshold = cutoff * (isempty(F.S) ? 0.0 : maximum(F.S))
+    keep = findall(>(threshold), F.S)
+    if !isnothing(Nkeep)
+        resize!(keep, min(Nkeep, length(keep)))
+    end
+    singular_values = F.S[keep]
+    k = length(keep)
+
+    Udata = reshape(F.U[:, keep], (left_dims..., k))
+    Vddata = reshape(F.Vt[keep, :], (k, right_dims...))
+    Uinds = (ntuple(i -> inds(q)[left_legs[i]], Val(L))..., TLIndex(left_tag, '-'))
+    Vdinds = (TLIndex(right_tag, '-'), ntuple(i -> inds(q)[right_legs[i]], Val(QD - L))...)
+    U = TLArray(Udata, Uinds)
+    S = TLArray(Matrix(Diagonal(singular_values)),
+                (TLIndex(left_tag, '+'), TLIndex(right_tag, '+')))
+    Vd = TLArray(Vddata, Vdinds)
+
+    get_lists || return SVDResult(U, S, Vd, nothing, nothing)
+    Entry = Tuple{Float64, Int, Tuple{}, Int}
+    kept_list = Entry[(Float64(F.S[index]), 1, (), index) for index in keep]
+    truncated = setdiff(collect(eachindex(F.S)), keep)
+    trunc_list = Entry[(Float64(F.S[index]), 1, (), index) for index in truncated]
+    return SVDResult(U, S, Vd, kept_list, trunc_list)
+end
+
 """
-    LinearAlgebra.svd(q, left_legs, left_tag="svdL", right_tag="svdR"; cutoff=1e-12, Nkeep=nothing, get_lists=false)
+    LinearAlgebra.svd(q, left_legs, left_tag="svdL", right_tag="svdR";
+                      cutoff=1e-12, Nkeep=nothing, get_lists=false,
+                      randomize=false, random_mode=:proportional,
+                      random_tol=0.1, random_niter=2, random_oversampling=10,
+                      random_rng=Random.default_rng())
 
-CGTSVD-based SVD of a `TLArray`, returning `SVDResult(U, S, Vd, kept_list, trunc_list)`.
+Split `q` across `left_legs` and return `SVDResult(U, S, Vd, kept_list, trunc_list)`
+without mutating the input. The remaining legs form the right side. Generated
+bond indices use the supplied tags: `U` and `Vd` bonds are outgoing (`'-'`),
+and both `S` legs are incoming (`'+'`). `cutoff` removes values at or below
+`cutoff * maximum_singular_value` (default `1e-12`); `Nkeep` caps the number
+kept globally across symmetry classes.
 
-Unlike `svd`, this path uses the direct split-space class SVD assembly and
-returns the bond convention requested for CGTSVD:
+With `randomize=true`, a positive `Nkeep` is required. Each symmetry class
+computes approximate leading singular pairs independently. The default
+`random_mode=:proportional` requests
+`min(dᵢ, ceil(Nkeep * (1 + random_tol) * dᵢ / sum(dⱼ)))` candidates per class,
+where `dᵢ` is the smaller matrix dimension. This can miss globally important
+values in a class receiving too few candidates. `random_mode=:per_class`
+requests `min(dᵢ, Nkeep)` per class, guaranteeing enough candidate slots for
+the global top `Nkeep`, subject to randomized approximation error. For
+unsymmetric input, request the `Nkeep` largest singular pairs directly.
+Full-rank requests use exact SVD; zero class matrices contribute no candidates.
 
-- `U` bond leg: outgoing `'-'`
-- `S` legs: incoming `'+'`, incoming `'+'`
-- `Vd` bond leg: outgoing `'-'`
+`random_tol` must be finite and positive (default `0.1`); it only affects
+proportional candidate allocation. `random_niter` is the nonnegative integer
+number of power iterations (default `2`), with QR at each iteration.
+`random_oversampling` is a nonnegative integer (default `10`): a class requesting
+`k` candidates uses a sketch of width `min(k + random_oversampling, m, n)`
+and returns only `k` pairs. It applies to both allocation modes and unsymmetric
+input; zero preserves the original sketch width.
+`random_rng` accepts an `AbstractRNG`; pass a freshly seeded RNG for repeatable
+results. Approximation quality depends on the candidate budget, oversampling,
+iterations, and RNG. All `random_*` options are ignored when `randomize=false`.
+
+With `get_lists=true`, lists are sorted by descending singular value and
+contain `(value, degeneracy, sector, index_within_sector)` entries. In randomized
+mode, only computed candidates appear in either list; uncomputed singular
+values are absent. Cutoff may return fewer than `Nkeep` values, without growing
+the candidate pool. Output bond conventions and list structure match exact SVD.
 """
-function LinearAlgebra.svd(q::TLArray{T, QD, N, RD},
+function LinearAlgebra.svd(q::AbstractTLArray{T, QD, N, RD},
                     left_legs,
                     left_tag::AbstractString = "svdL",
                     right_tag::AbstractString = "svdR";
                     cutoff::Float64 = 1e-12,
                     Nkeep::Union{Nothing, Int} = nothing,
-                    get_lists::Bool = false) where {T, QD, N, RD}
+                    get_lists::Bool = false,
+                    randomize::Bool = false, random_mode = :proportional,
+                    random_tol = 0.1, random_niter = 2, random_oversampling = 10,
+                    random_rng = Random.default_rng()) where {T, QD, N, RD}
     left_legs_ = Tuple(_normalize_svd_left_legs(left_legs, QD))
     return svd_std(q, left_legs_, left_tag, right_tag;
-                   cutoff=cutoff, Nkeep=Nkeep, get_lists=get_lists)
+                   cutoff=cutoff, Nkeep=Nkeep, get_lists=get_lists,
+                   randomize=randomize, random_mode=random_mode, random_tol=random_tol,
+                   random_niter=random_niter, random_oversampling=random_oversampling, random_rng=random_rng)
 end
 
-svd_cgtsvd(q::TLArray, args...; kwargs...) = svd(q, args...; kwargs...)
+"""
+    svd_cgtsvd(q, args...; kwargs...)
 
-function LinearAlgebra.svd(q::TLArray{T, QD, N, RD},
+Compatibility alias for Telum's symmetry-aware `svd`. `q` is an
+`AbstractTLArray`; positional `args` and keyword `kwargs` are forwarded
+unchanged to the matching `svd` method (including leg selection, tags, cutoff,
+and `Nkeep`, plus all randomized options). Returns that method's `SVDResult`, using the
+CGTSVD bond-leg convention. It does not mutate `q`.
+"""
+svd_cgtsvd(q::AbstractTLArray, args...; kwargs...) = svd(q, args...; kwargs...)
+
+"""
+    LinearAlgebra.svd(q, left_tag="svdL", right_tag="svdR";
+                      dir=nothing, itag=nothing, plev=nothing, lock=nothing,
+                      rev=false, random_oversampling=10, kwargs...)
+
+Select left legs by index metadata and forward to `svd(q, left_legs, ...)`.
+`rev` selects the complementary legs. At least one selector is required.
+All truncation, randomized SVD, and list options have the same semantics as
+the explicit-leg overload; the input is not mutated.
+"""
+function LinearAlgebra.svd(q::AbstractTLArray{T, QD, N, RD},
                     left_tag::AbstractString = "svdL",
                     right_tag::AbstractString = "svdR";
                     dir=nothing,
@@ -2048,13 +2347,17 @@ function LinearAlgebra.svd(q::TLArray{T, QD, N, RD},
                     rev::Bool=false,
                     cutoff::Float64=1e-12,
                     Nkeep::Union{Nothing, Int}=nothing,
-                    get_lists::Bool=false) where {T, QD, N, RD}
+                    get_lists::Bool=false,
+                    randomize::Bool=false, random_mode=:proportional,
+                    random_tol=0.1, random_niter=2, random_oversampling=10,
+                    random_rng=Random.default_rng()) where {T, QD, N, RD}
     left_legs = _select_svd_left_legs(q; dir=dir, itag=itag, plev=plev, lock=lock, rev=rev)
-    return svd(q, left_legs, left_tag, right_tag; cutoff=cutoff, Nkeep=Nkeep, get_lists=get_lists)
+    return svd(q, left_legs, left_tag, right_tag; cutoff=cutoff, Nkeep=Nkeep, get_lists=get_lists,
+               randomize=randomize, random_mode=random_mode, random_tol=random_tol,
+               random_niter=random_niter, random_oversampling=random_oversampling, random_rng=random_rng)
 end
 
-LinearAlgebra.svd(q::TLArrayView, args...; kwargs...) =
-    svd(_eager_tlarray(q), args...; kwargs...)
+
 
 function _normalize_svd_left_legs(left_legs, rank::Int)
     legs = collect(Int, left_legs)
@@ -2065,14 +2368,14 @@ function _normalize_svd_left_legs(left_legs, rank::Int)
     return collect(sort(legs))
 end
 
-function _select_svd_left_legs(q::TLArray; dir=nothing, itag=nothing, plev=nothing,
+function _select_svd_left_legs(q::AbstractTLArray; dir=nothing, itag=nothing, plev=nothing,
                                lock=nothing, rev::Bool=false)
     if isnothing(dir) && isnothing(itag) && isnothing(plev) && isnothing(lock)
         throw(ArgumentError("keyword-based svd requires at least one of dir, itag, plev, or lock"))
     end
 
     legs = findlegs(q; dir=dir, itag=itag, plev=plev, lock=lock, rev=rev)
-    rank = length(q.inds)
+    rank = length(inds(q))
     1 <= length(legs) <= rank - 1 || throw(ArgumentError("keyword-based svd selected legs $legs, but the number of selected legs must be between 1 and $(rank - 1)"))
     return sort(legs)
 end

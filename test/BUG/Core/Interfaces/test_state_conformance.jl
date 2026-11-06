@@ -15,7 +15,7 @@ function mps_sum(a::SymMPS, b::SymMPS)
     ts = Any[]
     for i = 1:L
         dims = i == 1 ? (3,) : (i == L ? (1,) : (1, 3))
-        push!(ts, to_concrete(oplus(a[i], b[i], dims)))
+        push!(ts, TLArray(oplus(a[i], b[i], dims)))
     end
     return canonical!(canonical!(SymMPS(ts, L), 1), L)
 end

@@ -120,7 +120,7 @@ end
 `nothing` or throws `ArgumentError`."
 function _check_gate(frame::BondFrame, gate)
     tl, tr = frame.site_l.itags, frame.site_r.itags
-    (gate.inds[1].itags == tl && gate.inds[2].itags == tr) || throw(
+    (Telum.inds(gate)[1].itags == tl && Telum.inds(gate)[2].itags == tr) || throw(
         ArgumentError(
             "gate is tagged for ($(gate.inds[1].itags), $(gate.inds[2].itags)), " *
             "bond frame carries ($tl, $tr)",

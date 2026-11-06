@@ -1,6 +1,16 @@
 # N: the number of symmetries
 # QT: the concrete qlabel type for one sector
 # PS: the product symmetry type
+"""
+Internal immutable description of one tensor leg used by identity/1j
+construction. It packages q-label space data, index metadata, and symmetry
+product without retaining a source tensor.
+
+# Fields
+
+- `ind`: index metadata for the source logical leg.
+- `splist`: copied q-label/multiplicity space list used to build the identity leg.
+"""
 struct leginfo{N, QT<:Tuple, PS<:ProductSymm}
     ind::TLIndex
     splist::Vector{Tuple{QT, Int}}
@@ -36,6 +46,16 @@ Base.propertynames(::leginfo, private::Bool=false) =
 
 # Variadic entry point: accepts multiple (TLArray, Int) pairs as positional arguments
 # Keyword arguments control the fused output leg's TLIndex properties
+"""
+    getIdentity((q1, leg1), (q2, leg2), ...; itag="", plev=0, lock=false)
+
+Construct the identity tensor for compatible input pairs `(qi, legi)`, where
+each `legi` is a 1-based logical leg of `qi`. The selected spaces are fused into
+the identity's output leg. `itag`, `plev`, and `lock` set that output `TLIndex`;
+the input leg metadata/spaces determine the remaining legs. All selected legs
+must be symmetry-compatible or an `ArgumentError` is thrown. The result is a
+new concrete identity tensor and does not modify any input tensor.
+"""
 function getIdentity(legs::Vararg{Tuple{AbstractTLArray, Int}};
                      itag::AbstractString="", plev::Int=0, lock::Int=0)
     leginfos = Tuple(leginfo(q, i) for (q, i) in legs)

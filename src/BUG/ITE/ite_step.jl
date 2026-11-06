@@ -12,7 +12,7 @@ function _ite_normalise!(psi::SymMPS)
             "imaginary-time step produced a state of norm $state_norm -- not representable",
         ),
     )
-    psi[psi.center] = to_concrete((1.0 / state_norm) * psi[psi.center])
+    psi[psi.center] = TLArray((1.0 / state_norm) * psi[psi.center])
     return state_norm
 end
 

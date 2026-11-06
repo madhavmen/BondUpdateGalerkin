@@ -98,7 +98,7 @@ function field_mpo_from_terms(h::XXZChain, hz::Vector{Float64})
             i < L &&
                 (mat[1, 1+t] = _mpo_block(terms[t].left, i, tl, tr, _side(terms[t].left, :left)))
             i > 1 && (
-                mat[1+t, n+2] = to_concrete(
+                mat[1+t, n+2] = TLArray(
                     terms[t].coeff *
                     _mpo_block(terms[t].right, i, tl, tr, _side(terms[t].right, :right)),
                 )
@@ -107,13 +107,13 @@ function field_mpo_from_terms(h::XXZChain, hz::Vector{Float64})
         # The on-site field, at EVERY site including both boundaries -- see the docstring.
         # A zero field is written as an explicit zero block rather than left unset: `oplus`
         # infers zero blocks from the row/column spaces, and a hole in this column has none.
-        mat[1, n+2] = to_concrete(hz[i] * _mpo_block(Sz, i, tl, tr, :none))
+        mat[1, n+2] = TLArray(hz[i] * _mpo_block(Sz, i, tl, tr, :none))
         if i == 1
             mat = reshape(mat[1, :], 1, n + 2)           # the `id` row only
         elseif i == L
             mat = reshape(mat[:, n+2], n + 2, 1)       # the `done` column only
         end
-        push!(Ws, to_concrete(oplus(mat, (1, 4))))
+        push!(Ws, TLArray(oplus(mat, (1, 4))))
     end
     return MPO(Ws)
 end
@@ -159,7 +159,7 @@ function hubbard_aa_mpo(
     M = 2L
     # Vertices come from `xxz_chain` (never a hand-built `op'`, whose leg order is wrong under `:none`),
     # and the hop is `pair_mpo`'s transport block with σ^z as the Jordan-Wigner string.
-    sigz = to_concrete(2.0 * q.Sz)                 # σ^z, the Jordan-Wigner string
+    sigz = TLArray(2.0 * q.Sz)                 # σ^z, the Jordan-Wigner string
 
     Jhop = zeros(Float64, M, M)
     for m = 1:(M-2)
@@ -185,7 +185,7 @@ function hubbard_aa_mpo(
         h[2i-1] = pot
         h[2i] = pot
     end
-    field = [to_concrete(h[m] * _mpo_block(q.Sz, m, "W,$(m - 1)", "W,$m", :none)) for m = 1:M]
+    field = [TLArray(h[m] * _mpo_block(q.Sz, m, "W,$(m - 1)", "W,$m", :none)) for m = 1:M]
 
     # `xxz_chain(J_spin)` gives `S⁺S⁻` the coefficient `J_spin/2` and the fermion hop is `+J σ^z S⁺S⁻`,
     # so `J_spin = 2J`.

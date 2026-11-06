@@ -1,3 +1,14 @@
+"""
+    _reorder_perm_part(qlabels, cgp_part) -> Vector{Int}
+
+Compute the stable reorder inside one same-direction CGT leg group.
+
+`qlabels` are already in stored CGT order for either all incoming or all
+outgoing legs. `cgp_part` maps those stored positions back to physical-leg
+numbers. Equal-qlabel runs are reordered by physical-leg order, while different
+qlabel runs keep their existing sorted order. The returned vector uses
+`perm[new_position] = old_position` convention within the group.
+"""
 function _reorder_perm_part(qlabels::NTuple{N, NTuple{NZ, Int}},
     cgp_part::NTuple{N, Int}) where {NZ, N}
 
@@ -14,6 +25,17 @@ end
 
 # Compute the reordering permutation for stored positions to satisfy the order constraint.
 # Returns reorder where reorder[new_stored_pos] = old_stored_pos.
+"""
+    _compute_reorder_permutation(qlabels, cgp, legdir) -> Tuple
+
+Compute the CGT stored-leg reorder required after a visible tensor permutation.
+
+`qlabels` are stored-leg qlabels, `cgp[physical_leg] = stored_pos`, and
+`legdir == (m, k)` gives the incoming and outgoing stored-leg counts. The result
+uses `reorder[new_stored_pos] = old_stored_pos`. Only legs with the same
+direction and qlabel may be reordered, preserving the CGT/TLArray tie rule that
+same-qlabel legs follow physical leg order.
+"""
 function _compute_reorder_permutation(qlabels::NTuple{QD, NTuple{NZ, Int}}, 
     cgp::NTuple{QD, Int}, 
     legdir::Tuple{Int, Int}) where {NZ, QD}
@@ -37,6 +59,18 @@ function _compute_reorder_permutation(qlabels::NTuple{QD, NTuple{NZ, Int}},
     return reorder
 end
 
+"""
+    _permuted_sector_wmat(symm_type, qlabels, wmat, cgp, legdir, perm)
+
+Transform one sector w-matrix under a visible physical-leg permutation.
+
+`symm_type` selects the non-Abelian symmetry, `qlabels` and `legdir` describe
+the stored CGT leg order, `wmat` is the current outer-multiplicity basis matrix,
+`cgp` maps visible physical legs to stored CGT positions, and `perm` is the
+requested visible permutation. When the stored CGT order changes only by an
+allowed same-qlabel tie reorder, the corresponding `CGTperm` matrix is applied
+to move `wmat` into the new OM basis.
+"""
 function _permuted_sector_wmat(symm_type,
                                qlabels::NTuple{QD, NTuple{NZ, Int}},
                                wmat::AbstractMatrix{Float64},
@@ -68,6 +102,16 @@ function _permuted_sector_wmat(symm_type,
     return cgtperm_obj.perm_arr * wmat
 end
 
+"""
+    _permute_sector_wmat(q, sector_index::Int, perm::NTuple, n)
+
+Return the `n`th symmetry w-matrix for one sector after visible leg permutation.
+
+`q` supplies the sector metadata and original w-matrix, `sector_index` selects
+the sector slot, and `perm` is the requested visible physical-leg permutation.
+The `n::Int` and `Val{n}` methods share the same transformation rule but use the
+most type-stable symmetry lookup available to the caller.
+"""
 function _permute_sector_wmat(q::AbstractTLArray{T, QD, N, RD}, sector_index::Int,
                               perm::NTuple{QD, Int}, n::Int, symm) where {T, QD, N, RD}
     qlabels, cgp, legdir = _sector_cgt_metadata(q, sector_index, n)
@@ -83,69 +127,21 @@ function _permute_sector_wmat(q::AbstractTLArray{T, QD, N, RD, QT, PS}, sector_i
                                  cgp, legdir, perm)
 end
 
-function _permute_sector_rmt(q::TLArray{T, QD, N, RD}, sector_index::Int,
-                             perm::NTuple{QD, Int}) where {T, QD, N, RD}
-    rmt_perm = (perm..., ntuple(n -> QD + n, N)...)
-    return permutedims(sector_rmt(q, sector_index), rmt_perm)
-end
-
-function _permute_wmat_storage(q::TLArray{T, QD, N, RD, QT, PS, M},
-                               perm::NTuple{QD, Int},
-                               symm) where {T, QD, N, RD, QT, PS, M}
-    out_data = copy(q.wmatdata)
-    out_info = copy(q.wmatinfo)
-    nonabelian_indices = nonabelian_symmetry_indices(PS)
-    for slot in 1:M
-        n = nonabelian_indices[slot]
-        for sector_index in sector_slots(q)
-            _wmat_info_present(q.wmatinfo[sector_index][slot]) || continue
-            _copy_wmat_to_storage!(out_data, out_info, sector_index, slot,
-                                   _permute_sector_wmat(q, sector_index, perm, n, symm))
-        end
-    end
-    return out_data, out_info
-end
-
-function _permute_sector_rmts(q::TLArray{T, QD, N, RD}, perm::NTuple{QD, Int}) where {T, QD, N, RD}
-    out = similar(q.RMTs, sector_count(q))
-    for sector_index in sector_slots(q)
-        q.iszero[sector_index] && continue
-        out[sector_index] = _permute_sector_rmt(q, sector_index, perm)
-    end
-    return out
-end
-
 """
-    permutedims(q::TLArray, perm)
+    permutedims(q::AbstractTLArray, perm) -> AbstractTLArray
 
-Permute the legs of a TLArray object.
+Return a lazy physical-leg permutation of `q`.
 
-# Arguments
-- `q`: TLArray to permute
-- `perm`: permutation (tuple or vector) of length equal to the rank of q.
-          `perm[new_pos] = old_pos` means the leg at `old_pos` moves to `new_pos`.
+`perm` uses Julia's `permutedims` convention: output leg `i` reads input leg
+`perm[i]`. The returned array shares the original stored indices, spaces, and
+RMT payloads, and records the new logical-to-stored leg mapping. Accordingly,
+`inds(q)`, `spaces(q)`, and `logical_qlabels(q)` are observed in the
+permuted logical-leg order. The q-label tuples are rebuilt lazily on access;
+their stored tuples remain in the original order.
 
-# Returns
-New TLArray with permuted legs.
+W-matrices for present sector/symmetry slots are transformed when the permuted
+view is created; absent slots remain absent. The RMT payloads are not physically
+permuted until a consumer requests sector payload data. The input `q` is not
+modified.
 """
-function _materialized_permutedims(q::TLArray{T, QD, N, RD}, perm) where {T, QD, N, RD}
-    perm = Tuple(perm)
-    @assert length(perm) == QD "permutation length $(length(perm)) != TLArray rank $QD"
-    @assert sort(collect(perm)) == collect(1:QD) "perm must be a valid permutation of 1:$QD"
-    
-    # 1. Permute TLIndex tuple
-    new_inds = Tuple(q.inds[perm[l]] for l in 1:QD)
-    
-    # 2. Permute spaces tuple
-    new_spaces = Tuple(q.spaces[perm[l]] for l in 1:QD)
-    
-    # 3 & 4. Permute each sector (CGT metadata and RMT)
-    new_qlabels = [ntuple(l -> sector[perm[l]], Val(QD)) for sector in q.qlabels]
-    new_wmatdata, new_wmatinfo = _permute_wmat_storage(q, perm, symm(q))
-    new_RMTs = _permute_sector_rmts(q, perm)
-    
-    # 5. Assemble and return new TLArray with precomputed spaces
-    return TLArray(symm(q), new_qlabels, new_wmatdata, new_wmatinfo, new_RMTs, new_inds, new_spaces)
-end
-
 Base.permutedims(q::AbstractTLArray, perm) = _view_permutedims(q, perm)

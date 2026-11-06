@@ -18,8 +18,8 @@ function ising_bond_gates(psi::SymMPS; J::Float64 = 1.0, h::Float64 = 1.0)
     L >= 2 || throw(ArgumentError("ising_bond_gates needs at least two sites, got $L"))
     return Any[
         ising_bond_gate(
-            psi[i].inds[2],
-            psi[i+1].inds[2];
+            Telum.inds(psi[i])[2],
+            Telum.inds(psi[i+1])[2];
             J = J,
             hl = h / (i == 1 ? 1 : 2),
             hr = h / (i == L - 1 ? 1 : 2),
@@ -40,18 +40,18 @@ function ising_bond_gate(site_l, site_r; J::Float64 = 1.0, hl::Float64 = 0.5, hr
     tl == tr && throw(ArgumentError("the two sites of a bond need distinct itags, both are '$tl'"))
     q = ising_local_space()
 
-    pair(A, B) = to_concrete(
+    pair(A, B) = TLArray(
         permutedims(contract(_retag_site(A, tl), (3,), _retag_site(B, tr)', (3,)), (1, 4, 2, 3)),
     )
-    outer(A, B) = to_concrete(
+    outer(A, B) = TLArray(
         permutedims(contract(_retag_site(A, tl), (), _retag_site(B, tr), ()), (1, 3, 2, 4)),
     )
 
     # Under :Z2 the flip is rank-3 (its op leg carries the charge), so Z⊗Z is the op-leg
     # contraction; under :none it is a plain matrix and the same operator is an outer product.
-    zz = length(q.Z.inds) == 3 ? pair(q.Z, q.Z) : outer(q.Z, q.Z)
+    zz = length(Telum.inds(q.Z)) == 3 ? pair(q.Z, q.Z) : outer(q.Z, q.Z)
     G = (-J) * zz + (-hl) * outer(q.X, q.I) + (-hr) * outer(q.I, q.X)
-    return to_concrete(G * (1.0 + 0.0im))
+    return TLArray(G * (1.0 + 0.0im))
 end
 
 # ── states and observables ───────────────────────────────────────────────────────────
@@ -79,21 +79,21 @@ function ising_product_state(dirs::Vector{Symbol})
     tensors = Any[]
     prev = (getvac(q.I, ("L,0", "L,1")), 2)
     for i = 1:L
-        F = to_concrete(getIdentity(prev, (q.I, 1); itag = "L,$(i + 1)"))
-        F = to_concrete(setitag(F, 2, "S,$i"))
+        F = TLArray(getIdentity(prev, (q.I, 1); itag = "L,$(i + 1)"))
+        F = TLArray(setitag(F, 2, "S,$i"))
         A = if z2
             target = dirs[i] === :plus ? _Z2_Q0 : _Z2_Q1
-            B = to_concrete(
+            B = TLArray(
                 getsub(F, 2, s -> s == target ? Colon() : nothing; preserve_space = true),
             )
-            present = Set(ql[3] for ql in B.qlabels)
-            to_concrete(getsub(B, 3, s -> s in present ? Colon() : nothing))
+            present = Set(ql[3] for ql in Telum.logical_qlabels(B))
+            TLArray(getsub(B, 3, s -> s in present ? Colon() : nothing))
         else
             # `_z2_diag_op`'s ordering is (|+>, |->), and `_getLocalSpace_no_symmetry` keeps it,
             # so index 1 is |+> and 2 is |->.
-            to_concrete(getsub(F, 3, s -> dirs[i] === :plus ? 1 : 2))
+            TLArray(getsub(F, 3, s -> dirs[i] === :plus ? 1 : 2))
         end
-        A = to_concrete(A * (1.0 + 0.0im))
+        A = TLArray(A * (1.0 + 0.0im))
         push!(tensors, A)
         prev = (A, 3)
     end

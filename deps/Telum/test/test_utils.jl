@@ -4,6 +4,11 @@ using Test
 const change_dir = Telum.change_dir
 ⊗(a, b) = kron(b, a)
 
+function _test_sector_rmt(q::AbstractTLArray, sector::Int)
+    rmt, scale = Telum.sector_rmt(q, sector)
+    scale == one(typeof(scale)) && return rmt
+    return scale .* rmt
+end
 
 
 # ─── _leg_kron ────────────────────────────────────────────────────────────────
@@ -98,7 +103,7 @@ function get_offset(symm::Tuple, splist::Vector)
     for (qlabels, RMTd) in splist
         irep_dim = prod(
             isabelian(symm[n]) ? 1 :
-            dimension(getNsave_irep(symm[n], BigInt, qlabels[n]))
+            dimension(LurCGT.getNsave_irep(symm[n], BigInt, qlabels[n]))
             for n in 1:N)
         sz = irep_dim * RMTd
         sector_size[qlabels] = sz
@@ -118,13 +123,13 @@ end
 
 # ─── to_sparse_array ───────────────────────────────────────────────────────────
 # Convert a TLArray to a sparse array using its spaces field for offset computation.
-function to_sparse_array(q::TLArray{T, QD, N, RD},
+function _test_to_sparse_array(q::TLArray{T, QD, N, RD},
     ::Type{FT}) where {T, QD, N, RD, FT}
 
     symmetries = symm(q)
     # ── Step 1: offset map ──────────────────────────────────────────────────
     # Use spaces field directly for each leg's offset computation.
-    leg_info = [get_offset(symmetries, q.spaces[l]) for l in 1:QD]
+    leg_info = [get_offset(symmetries, Telum.spaces(q)[l]) for l in 1:QD]
     leg_offsets = [li[1] for li in leg_info]
     leg_total = [li[2] for li in leg_info]
 
@@ -205,7 +210,7 @@ function to_sparse_array(q::TLArray{T, QD, N, RD},
         # RMT shape: (s_1, ..., s_QD, M_1, ..., M_N)  →  (s_1, ..., s_QD, chi)
         # Julia column-major reshape: M_1 varies fastest, consistent with how
         # _leg_kron built up the bond dimension in cgt_block.
-        rmt = Array(Telum.sector_rmt(q, sector_index))
+        rmt = Array(_test_sector_rmt(q, sector_index))
         rmt_merged = reshape(rmt, size(rmt)[1:QD]..., chi)
 
         # ── Step 3b: Σ_i kron(CGT[:,...,:,i], RMT[:,...,:,i]) ────────────────
@@ -225,11 +230,8 @@ function to_sparse_array(q::TLArray{T, QD, N, RD},
     return result
 end
 
-to_sparse_array(q::TLArray) = to_sparse_array(q, eltype(q))
+_test_to_sparse_array(q::TLArray) = _test_to_sparse_array(q, eltype(q))
 
-to_sparse_array(q::TLArrayView, ::Type{FT} = Float64) where {FT} =
-    to_sparse_array(Telum._eager_tlarray(q), FT)
-to_sparse_array(q::TLArrayView) = to_sparse_array(q, eltype(q))
 
 function _test_contract_matches_sparse_and_preserves_inputs(a::TLArray,
                                                             legs_a::Tuple,
@@ -352,8 +354,10 @@ function test_sum_sparse_equivalence_mixed_rmt_eltypes()
 
     complex_view = permutedims(complex_dense, (2, 1))
     scaled_complex_view = (1.5 - 0.5im) * complex_dense
-    @test complex_view isa TLArrayView
-    @test scaled_complex_view isa TLArrayView
+    @test complex_view isa TLArray
+    @test complex_view.perm == (2, 1)
+    @test scaled_complex_view isa TLArray
+    @test scaled_complex_view.scale == 1.5 - 0.5im
 
     result_tuple = sum((real_dense, complex_view, scaled_complex_view, complex_diag))
     reference_tuple = Array(to_sparse_array(real_dense, ComplexF64)) +
@@ -392,11 +396,11 @@ function test_sum_sparse_equivalence_mixed_rmt_eltypes()
     @test Array(to_sparse_array(result_multi_sector, ComplexF64)) ≈ reference_multi_sector
     @test eltype(result_multi_sector) == ComplexF64
     @test all(rmt -> rmt isa Array{ComplexF64, 3}, result_multi_sector.RMTs)
-    @test Set(result_multi_sector.qlabels) == Set([(q0, q0), (q1, q1), (q2, q2)])
+    @test Set(Telum.logical_qlabels(result_multi_sector)) == Set([(q0, q0), (q1, q1), (q2, q2)])
 end
 
 function test_contract_tlarrayview_inputs()
-    @testset "contract TLArrayView inputs" begin
+    @testset "contract embedded-state inputs" begin
         symm = (U1,)
         qlabels = [(((0,),), ((0,),))]
         wmatdata = Float64[]
@@ -412,11 +416,14 @@ function test_contract_tlarrayview_inputs()
 
         left_view = 2.0 * left
         right_view = (1.5 - 0.5im) * right
-        @test left_view isa TLArrayView
-        @test right_view isa TLArrayView
+        @test left_view isa TLArray
+        @test left_view.scale == 2.0
+        @test right_view isa TLArray
+        @test right_view.scale == 1.5 - 0.5im
 
-        # Compare view*dense and view*view contraction against the sparse-array
-        # reference so scalar view materialization and eltype promotion are both covered.
+        # Compare embedded-state*dense and embedded-state*embedded-state
+        # contraction against the sparse-array reference so scalar materialization
+        # and eltype promotion are both covered.
         for (a, b) in ((left_view, right), (left_view, right_view))
             result = a * b
             reference = Array(contract_sparse(to_sparse_array(a, ComplexF64),
@@ -440,30 +447,27 @@ function test_FAcont(option::LocalSpaceOptions)
 end
 
 function _test_tlarrays_same_sector_storage(a::TLArray, b::TLArray)
-    @test a.qlabels == b.qlabels
+    @test Telum.stored_qlabels(a) == Telum.stored_qlabels(b)
     @test a.iszero == b.iszero
     @test a.isdefined == b.isdefined
-    @test a.spaces == b.spaces
+    @test Telum.spaces(a) == Telum.spaces(b)
     for sector_index in intersect(Telum.sector_slots(a), Telum.sector_slots(b))
         (a.iszero[sector_index] || b.iszero[sector_index]) && continue
-        @test Array(Telum.sector_rmt(a, sector_index)) ≈ Array(Telum.sector_rmt(b, sector_index))
+        @test Array(_test_sector_rmt(a, sector_index)) ≈ Array(_test_sector_rmt(b, sector_index))
         for n in 1:length(symm(a))
             @test Telum.sector_wmat(a, sector_index, n) ≈ Telum.sector_wmat(b, sector_index, n)
         end
     end
 end
 
-function _test_tlarrays_same_sector_storage(a::AbstractTLArray, b::AbstractTLArray)
-    return _test_tlarrays_same_sector_storage(copy(a), copy(b))
-end
 
 function _test_tlarrays_same_sector_payloads(a::TLArray, b::TLArray)
-    @test a.qlabels == b.qlabels
+    @test Telum.stored_qlabels(a) == Telum.stored_qlabels(b)
     @test a.iszero == b.iszero
     @test a.isdefined == b.isdefined
     for sector_index in intersect(Telum.sector_slots(a), Telum.sector_slots(b))
         (a.iszero[sector_index] || b.iszero[sector_index]) && continue
-        @test Array(Telum.sector_rmt(a, sector_index)) ≈ Array(Telum.sector_rmt(b, sector_index))
+        @test Array(_test_sector_rmt(a, sector_index)) ≈ Array(_test_sector_rmt(b, sector_index))
         for n in 1:length(symm(a))
             @test Telum.sector_wmat(a, sector_index, n) ≈ Telum.sector_wmat(b, sector_index, n)
         end
@@ -480,19 +484,19 @@ function test_getIdentity_direct_contract(option::LocalSpaceOptions)
     a_pairs = getIdentity((qi, 1); itag="fused")
     a = getIdentity(qi, 1; itag="fused")
 
-    @test a.inds == a_pairs.inds
-    @test a.spaces == a_pairs.spaces
+    @test Telum.inds(a) == Telum.inds(a_pairs)
+    @test Telum.spaces(a) == Telum.spaces(a_pairs)
     _test_tlarrays_same_sector_storage(a, a_pairs)
-    @test a.inds[1] == TLIndex(qi.inds[1].itags, '-', qi.inds[1].plev, qi.inds[1].lock, qi.inds[1].dual)
-    @test a.spaces[1] == qi.spaces[1]
-    @test a.inds[2] == TLIndex("fused", '-')
+    @test Telum.inds(a)[1] == TLIndex(Telum.inds(qi)[1].itag, '-', Telum.inds(qi)[1].plev, Telum.inds(qi)[1].lock, Telum.inds(qi)[1].dual)
+    @test Telum.spaces(a)[1] == Telum.spaces(qi)[1]
+    @test Telum.inds(a)[2] == TLIndex("fused", '-')
 
     ct = qi * a
-    @test length(ct.inds) == 2
-    @test ct.inds[1] == qi.inds[2]
-    @test ct.inds[2] == TLIndex("fused", '-')
-    @test ct.spaces[1] == qi.spaces[2]
-    @test !isempty(_test_defined_sector_indices(ct))
+    @test length(Telum.inds(ct)) == 2
+    @test Telum.inds(ct)[1] == Telum.inds(qi)[2]
+    @test Telum.inds(ct)[2] == TLIndex("fused", '-')
+    @test Telum.spaces(ct)[1] == Telum.spaces(qi)[2]
+    @test !isempty(_test_defined_sector_indices(convert(TLArray, ct)))
 end
 
 function test_1jpair(option::LocalSpaceOptions)
@@ -528,8 +532,8 @@ function test_get1jtensor_and_legflip_keywords(option::LocalSpaceOptions)
     q = q0.F
 
     function test_same_tlarray_structure(q1::AbstractTLArray, q2::AbstractTLArray)
-        @test q1.inds == q2.inds
-        @test q1.spaces == q2.spaces
+        @test Telum.inds(q1) == Telum.inds(q2)
+        @test Telum.spaces(q1) == Telum.spaces(q2)
         _test_tlarrays_same_sector_storage(q1, q2)
     end
 
@@ -544,13 +548,13 @@ function test_get1jtensor_and_legflip_keywords(option::LocalSpaceOptions)
     flipped_kw = legflip(q; itag="site2")
     test_same_tlarray_structure(flipped_kw, flipped_explicit)
 
-    @test flipped_explicit.inds[1] == q.inds[1]
-    @test flipped_explicit.inds[2] == change_dir(Telum.change_dual(q.inds[2]))
-    @test flipped_explicit.inds[3] == q.inds[3]
+    @test Telum.inds(flipped_explicit)[1] == Telum.inds(q)[1]
+    @test Telum.inds(flipped_explicit)[2] == change_dir(Telum.change_dual(Telum.inds(q)[2]))
+    @test Telum.inds(flipped_explicit)[3] == Telum.inds(q)[3]
 
     roundtrip = legflip(flipped_explicit, 2)
-    @test roundtrip.inds == q.inds
-    @test roundtrip.spaces == q.spaces
+    @test Telum.inds(roundtrip) == Telum.inds(q)
+    @test Telum.spaces(roundtrip) == Telum.spaces(q)
 
     flipped_multi_tuple = legflip(q, (2, 3))
     flipped_multi_vector = legflip(q, [2, 3])
@@ -559,17 +563,83 @@ function test_get1jtensor_and_legflip_keywords(option::LocalSpaceOptions)
     test_same_tlarray_structure(flipped_multi_vector, flipped_multi_tuple)
     test_same_tlarray_structure(flipped_multi_kw, flipped_multi_tuple)
 
-    @test flipped_multi_tuple.inds[1] == q.inds[1]
-    @test flipped_multi_tuple.inds[2] == change_dir(Telum.change_dual(q.inds[2]))
-    @test flipped_multi_tuple.inds[3] == change_dir(Telum.change_dual(q.inds[3]))
+    @test Telum.inds(flipped_multi_tuple)[1] == Telum.inds(q)[1]
+    @test Telum.inds(flipped_multi_tuple)[2] == change_dir(Telum.change_dual(Telum.inds(q)[2]))
+    @test Telum.inds(flipped_multi_tuple)[3] == change_dir(Telum.change_dual(Telum.inds(q)[3]))
 
     roundtrip_multi = legflip(flipped_multi_tuple, (2, 3))
-    @test roundtrip_multi.inds == q.inds
-    @test roundtrip_multi.spaces == q.spaces
+    @test Telum.inds(roundtrip_multi) == Telum.inds(q)
+    @test Telum.spaces(roundtrip_multi) == Telum.spaces(q)
 
     @test_throws ArgumentError legflip(q, Int[])
     @test_throws ArgumentError legflip(q, (2, 2))
     @test_throws ArgumentError legflip(q; itag="missing")
+end
+
+function _legflip_general_reference(q::AbstractTLArray, leg::Int)
+    j = get1jtensor(q, leg)
+    q_flip = contract(q, (leg,), j, (1,); reduce_lock=false)
+    QD = ndims(q)
+    perm = (ntuple(i -> i, leg - 1)..., QD,
+            ntuple(i -> leg - 1 + i, QD - leg)...)
+    return permutedims(q_flip, perm)
+end
+
+function _test_legflip_values(q::AbstractTLArray)
+    if isempty(symm(q))
+        sector = first(Telum.sector_slots(q))
+        identity_perm = ntuple(identity, Val(ndims(q)))
+        rmt, scale = Telum.sector_rmt_permuted(q, sector, identity_perm)
+        return Array(scale .* rmt)
+    end
+    return Array(to_sparse_array(q))
+end
+
+function test_abelian_legflip_views()
+    u1_space = getLocalSpace(FermionOptions(U1), ("left", "right", "op"))
+    no_symm_data = reshape(ComplexF64.(1:24) .+ im .* ComplexF64.(24:-1:1), 2, 3, 4)
+    no_symm = TLArray(no_symm_data;
+                      itag=("dense1", "dense2", "dense3"),
+                      dir=('+', '-', '+'))
+
+    sources = (
+        (u1_space.F, 2),
+        (conj(u1_space.F), 2),
+        (2.5 * u1_space.F, 3),
+        (permutedims(u1_space.F, (3, 1, 2)), 1),
+        (permutedims(1.5 * conj(u1_space.F), (2, 3, 1)), 3),
+        (no_symm, 2),
+        (conj(no_symm), 1),
+        (permutedims(2.0 * conj(no_symm), (3, 1, 2)), 1),
+    )
+
+    for (source, leg) in sources
+        source_before = _test_legflip_values(source)
+        flipped = legflip(source, leg)
+        if isempty(symm(source))
+            expected_inds = ntuple(l -> l == leg ?
+                change_dir(Telum.change_dual(Telum.inds(source)[l])) : Telum.inds(source)[l],
+                Val(ndims(source)))
+            @test Telum.inds(flipped) == expected_inds
+            @test Telum.spaces(flipped) == Telum.spaces(source)
+            @test Telum.logical_qlabels(flipped) == Telum.logical_qlabels(source)
+            @test _test_legflip_values(flipped) ≈ source_before
+        else
+            reference = _legflip_general_reference(source, leg)
+            @test Telum.inds(flipped) == Telum.inds(reference)
+            @test Telum.spaces(flipped) == Telum.spaces(reference)
+            @test sort(Telum.logical_qlabels(flipped)) == sort(Telum.logical_qlabels(reference))
+            @test _test_legflip_values(flipped) ≈ _test_legflip_values(reference)
+        end
+        @test _test_legflip_values(source) ≈ source_before
+        @test flipped.conj == source.conj
+        @test flipped.scale == source.scale
+        @test flipped.perm == source.perm
+        for sector in Telum.sector_slots(source)
+            source.isdefined[sector] || continue
+            @test flipped.RMTs[sector] === source.RMTs[sector]
+        end
+    end
 end
 
 function test_contract_verify_legs_checks_dual(option::LocalSpaceOptions)
@@ -614,8 +684,8 @@ function test_conj(option::LocalSpaceOptions)
         ("ct", ct),
     ]
 
-    zero_qlabels = copy(q.F.qlabels)
-    push!(zero_qlabels, first(q.F.qlabels))
+    zero_qlabels = copy(Telum.stored_qlabels(q.F))
+    push!(zero_qlabels, first(Telum.stored_qlabels(q.F)))
     zero_wmatdata = copy(q.F.wmatdata)
     zero_wmatinfo = copy(q.F.wmatinfo)
     push!(zero_wmatinfo, Telum._empty_wmat_info(Val(length(q.F.wmatinfo[1]))))
@@ -625,7 +695,7 @@ function test_conj(option::LocalSpaceOptions)
         zero_RMTs[sector_index] = q.F.RMTs[sector_index]
     end
     q_with_zero_sector = TLArray(symm(q.F), zero_qlabels, zero_wmatdata, zero_wmatinfo, zero_RMTs,
-                                 q.F.inds, q.F.spaces)
+                                 Telum.inds(q.F), Telum.spaces(q.F))
     qzc = conj(q_with_zero_sector)
     @test qzc.iszero[end]
     @test !isassigned(qzc.RMTs, length(qzc.RMTs))
@@ -732,6 +802,26 @@ function test_svd_diag_rmt()
     end
 end
 
+function _test_qr_reconstructs(q::AbstractTLArray, left_legs; tol=1e-9)
+    result = qr(q, left_legs)
+    rec = result.Q * result.R
+
+    @test norm(q - rec) / max(norm(q), 1.0) < tol
+
+    Qiso_work = result.Q
+    for leg in 1:(ndims(Qiso_work) - 1)
+        Qiso_work = additag(Qiso_work, leg, "__test_qr_Q_$leg")
+    end
+    Qiso = Qiso_work' * lock(Qiso_work, ndims(Qiso_work))
+    @test norm(Qiso - 1) < tol
+
+    @test all(i -> !(result.Q.isdefined[i] && result.Q.iszero[i]), Telum.sector_slots(result.Q))
+    @test all(i -> !(result.R.isdefined[i] && result.R.iszero[i]), Telum.sector_slots(result.R))
+    @test length(unique(typeof(result.Q.RMTs[i]) for i in Telum.sector_slots(result.Q) if !result.Q.iszero[i])) <= 1
+    @test length(unique(typeof(result.R.RMTs[i]) for i in Telum.sector_slots(result.R) if !result.R.iszero[i])) <= 1
+    return result
+end
+
 function _test_multi_sector_matrix_tlarray(matrices::AbstractVector{<:AbstractMatrix{T}};
                                            qlabels=[((i - 1,),) for i in eachindex(matrices)],
                                            tags=("phys", "phys")) where {T}
@@ -788,7 +878,7 @@ function test_eigen_multi_sector()
             Matrix(Symmetric(randn(5, 5))),
             Matrix(Symmetric(randn(10, 10))),
         ]
-        hermitian_q = _test_multi_sector_matrix_tlarray(hermitian_blocks)
+        hermitian_q = _test_multi_sector_matrix_tlarray(hermitian_block)
         hermitian_result = _test_eigen_assert_reconstructs(hermitian_q; hermitian=true)
         @test _test_eigen_expanded_eigenvalues(hermitian_result) ≈
               _test_eigen_dense_eigenvalues(hermitian_q; hermitian=true) atol=1e-10 rtol=1e-10
@@ -801,7 +891,7 @@ function test_eigen_multi_sector()
         complex_blocks[1][2, 1] -= 0.25 + 1.0im
         complex_blocks[2][1, 2] += 2.0 - 0.5im
         complex_blocks[2][2, 1] -= 1.0 + 1.5im
-        complex_q = _test_multi_sector_matrix_tlarray(complex_blocks)
+        complex_q = _test_multi_sector_matrix_tlarray(complex_block)
         complex_result = _test_eigen_assert_reconstructs(complex_q; tol=1e-8)
         @test !isnothing(complex_result.V_inv)
         @test _test_eigen_expanded_eigenvalues(complex_result) ≈
@@ -811,8 +901,8 @@ end
 
 function _test_eigen_reconstructs_view(q::AbstractTLArray; hermitian::Bool=false, tol=1e-9)
     result = eigen(q; hermitian)
-    # TLArrayView inputs should reconstruct the represented tensor, not only the
-    # eager TLArray produced internally by eigen.
+    # Embedded-state inputs should reconstruct the represented tensor, not only
+    # the eager TLArray produced internally by eigen.
     V = lock(result.V, 1)
     rec = isnothing(result.V_inv) ? V * result.D * result.V' : V * result.D * result.V_inv
     @test norm(q - rec) / max(norm(q), 1.0) < tol
@@ -820,16 +910,17 @@ function _test_eigen_reconstructs_view(q::AbstractTLArray; hermitian::Bool=false
 end
 
 function test_eigen_tlarrayview()
-    @testset "eigen accepts TLArrayView input" begin
-        # Nonzero scalar multiplication returns TLArrayView for these operands,
+    @testset "eigen accepts embedded-state input" begin
+        # Nonzero scalar multiplication stores embedded scale for these operands,
         # covering both Hermitian and non-Hermitian eigen paths on lazy inputs.
         hermitian_blocks = [
             Matrix(Symmetric(randn(5, 5))),
             Matrix(Symmetric(randn(10, 10))),
         ]
-        hermitian_q = _test_multi_sector_matrix_tlarray(hermitian_blocks)
+        hermitian_q = _test_multi_sector_matrix_tlarray(hermitian_block)
         hermitian_view = 2.0 * hermitian_q
-        @test hermitian_view isa TLArrayView
+        @test hermitian_view isa TLArray
+        @test hermitian_view.scale == 2.0
         hermitian_result = _test_eigen_reconstructs_view(hermitian_view; hermitian=true)
         @test isnothing(hermitian_result.V_inv)
 
@@ -841,9 +932,10 @@ function test_eigen_tlarrayview()
         complex_blocks[1][2, 1] -= 0.25 + 1.0im
         complex_blocks[2][1, 2] += 2.0 - 0.5im
         complex_blocks[2][2, 1] -= 1.0 + 1.5im
-        complex_q = _test_multi_sector_matrix_tlarray(complex_blocks)
+        complex_q = _test_multi_sector_matrix_tlarray(complex_block)
         complex_view = (1.5 - 0.25im) * complex_q
-        @test complex_view isa TLArrayView
+        @test complex_view isa TLArray
+        @test complex_view.scale == 1.5 - 0.25im
         complex_result = _test_eigen_reconstructs_view(complex_view; tol=1e-8)
         @test !isnothing(complex_result.V_inv)
     end
@@ -862,7 +954,7 @@ end
 #   ct   – rank-4 tensor   (QD = 4, after F * identity contraction)
 #
 # For (b) to work every pair (q leg l, conj(q) leg l) must form a valid
-# contraction pair: same itags, opposite directions.  conj() flips all
+# contraction pair: same itag, opposite directions.  conj() flips all
 # directions, so the pairing is always leg-for-leg given that all legs of q
 # already carry distinct TLIndex values (full-rank contraction → 0D scalar).
 # ─────────────────────────────────────────────────────────────────────────────
@@ -919,8 +1011,8 @@ function test_lock_reduce(option::LocalSpaceOptions)
     q = getLocalSpace(option, ("lur", "lur", "op"))
 
     # ── Scenario 1: matching leg present → lock decrements ───────────────────
-    # q.I has legs ('+', '-').  A1 is built from q.I (same dirs), B1 from q.I'
-    # (dirs flipped to ('-', '+')) so they can be contracted on "ct".
+    # q.I has legs ('+', '-').  A1 is built from q.I (same dir), B1 from q.I'
+    # (dir flipped to ('-', '+')) so they can be contracted on "ct".
     # A1: ("ct" '+' lock=0,  "free" '-' lock=1)
     # B1: ("ct" '-' lock=0,  "free" '+' lock=0)
     # Contract A1*B1 on "ct"; A1's "free" lock=1 has a match in B1 → lock → 0.
@@ -932,9 +1024,9 @@ function test_lock_reduce(option::LocalSpaceOptions)
          TLIndex("free", '+', 0, 0)))
 
     C1 = A1 * B1
-    free_pos1 = findfirst(idx -> idx.itags == "free" && idx.dir == '-', C1.inds)
-    @test C1.inds[free_pos1].lock == 0
-    println("test_lock_reduce (match):    \"free\" lock=$(C1.inds[free_pos1].lock) (expected 0)")
+    free_pos1 = findfirst(idx -> idx.itags == "free" && idx.dir == '-', Telum.inds(C1))
+    @test Telum.inds(C1)[free_pos1].lock == 0
+    println("test_lock_reduce (match):    \"free\" lock=$(Telum.inds(C1)[free_pos1].lock) (expected 0)")
 
     # ── Scenario 2: no matching leg → lock unchanged ─────────────────────────
     # A2: ("ct" '+' lock=0,  "unique" '-' lock=1)   — from q.I
@@ -947,9 +1039,9 @@ function test_lock_reduce(option::LocalSpaceOptions)
          TLIndex("other", '+', 0, 0)))
 
     C2 = A2 * B2
-    unique_pos = findfirst(idx -> idx.itags == "unique", C2.inds)
-    @test C2.inds[unique_pos].lock == 1
-    println("test_lock_reduce (no match): \"unique\" lock=$(C2.inds[unique_pos].lock) (expected 1)")
+    unique_pos = findfirst(idx -> idx.itags == "unique", Telum.inds(C2))
+    @test Telum.inds(C2)[unique_pos].lock == 1
+    println("test_lock_reduce (no match): \"unique\" lock=$(Telum.inds(C2)[unique_pos].lock) (expected 1)")
 
     # ── Scenario 3: lock already 0 with match → stays 0 ─────────────────────
     # A3's "free" lock=0 and B1 has a matching "free" leg, but 0 cannot go lower.
@@ -958,9 +1050,9 @@ function test_lock_reduce(option::LocalSpaceOptions)
         (TLIndex("ct",   '+', 0, 0),
          TLIndex("free", '-', 0, 0)))
     C3 = contract(A3, (1,), B1, (1,))
-    free_pos3 = findfirst(idx -> idx.itags == "free" && idx.dir == '-', C3.inds)
-    @test C3.inds[free_pos3].lock == 0
-    println("test_lock_reduce (lock=0):   \"free\" lock=$(C3.inds[free_pos3].lock) (expected 0)")
+    free_pos3 = findfirst(idx -> idx.itags == "free" && idx.dir == '-', Telum.inds(C3))
+    @test Telum.inds(C3)[free_pos3].lock == 0
+    println("test_lock_reduce (lock=0):   \"free\" lock=$(Telum.inds(C3)[free_pos3].lock) (expected 0)")
 end
 
 # ─── test_contract_requires_matching_spaces_in_star ─────────────────────────
@@ -976,10 +1068,10 @@ function test_contract_requires_matching_spaces_in_star(option::LocalSpaceOption
         (TLIndex("ct", '-', 0, 0),
          TLIndex("",   '+', 0, 0)))
 
-    first_sector, first_dim = first(B.spaces[1])
-    bad_leg1 = vcat([(first_sector, first_dim + 1)], B.spaces[1][2:end])
-    B_bad = Telum.TLArray(symm(B), copy(B.qlabels), copy(B.wmatdata), copy(B.wmatinfo),
-                                 deepcopy(B.RMTs), B.inds, (bad_leg1, B.spaces[2]))
+    first_sector, first_dim = first(Telum.spaces(B)[1])
+    bad_leg1 = vcat([(first_sector, first_dim + 1)], Telum.spaces(B)[1][2:end])
+    B_bad = Telum.TLArray(symm(B), copy(Telum.stored_qlabels(B)), copy(B.wmatdata), copy(B.wmatinfo),
+                                 deepcopy(B.RMTs), Telum.inds(B), (bad_leg1, Telum.spaces(B)[2]))
 
     @test_throws AssertionError A * B_bad
 end

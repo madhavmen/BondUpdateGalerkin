@@ -71,6 +71,17 @@ struct FermionOptions <: LocalSpaceOptions
     channel_symm::Union{Vector{Tuple{Symbol, Vector{Int}}}, Nothing}
 end
 
+"""
+    FermionOptions(N::Int=1, charge_symm=:U1, channel_symm=nothing) -> FermionOptions
+
+Normalize user options for a spinless fermion local space.
+
+`N` is the number of channels and must be positive. `charge_symm` and
+`channel_symm` may be `nothing`, one `Symbol` applied to all channels, or a
+`Vector{Tuple{Symbol, Vector{Int}}}` assigning symmetries to explicit channel
+groups. The stored object always contains either `nothing` or normalized vectors
+of `(symbol, channels)` pairs.
+"""
 function FermionOptions(N::Int=1, charge_symm=:U1, channel_symm=nothing)
     @assert N > 0 "Number of channels must be positive"
     charge_symm_ = standardize_option(charge_symm, N)
@@ -78,6 +89,13 @@ function FermionOptions(N::Int=1, charge_symm=:U1, channel_symm=nothing)
     return FermionOptions(N, charge_symm_, channel_symm_)
 end
 
+"""
+    FermionOptions(symmetry::Type{<:Symmetry}) -> FermionOptions
+
+Compatibility constructor for the one-channel spinless fermion case.
+
+Only `U1` is currently accepted, producing `FermionOptions(1, :U1, nothing)`.
+"""
 function FermionOptions(symmetry::Type{<:Symmetry})
     @assert symmetry == U1 "FermionOptions currently only supports U1 charge symmetry"
     return FermionOptions(1, :U1, nothing)
@@ -104,8 +122,10 @@ channels, so `FermionSOptions(3, :U1, :SU2, :SU3)` is equivalent to
 - `spin_symm` – spin symmetries on selected channel groups.  Supported symbols
   are currently `:U1` and `:SU2`; `nothing` disables spin symmetry.
 - `channel_symm` – channel / flavor symmetry groups on selected channels.
-  Symbols of the form `:SU3`, `:SU4`, ... request the corresponding SU(N)
-  channel symmetry; `nothing` disables channel symmetry.
+  `:SU` uses the number of selected channels; `:SU3`, `:SU4`, ... specify it.
+  `:SO` and `:SO3` select SO(3) on exactly three ordered channels, with
+  doubled z weights `+2`, `0`, `-2`. `:SO2` selects two ordered channels
+  with generator `L3`, returned as Abelian `U1`; `nothing` disables channel symmetry.
 """
 struct FermionSOptions <: LocalSpaceOptions
     nchannels   ::Int
@@ -114,6 +134,16 @@ struct FermionSOptions <: LocalSpaceOptions
     channel_symm::Union{Vector{Tuple{Symbol, Vector{Int}}}, Nothing}
 end
 
+"""
+    standardize_option(opt, N)
+
+Normalize one local-space symmetry option into internal channel-group form.
+
+`opt === nothing` disables the option. A `Symbol` applies that symmetry to all
+channels `1:N`. A vector of `(Symbol, Vector{Int})` pairs is returned unchanged
+after a type assertion; channel validity is checked later by the local-space
+builder.
+"""
 function standardize_option(opt, N)
     if opt === nothing return nothing
     elseif opt isa Symbol return [(Symbol(opt), collect(1:N))]
@@ -122,6 +152,17 @@ function standardize_option(opt, N)
     end
 end
 
+"""
+    FermionSOptions(N::Int, charge_symm=nothing, spin_symm=nothing, channel_symm=nothing) -> FermionSOptions
+
+Normalize user options for a spinful fermion local space.
+
+`N` is the number of channels. `charge_symm`, `spin_symm`, and `channel_symm`
+follow the common local-space option convention accepted by
+`standardize_option`: `nothing`, a whole-channel `Symbol`, or explicit
+`(symbol, channels)` groups. The stored fields are normalized vectors or
+`nothing`.
+"""
 function FermionSOptions(N::Int, charge_symm=nothing, spin_symm=nothing, channel_symm=nothing)
     charge_symm_ = standardize_option(charge_symm, N)
     spin_symm_ = standardize_option(spin_symm, N)

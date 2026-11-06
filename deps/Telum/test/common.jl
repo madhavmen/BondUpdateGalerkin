@@ -4,7 +4,6 @@ using SparseArrays
 using Test
 using LurCGT
 using Telum
-import Telum: _compute_spaces
 
 include("test_utils.jl")
 
@@ -117,7 +116,7 @@ function _dense_leg_index_map(symm::Tuple, src_splist::Vector, dst_splist::Vecto
 end
 
 function _dense_vector_start_maps(qs, dims)
-    QD = length(first(qs).inds)
+    QD = length(Telum.inds(first(qs)))
     dims_set = Set(dims)
     running = [Dict{Any, Int}() for _ in 1:QD]
     starts = Vector{Vector{Dict{Any, Int}}}(undef, length(qs))
@@ -126,8 +125,8 @@ function _dense_vector_start_maps(qs, dims)
         starts[qi] = [Dict{Any, Int}() for _ in 1:QD]
         for leg in 1:QD
             leg ∈ dims_set || continue
-            leg_offsets, _ = get_offset(symm(q), q.spaces[leg])
-            for (qlabels, _) in q.spaces[leg]
+            leg_offsets, _ = get_offset(symm(q), Telum.spaces(q)[leg])
+            for (qlabels, _) in Telum.spaces(q)[leg]
                 start = get(running[leg], qlabels, 1)
                 starts[qi][leg][qlabels] = start
                 running[leg][qlabels] = start + length(leg_offsets[qlabels])
@@ -140,28 +139,28 @@ end
 
 function _dense_vector_oplus_ref(qs, dimensions)
     qs_vec = collect(qs)
-    dims = _normalize_dim_tuple(dimensions, length(first(qs_vec).inds))
+    dims = _normalize_dim_tuple(dimensions, length(Telum.inds(first(qs_vec))))
     dims_set = Set(dims)
     ref = first(qs_vec)
 
     result_spaces = ntuple(leg -> begin
-        leg in dims_set ? _sum_splist_many_ref([q.spaces[leg] for q in qs_vec]) : copy(ref.spaces[leg])
-    end, length(ref.inds))
+        leg in dims_set ? _sum_splist_many_ref([Telum.spaces(q)[leg] for q in qs_vec]) : copy(Telum.spaces(ref)[leg])
+    end, length(Telum.inds(ref)))
 
     result_sizes = ntuple(leg -> begin
         get_offset(symm(ref), result_spaces[leg])[2]
-    end, length(ref.inds))
+    end, length(Telum.inds(ref)))
     T = promote_type((eltype(Array(to_sparse_array(q))) for q in qs_vec)...)
     result = zeros(T, result_sizes)
     start_maps = _dense_vector_start_maps(qs_vec, dims)
 
     for (q, qstarts) in zip(qs_vec, start_maps)
         arr = Array(to_sparse_array(q))
-        idxmaps = Vector{Vector{Int}}(undef, length(q.inds))
-        for leg in 1:length(q.inds)
+        idxmaps = Vector{Vector{Int}}(undef, length(Telum.inds(q)))
+        for leg in 1:length(Telum.inds(q))
             if leg in dims_set
                 offset_sizes = Dict{Any, Int}(qlabels => start - 1 for (qlabels, start) in qstarts[leg])
-                idxmaps[leg] = _dense_leg_index_map(symm(q), q.spaces[leg], result_spaces[leg]; offset_sizes=offset_sizes)
+                idxmaps[leg] = _dense_leg_index_map(symm(q), Telum.spaces(q)[leg], result_spaces[leg]; offset_sizes=offset_sizes)
             else
                 idxmaps[leg] = collect(1:size(arr, leg))
             end
@@ -185,7 +184,7 @@ function _dense_matrix_entry(mat, i::Int, j::Int)
 end
 
 function _zero_tlarray_ref_like(ref::TLArray{TQ, QD, N, RD}, spaces; T::Type=Float64) where {TQ, QD, N, RD}
-    return Telum._zero_tlarray_with_spaces(symm(ref), ref.inds, spaces; T=T)
+    return Telum._zero_tlarray_with_spaces(symm(ref), Telum.inds(ref), spaces; T=T)
 end
 
 function _matrix_axis_start_maps(sources, dims, QD::Int, symm::Tuple)
@@ -217,7 +216,7 @@ function _dense_matrix_oplus_ref(mat, dimensions)
     isempty(defined) && error("matrix reference requires at least one defined TLArray")
 
     ref = first(defined)
-    row_dims, col_dims = _normalize_matrix_dim_tuple(dimensions, length(ref.inds))
+    row_dims, col_dims = _normalize_matrix_dim_tuple(dimensions, length(Telum.inds(ref)))
     row_dims_set = Set(row_dims)
     col_dims_set = Set(col_dims)
 
@@ -226,12 +225,12 @@ function _dense_matrix_oplus_ref(mat, dimensions)
     for j in axes(mat, 2), i in axes(mat, 1)
         q = _dense_matrix_entry(mat, i, j)
         q === nothing && continue
-        for leg in 1:length(ref.inds)
+        for leg in 1:length(Telum.inds(ref))
             if leg ∉ col_dims_set
-                haskey(row_sources[i], leg) || (row_sources[i][leg] = copy(q.spaces[leg]))
+                haskey(row_sources[i], leg) || (row_sources[i][leg] = copy(Telum.spaces(q)[leg]))
             end
             if leg ∉ row_dims_set
-                haskey(col_sources[j], leg) || (col_sources[j][leg] = copy(q.spaces[leg]))
+                haskey(col_sources[j], leg) || (col_sources[j][leg] = copy(Telum.spaces(q)[leg]))
             end
         end
     end
@@ -242,14 +241,14 @@ function _dense_matrix_oplus_ref(mat, dimensions)
         elseif leg ∈ col_dims_set
             _sum_splist_many_ref([col_sources[j][leg] for j in axes(mat, 2)])
         else
-            copy(ref.spaces[leg])
+            copy(Telum.spaces(ref)[leg])
         end
-    end, length(ref.inds))
+    end, length(Telum.inds(ref)))
 
-    row_starts = _matrix_axis_start_maps(row_sources, row_dims, length(ref.inds), symm(ref))
-    col_starts = _matrix_axis_start_maps(col_sources, col_dims, length(ref.inds), symm(ref))
+    row_starts = _matrix_axis_start_maps(row_sources, row_dims, length(Telum.inds(ref)), symm(ref))
+    col_starts = _matrix_axis_start_maps(col_sources, col_dims, length(Telum.inds(ref)), symm(ref))
     T = promote_type((eltype(Array(to_sparse_array(q))) for q in defined)...)
-    result_sizes = ntuple(leg -> get_offset(symm(ref), result_spaces[leg])[2], length(ref.inds))
+    result_sizes = ntuple(leg -> get_offset(symm(ref), result_spaces[leg])[2], length(Telum.inds(ref)))
     result = zeros(T, result_sizes)
 
     for j in axes(mat, 2), i in axes(mat, 1)
@@ -263,19 +262,19 @@ function _dense_matrix_oplus_ref(mat, dimensions)
                 else
                     copy(col_sources[j][leg])
                 end
-            end, length(ref.inds))
+            end, length(Telum.inds(ref)))
             q = _zero_tlarray_ref_like(ref, spaces; T=T)
         end
 
         arr = Array(to_sparse_array(q))
-        idxmaps = Vector{Vector{Int}}(undef, length(ref.inds))
-        for leg in 1:length(ref.inds)
+        idxmaps = Vector{Vector{Int}}(undef, length(Telum.inds(ref)))
+        for leg in 1:length(Telum.inds(ref))
             if leg ∈ row_dims_set
                 offsets = Dict{Any, Int}(qlabels => start - 1 for (qlabels, start) in row_starts[i][leg])
-                idxmaps[leg] = _dense_leg_index_map(symm(ref), q.spaces[leg], result_spaces[leg]; offset_sizes=offsets)
+                idxmaps[leg] = _dense_leg_index_map(symm(ref), Telum.spaces(q)[leg], result_spaces[leg]; offset_sizes=offsets)
             elseif leg ∈ col_dims_set
                 offsets = Dict{Any, Int}(qlabels => start - 1 for (qlabels, start) in col_starts[j][leg])
-                idxmaps[leg] = _dense_leg_index_map(symm(ref), q.spaces[leg], result_spaces[leg]; offset_sizes=offsets)
+                idxmaps[leg] = _dense_leg_index_map(symm(ref), Telum.spaces(q)[leg], result_spaces[leg]; offset_sizes=offsets)
             else
                 idxmaps[leg] = collect(1:size(arr, leg))
             end

@@ -34,7 +34,7 @@ function lindblad_mpo(
         length(w) == L - 2 || throw(DimensionMismatch("triple weights must have length $(L - 2)"))
         for (sup, c) in ((ket_super, -1im), (bra_super, 1im))
             TA = liouville_op(ls, sup(A))
-            length(TA.inds) == 2 || throw(
+            length(Telum.inds(TA)) == 2 || throw(
                 ArgumentError("a triple's first operator must be charge-neutral under :$(ls.sym)"),
             )
             push!(tts, TripleTerm(TA, _liouville_vertex(ls, sup(B), sup(C)), c .* ComplexF64.(w)))
@@ -64,7 +64,7 @@ function lindblad_mpo(
             iszero(g) || (M = M + g .* dissipator_super(ComplexF64.(Jop)))
         end
         T = liouville_op(ls, M)
-        length(T.inds) == 2 || throw(
+        length(Telum.inds(T)) == 2 || throw(
             ArgumentError(
                 "the on-site superoperator at site $i is charged; H and every jump must be " *
                 "covariant with a ZERO net shift under :$(ls.sym)",
@@ -82,15 +82,15 @@ which requires the two shifts to cancel.
 """
 function _liouville_vertex(ls::LiouvilleSpace, SA::AbstractMatrix, SB::AbstractMatrix)
     TA = liouville_op(ls, SA)
-    if length(TA.inds) == 2
+    if length(Telum.inds(TA)) == 2
         TB = liouville_op(ls, SB)
-        length(TB.inds) == 2 || throw(
+        length(Telum.inds(TB)) == 2 || throw(
             ArgumentError("pair halves must both be neutral or both charged under :$(ls.sym)"),
         )
         return PairVertex(TA, TB, 1.0)
     end
     # `liouville_op(ls, X)` stores transpose(X); the adjoint of the tensor for `SB'` stores
     # conj(transpose(SB')) = transpose(SB) as a matrix, i.e. it applies `SB`.
-    TB = to_concrete(liouville_op(ls, Matrix(SB'))')
+    TB = TLArray(liouville_op(ls, Matrix(SB'))')
     return PairVertex(TA, TB, 1.0)
 end

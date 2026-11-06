@@ -32,10 +32,10 @@ function _bit_site_inds(L::Int)
     prev = (getvac(q.I, ("L,0", "L,1")), 2)
     inds = Vector{Any}(undef, L)
     for i = 1:L
-        F = to_concrete(getIdentity(prev, (q.I, 1); itag = "L,$(i + 1)"))
-        F = to_concrete(setitag(F, 2, "S,$i"))
-        A = to_concrete(getsub(F, 3, s -> 1))
-        inds[i] = A.inds
+        F = TLArray(getIdentity(prev, (q.I, 1); itag = "L,$(i + 1)"))
+        F = TLArray(setitag(F, 2, "S,$i"))
+        A = TLArray(getsub(F, 3, s -> 1))
+        inds[i] = Telum.inds(A)
         prev = (A, 3)
     end
     return inds
@@ -56,11 +56,12 @@ end
 
 "The dense block of a `:none` TLArray (zeros when it holds no sector)."
 function _none_block(t)
-    t = to_concrete(t)
+    t = TLArray(t)
     symm(t) === () || isempty(symm(t)) || throw(ArgumentError("_none_block: tensor is symmetric"))
-    length(t.qlabels) <= 1 || throw(ArgumentError("_none_block: $(length(t.qlabels)) sectors"))
-    isempty(t.qlabels) && return zeros(eltype(t), size(t))
-    return Array(t.RMTs[1])
+    sector_count = Telum.sector_count(t)
+    sector_count <= 1 || throw(ArgumentError("_none_block: $sector_count sectors"))
+    sector_count == 0 && return zeros(eltype(t), size(t))
+    return Array(_sector_block(t, 1))
 end
 
 """
@@ -100,7 +101,7 @@ function qtt_to_mpo(W::AbstractVector)
     tmpl = onsite_mpo(L, [q.I for _ = 1:L]; Iloc = q.I)
     T = mapreduce(eltype, promote_type, W; init = ComplexF64)
     return MPO(
-        Any[_none_tensor(Array{T,4}(permutedims(W[i], (1, 3, 2, 4))), tmpl[i].inds) for i = 1:L],
+        Any[_none_tensor(Array{T,4}(permutedims(W[i], (1, 3, 2, 4))), Telum.inds(tmpl[i])) for i = 1:L],
     )
 end
 

@@ -19,8 +19,8 @@ end
         arr_ref, spaces_ref = _dense_vector_oplus_ref([A, B, 3.0 * A], (2, 3))
         arr_qsum = Array(to_sparse_array(qsum))
 
-        @test qsum.inds == A.inds
-        @test qsum.spaces == (A.spaces[1], spaces_ref[2], spaces_ref[3])
+        @test Telum.inds(qsum) == Telum.inds(A)
+        @test Telum.spaces(qsum) == (Telum.spaces(A)[1], spaces_ref[2], spaces_ref[3])
         @test size(arr_qsum) == size(arr_ref)
         @test norm(arr_qsum - arr_ref) < 1e-10
     end
@@ -31,8 +31,8 @@ end
         arr_ref, spaces_ref = _dense_vector_oplus_ref([A, B], 3)
         arr_qsum = Array(to_sparse_array(qsum))
 
-        @test qsum.inds == A.inds
-        @test qsum.spaces == (A.spaces[1], A.spaces[2], spaces_ref[3])
+        @test Telum.inds(qsum) == Telum.inds(A)
+        @test Telum.spaces(qsum) == (Telum.spaces(A)[1], Telum.spaces(A)[2], spaces_ref[3])
         @test size(arr_qsum) == size(arr_ref)
         @test norm(arr_qsum - arr_ref) < 1e-10
     end
@@ -42,20 +42,20 @@ end
         arr_ref, spaces_ref = _dense_vector_oplus_ref([A, B], 3)
         arr_qsum = Array(to_sparse_array(qsum))
 
-        @test qsum.inds == A.inds
-        @test qsum.spaces == (A.spaces[1], A.spaces[2], spaces_ref[3])
+        @test Telum.inds(qsum) == Telum.inds(A)
+        @test Telum.spaces(qsum) == (Telum.spaces(A)[1], Telum.spaces(A)[2], spaces_ref[3])
         @test size(arr_qsum) == size(arr_ref)
         @test norm(arr_qsum - arr_ref) < 1e-10
     end
 
     @testset "vector allows different dual fields" begin
-        B_dual = TLArray(B, (Telum.change_dual(B.inds[1]), B.inds[2], Telum.change_dual(B.inds[3])))
+        B_dual = TLArray(B, (Telum.change_dual(Telum.inds(B)[1]), Telum.inds(B)[2], Telum.change_dual(Telum.inds(B)[3])))
         qsum = oplus([A, B_dual], 3)
         arr_ref, spaces_ref = _dense_vector_oplus_ref([A, B], 3)
         arr_qsum = Array(to_sparse_array(qsum))
 
-        @test qsum.inds == A.inds
-        @test qsum.spaces == (A.spaces[1], A.spaces[2], spaces_ref[3])
+        @test Telum.inds(qsum) == Telum.inds(A)
+        @test Telum.spaces(qsum) == (Telum.spaces(A)[1], Telum.spaces(A)[2], spaces_ref[3])
         @test size(arr_qsum) == size(arr_ref)
         @test norm(arr_qsum - arr_ref) < 1e-10
     end
@@ -90,8 +90,8 @@ end
             arr_qsum = Array(to_sparse_array(qsum, ComplexF64))
 
             @test eltype(qsum) == ComplexF64
-            @test qsum.inds == real_dense.inds
-            @test qsum.spaces == (spaces_ref[1], real_dense.spaces[2])
+            @test Telum.inds(qsum) == Telum.inds(real_dense)
+            @test Telum.spaces(qsum) == (spaces_ref[1], Telum.spaces(real_dense)[2])
             @test size(arr_qsum) == size(arr_ref)
             @test norm(arr_qsum - arr_ref) < 1e-10
         end
@@ -107,8 +107,8 @@ end
         arr_qsum = Array(to_sparse_array(qsum, ComplexF64))
 
         @test eltype(qsum) == ComplexF64
-        @test qsum.inds == real_dense.inds
-        @test qsum.spaces == spaces_ref
+        @test Telum.inds(qsum) == Telum.inds(real_dense)
+        @test Telum.spaces(qsum) == spaces_ref
         @test size(arr_qsum) == size(arr_ref)
         @test norm(arr_qsum - arr_ref) < 1e-10
     end
@@ -131,8 +131,8 @@ end
         arr_ref, spaces_ref = _dense_matrix_oplus_ref(mat, (3, 4))
         arr_qsum = Array(to_sparse_array(qsum))
 
-        @test qsum.inds == q4.inds
-        @test qsum.spaces == (q4.spaces[1], q4.spaces[2], spaces_ref[3], spaces_ref[4])
+        @test Telum.inds(qsum) == Telum.inds(q4)
+        @test Telum.spaces(qsum) == (Telum.spaces(q4)[1], Telum.spaces(q4)[2], spaces_ref[3], spaces_ref[4])
         @test size(arr_qsum) == size(arr_ref)
         @test norm(arr_qsum - arr_ref) < 1e-10
     end
@@ -149,8 +149,8 @@ end
         arr_ref, spaces_ref = _dense_matrix_oplus_ref([q4 3.0 * q4; 2.0 * q4 4.0 * q4], (3, 4))
         arr_qsum = Array(to_sparse_array(qsum))
 
-        @test qsum.inds == q4.inds
-        @test qsum.spaces == (q4.spaces[1], q4.spaces[2], spaces_ref[3], spaces_ref[4])
+        @test Telum.inds(qsum) == Telum.inds(q4)
+        @test Telum.spaces(qsum) == (Telum.spaces(q4)[1], Telum.spaces(q4)[2], spaces_ref[3], spaces_ref[4])
         @test size(arr_qsum) == size(arr_ref)
         @test norm(arr_qsum - arr_ref) < 1e-10
     end
@@ -167,8 +167,8 @@ end
         arr_ref, spaces_ref = _dense_matrix_oplus_ref(mat, ((1, 2), 3))
         arr_qsum = Array(to_sparse_array(qsum))
 
-        @test qsum.inds == q4.inds
-        @test qsum.spaces == (spaces_ref[1], spaces_ref[2], spaces_ref[3], q4.spaces[4])
+        @test Telum.inds(qsum) == Telum.inds(q4)
+        @test Telum.spaces(qsum) == (spaces_ref[1], spaces_ref[2], spaces_ref[3], Telum.spaces(q4)[4])
         @test size(arr_qsum) == size(arr_ref)
         @test norm(arr_qsum - arr_ref) < 1e-10
     end

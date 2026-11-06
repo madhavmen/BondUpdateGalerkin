@@ -91,7 +91,7 @@ The halves must be an adjoint pair (Z and Z'): two Z halves give both legs the s
 function _oat_sz_vertex()
     if symmetry_mode() === :Z2
         Z = ising_local_space(:Z2).Z
-        return Z, to_concrete(Z'), 0.25
+        return Z, TLArray(Z'), 0.25
     end
     Sz = local_space().Sz
     return Sz, Sz, 1.0
@@ -136,13 +136,13 @@ function sx_operator()
         # THE SIGMA^X BASIS PUTS S^x ON THE DIAGONAL: `X = diag(+1,-1)` is `2 S^x`, one 1x1
         # block per Z2 charge, charge-neutral and rank 2 -- exactly what `site_expval` wants.
         # Nothing here needs Telum's Sp/Sm normalisation, so nothing here can be caught by it.
-        Sx = to_concrete(0.5 * ising_local_space(:Z2).X)
+        Sx = TLArray(0.5 * ising_local_space(:Z2).X)
         # Do not reach for `Matrix` here. `_z2_diag_op` builds each sector block as
         # `reshape([v], 1, 1, 1)`, so the RMTs are 1x1x1 THREE-dimensional arrays and
         # `Matrix(R)` throws `MethodError: no method matching Matrix(::Array{Float64, 3})`
         # -- measured. Every Z2 irrep is one-dimensional, so each block holds exactly one
         # number and `only` reads it whatever the block's rank happens to be.
-        blocks = collect(Sx.RMTs)
+        blocks = [_sector_block(Sx, sector) for sector in eachindex(Sx.RMTs)]
         (length(blocks) == 2 && all(length(R) == 1 for R in blocks)) || throw(
             ErrorException(
                 "sx_operator(:Z2): expected two single-entry sector blocks, got $(length(blocks)) " *
@@ -161,8 +161,8 @@ function sx_operator()
         return Sx
     end
     q = local_space(:none)
-    Sx = to_concrete((1 / sqrt(2)) * (q.Sm - q.Sp))
-    M = Matrix(Sx.RMTs[1])
+    Sx = TLArray((1 / sqrt(2)) * (q.Sm - q.Sp))
+    M = Matrix(_sector_block(Sx, 1))
     # `_dense_up_index` fixes which index is up; S^x is off-diagonal either way, so the check is
     # basis-order independent as written.
     want = [0.0 0.5; 0.5 0.0]
@@ -196,7 +196,7 @@ function x_polarized_state(L::Int)
     symmetry_mode() === :Z2 && return ising_polarised_state(L)
     up = product_state(fill(:up, L))
     dn = product_state(fill(:down, L))
-    ts = Any[to_concrete((1 / sqrt(2)) * (up[i] + dn[i])) for i = 1:L]
+    ts = Any[TLArray((1 / sqrt(2)) * (up[i] + dn[i])) for i = 1:L]
     return SymMPS(ts, L)
 end
 

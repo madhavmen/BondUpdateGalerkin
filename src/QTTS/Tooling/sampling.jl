@@ -7,7 +7,7 @@
 function qtt_normalize!(psi::SymMPS, g::QTTGrid; N::Real = 1.0)
     physical_norm = qtt_l2norm(psi, g)
     physical_norm > 0 || throw(ArgumentError("qtt_normalize!: zero state"))
-    psi[psi.center] = to_concrete(psi[psi.center] * (sqrt(N) / physical_norm))
+    psi[psi.center] = TLArray(psi[psi.center] * (sqrt(N) / physical_norm))
     return psi
 end
 

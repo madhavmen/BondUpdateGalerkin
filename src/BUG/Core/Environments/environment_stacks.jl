@@ -63,7 +63,7 @@ const ZERO = ZeroEnv()
 # Add `addend` into a running channel sum; returns the new sum. Adding into ZERO returns the addend
 # itself, so an empty channel never contributes a spurious zero tensor.
 _accum(accumulated::ZeroEnv, addend) = addend
-_accum(accumulated, addend) = to_concrete(accumulated + addend)
+_accum(accumulated, addend) = TLArray(accumulated + addend)
 
 # A sweep carries the channels from link i to link i+1 through site i, O(1) per bond instead of an
 # O(L) rebuild. `canonical!` rewrites tensors, so a stack built before it is stale: canonicalise
@@ -107,7 +107,7 @@ function push_left_channels(
     for (term_index, term) in enumerate(terms)
         cs.open[term_index] === ZERO && continue
         closed = _left_step(cs.open[term_index], site_tensor, term.right, site)
-        acc = _accum(acc, to_concrete(term.coeff * closed))
+        acc = _accum(acc, TLArray(term.coeff * closed))
     end
     # The transported identity opens every term with its left operator on this site.
     nxt = Any[
@@ -136,7 +136,7 @@ function push_right_channels(
     for (term_index, term) in enumerate(terms)
         cs.open[term_index] === ZERO && continue
         closed = _right_step(cs.open[term_index], site_tensor, term.left, site)
-        acc = _accum(acc, to_concrete(term.coeff * closed))
+        acc = _accum(acc, TLArray(term.coeff * closed))
     end
     nxt = Any[
         open_next ? _right_step(cs.id, site_tensor, terms[term_index].right, site) : ZERO for
@@ -149,7 +149,7 @@ end
 
 "Retag an operator's two site legs onto site `site`, leaving any op-leg alone."
 _retag_sites(operator, site::Int) =
-    to_concrete(setitag(setitag(operator, 1, "S,$site"), 2, "S,$site"))
+    TLArray(setitag(setitag(operator, 1, "S,$site"), 2, "S,$site"))
 
 """
     _apply_site_op(site_tensor, operator, site) -> TLArray
@@ -164,24 +164,24 @@ hard-coding leg 1 breaks on exactly the adjoint half of every XY term.
 function _apply_site_op(site_tensor, operator, site::Int)
     operator === nothing && return site_tensor
     Oi = _retag_sites(operator, site)
-    ket_leg = Oi.inds[1].dir == '+' ? 1 : 2
+    ket_leg = Telum.inds(Oi)[1].dir == '+' ? 1 : 2
     contracted = contract(Oi, (ket_leg,), site_tensor, (2,))
     # contracted = (operator's remaining legs..., link_l, link_r). The surviving site leg of a
     # rank-3 operator is always at index < 3, so its remainder is (site_out, op) in order.
-    return length(Oi.inds) == 2 ? to_concrete(permutedims(contracted, (2, 1, 3))) :
-           to_concrete(permutedims(contracted, (3, 1, 4, 2)))
+    return length(Telum.inds(Oi)) == 2 ? TLArray(permutedims(contracted, (2, 1, 3))) :
+           TLArray(permutedims(contracted, (3, 1, 4, 2)))
 end
 
 "Bra tensor for an interior step: both link legs primed, so each pairs with the
 environment's bra leg rather than with the ket."
-_bra_interior(site_tensor) = to_concrete(prime(prime(site_tensor, 1), 3)')
+_bra_interior(site_tensor) = TLArray(prime(prime(site_tensor, 1), 3)')
 
 "Bra tensor at the left boundary: `link_l` unprimed, because there the bra and ket
 links are the same dim-1 vacuum leg and must contract with each other."
-_bra_left_boundary(site_tensor) = to_concrete(prime(site_tensor, 3)')
+_bra_left_boundary(site_tensor) = TLArray(prime(site_tensor, 3)')
 
 "Bra tensor closing the right boundary: `link_r` unprimed, for the same reason."
-_bra_right_boundary(site_tensor) = to_concrete(prime(site_tensor, 1)')
+_bra_right_boundary(site_tensor) = TLArray(prime(site_tensor, 1)')
 
 # ── one left step ────────────────────────────────────────────────────────────
 
@@ -198,13 +198,13 @@ rather than silently building a longer-range Hamiltonian.
 """
 function _left_step(environment, site_tensor, operator, site::Int)
     AO = _apply_site_op(site_tensor, operator, site)
-    nAO = length(AO.inds)
+    nAO = length(Telum.inds(AO))
 
     if environment === nothing
         # Boundary: contract link_l bra-to-ket along with the site leg.
         out = contract(AO, (1, 2), _bra_left_boundary(site_tensor), (1, 2))
     else
-        nE = length(environment.inds)
+        nE = length(Telum.inds(environment))
         if nE == 3 && nAO == 4
             tmp = contract(AO, (1, 4), environment, (2, 3))   # close: pair the op-legs too
         elseif nE == 2
@@ -216,12 +216,12 @@ function _left_step(environment, site_tensor, operator, site::Int)
             )
         end
         # tmp = (site, link_r, [op], bra) -- the bra leg is always last.
-        out = contract(tmp, (1, length(tmp.inds)), _bra_interior(site_tensor), (2, 1))
+        out = contract(tmp, (1, length(Telum.inds(tmp))), _bra_interior(site_tensor), (2, 1))
     end
 
     # out = (ket, [op], bra); put the bra first.
-    leg_count = length(out.inds)
-    return to_concrete(permutedims(out, leg_count == 2 ? (2, 1) : (3, 1, 2)))
+    leg_count = length(Telum.inds(out))
+    return TLArray(permutedims(out, leg_count == 2 ? (2, 1) : (3, 1, 2)))
 end
 
 """
@@ -233,14 +233,14 @@ a term running off the end of the chain, so that is an error.
 """
 function _left_close(environment, site_tensor, operator, site::Int)
     AO = _apply_site_op(site_tensor, operator, site)
-    nAO, nE = length(AO.inds), length(environment.inds)
+    nAO, nE = length(Telum.inds(AO)), length(Telum.inds(environment))
     tmp =
         (nE == 3 && nAO == 4) ? contract(AO, (1, 4), environment, (2, 3)) :
         nE == 2 ? contract(AO, (1,), environment, (2,)) :
         error("_left_close: rank-$nE environment with a rank-$nAO operator at site $site")
-    length(tmp.inds) == 3 ||
+    length(Telum.inds(tmp)) == 3 ||
         error("_left_close: an operator channel is still open at the right boundary")
-    scalar = to_concrete!(contract(tmp, (1, 2, 3), _bra_right_boundary(site_tensor), (2, 3, 1)))
+    scalar = contract(tmp, (1, 2, 3), _bra_right_boundary(site_tensor), (2, 3, 1))
     return ComplexF64(scalar[])
 end
 
@@ -337,13 +337,13 @@ Push the right `environment` at link `site+1` through `site`, inserting `operato
 """
 function _right_step(environment, site_tensor, operator, site::Int)
     AO = _apply_site_op(site_tensor, operator, site)
-    nAO = length(AO.inds)
+    nAO = length(Telum.inds(AO))
 
     if environment === nothing
         # Boundary: contract link_r bra-to-ket along with the site leg.
         out = contract(AO, (2, 3), _bra_right_boundary(site_tensor), (2, 3))
     else
-        nE = length(environment.inds)
+        nE = length(Telum.inds(environment))
         if nE == 3 && nAO == 4
             tmp = contract(AO, (3, 4), environment, (2, 3))   # close: pair the op-legs too
         elseif nE == 2
@@ -355,12 +355,12 @@ function _right_step(environment, site_tensor, operator, site::Int)
             )
         end
         # tmp = (link_l, site, [op], bra) -- the bra leg is always last.
-        out = contract(tmp, (2, length(tmp.inds)), _bra_interior(site_tensor), (2, 3))
+        out = contract(tmp, (2, length(Telum.inds(tmp))), _bra_interior(site_tensor), (2, 3))
     end
 
     # out = (ket, [op], bra); put the bra first.
-    leg_count = length(out.inds)
-    return to_concrete(permutedims(out, leg_count == 2 ? (2, 1) : (3, 1, 2)))
+    leg_count = length(Telum.inds(out))
+    return TLArray(permutedims(out, leg_count == 2 ? (2, 1) : (3, 1, 2)))
 end
 
 """
@@ -371,14 +371,14 @@ contracted bra-to-ket, giving a scalar.
 """
 function _right_close(environment, site_tensor, operator, site::Int)
     AO = _apply_site_op(site_tensor, operator, site)
-    nAO, nE = length(AO.inds), length(environment.inds)
+    nAO, nE = length(Telum.inds(AO)), length(Telum.inds(environment))
     tmp =
         (nE == 3 && nAO == 4) ? contract(AO, (3, 4), environment, (2, 3)) :
         nE == 2 ? contract(AO, (3,), environment, (2,)) :
         error("_right_close: rank-$nE environment with a rank-$nAO operator at site $site")
-    length(tmp.inds) == 3 ||
+    length(Telum.inds(tmp)) == 3 ||
         error("_right_close: an operator channel is still open at the left boundary")
-    scalar = to_concrete!(contract(tmp, (1, 2, 3), _bra_left_boundary(site_tensor), (1, 2, 3)))
+    scalar = contract(tmp, (1, 2, 3), _bra_left_boundary(site_tensor), (1, 2, 3))
     return ComplexF64(scalar[])
 end
 
@@ -471,9 +471,9 @@ adjoint half-term works unchanged.
 function _apply_theta_op(Theta, operator, leg::Int, site::Int)
     operator === nothing && return Theta
     Oi = _retag_sites(operator, site)
-    ket_leg = Oi.inds[1].dir == '+' ? 1 : 2
+    ket_leg = Telum.inds(Oi)[1].dir == '+' ? 1 : 2
     contracted = contract(Oi, (ket_leg,), Theta, (leg,))
-    rank3 = length(Oi.inds) == 3
+    rank3 = length(Telum.inds(Oi)) == 3
     # contracted = (site_out, [op], Theta's legs except `leg`, in order).
     perm = if leg == 2
         rank3 ? (3, 1, 4, 5, 2) : (2, 1, 3, 4)
@@ -482,7 +482,7 @@ function _apply_theta_op(Theta, operator, leg::Int, site::Int)
     else
         throw(ArgumentError("_apply_theta_op: leg must be 2 or 3, got $leg"))
     end
-    return to_concrete(permutedims(contracted, perm))
+    return TLArray(permutedims(contracted, perm))
 end
 
 """
@@ -495,7 +495,7 @@ has exactly `Theta`'s legs again.
 """
 function _apply_theta_env(block, environment, link_leg::Int)
     link_leg in (1, 4) || throw(ArgumentError("link_leg must be 1 or 4, got $link_leg"))
-    nT, nE = length(block.inds), length(environment.inds)
+    nT, nE = length(Telum.inds(block)), length(Telum.inds(environment))
     out = if nT == 5 && nE == 3
         contract(block, (link_leg, 5), environment, (2, 3))
     elseif nE == 2 && nT == 4
@@ -509,8 +509,8 @@ function _apply_theta_env(block, environment, link_leg::Int)
     # `out` = the block's remaining legs in order, then the environment's bra leg.
     #   link_leg == 1: (site_l, site_r, link_r, bra) -> bra first
     #   link_leg == 4: (link_l, site_l, site_r, bra) -> already in place
-    out = link_leg == 1 ? to_concrete(permutedims(out, (4, 1, 2, 3))) : to_concrete(out)
-    return to_concrete(prime(out, link_leg; inc = -1))
+    out = link_leg == 1 ? TLArray(permutedims(out, (4, 1, 2, 3))) : TLArray(out)
+    return TLArray(prime(out, link_leg; inc = -1))
 end
 
 """
@@ -524,8 +524,8 @@ from must be canonical at the bond (see the note above). This is the whole chain
 not the bond's gate -- which is the point of the module.
 """
 function apply_h_two_site(Theta, chain::XXZChain, bond::Int, lch::ChannelSet, rch::ChannelSet)
-    tl, tr = Theta.inds[2].itags, Theta.inds[3].itags
-    # Collect the terms and sum once: pairwise `to_concrete(acc + summand)` rebuilt the metadata for
+    tl, tr = Telum.inds(Theta)[2].itags, Telum.inds(Theta)[3].itags
+    # Collect the terms and sum once: pairwise `acc + summand` rebuilt the metadata for
     # each of the roughly nine summands, which made the probe allocation-bound. Telum's `sum` aligns
     # all summands once.
     terms = AbstractTLArray[]
@@ -540,12 +540,12 @@ function apply_h_two_site(Theta, chain::XXZChain, bond::Int, lch::ChannelSet, rc
         open_env = lch.open[term_index]
         if open_env !== ZERO
             operated = _apply_theta_op(Theta, term.right, 2, bond)
-            add!(to_concrete(term.coeff * _apply_theta_env(operated, open_env, 1)))
+            add!(TLArray(term.coeff * _apply_theta_env(operated, open_env, 1)))
         end
         open_env = rch.open[term_index]
         if open_env !== ZERO
             operated = _apply_theta_op(Theta, term.left, 3, bond + 1)
-            add!(to_concrete(term.coeff * _apply_theta_env(operated, open_env, 4)))
+            add!(TLArray(term.coeff * _apply_theta_env(operated, open_env, 4)))
         end
     end
 
@@ -555,7 +555,7 @@ function apply_h_two_site(Theta, chain::XXZChain, bond::Int, lch::ChannelSet, rc
     # `nothing` when every channel was ZERO and there is no gate -- preserved from the pairwise
     # version, which returned an unset `acc`.
     isempty(terms) && return nothing
-    return length(terms) == 1 ? terms[1] : to_concrete(sum(terms))
+    return length(terms) == 1 ? terms[1] : TLArray(sum(terms))
 end
 
 # The same action with the bond's two links read out of prebuilt stacks.

@@ -61,9 +61,9 @@ end
 
 "`S^z` on the site leg (leg 2) of one MPS tensor, by sector projection ([`apply_sz!`](@ref))."
 function _sz_site(A)
-    up = to_concrete(getsub(A, 2, s -> s == SECTOR_UP ? Colon() : nothing; preserve_space = true))
-    dn = to_concrete(getsub(A, 2, s -> s == SECTOR_DOWN ? Colon() : nothing; preserve_space = true))
-    return to_concrete(to_concrete(0.5 * up) + to_concrete(-0.5 * dn))
+    up = TLArray(getsub(A, 2, s -> s == SECTOR_UP ? Colon() : nothing; preserve_space = true))
+    dn = TLArray(getsub(A, 2, s -> s == SECTOR_DOWN ? Colon() : nothing; preserve_space = true))
+    return TLArray(TLArray(0.5 * up) + TLArray(-0.5 * dn))
 end
 
 """
@@ -91,12 +91,12 @@ function sz_overlaps(bra::SymMPS, ket::SymMPS)
         t = bra[i]
         i > 1 && (t = setitag(t, 1, "BL,$i"))
         i < L && (t = setitag(t, 3, "BL,$(i + 1)"))
-        braR[i] = to_concrete(t)
+        braR[i] = TLArray(t)
     end
-    braq = Set(first(sp) for sp in braR[L].spaces[3])
-    ketq = Set(first(sp) for sp in ket[L].spaces[3])
+    braq = Set(first(sp) for sp in Telum.spaces(braR[L])[3])
+    ketq = Set(first(sp) for sp in Telum.spaces(ket[L])[3])
     isdisjoint(braq, ketq) && return zeros(ComplexF64, L)
-    scalar(s) = (r = to_concrete(s); length(r) == 0 ? 0.0 + 0.0im : ComplexF64(r[]))
+    scalar(s) = (r = TLArray(s); length(r) == 0 ? 0.0 + 0.0im : ComplexF64(r[]))
     # left: E[i] = sites 1..i, legs (bra_link_r, ket_link_r)
     lstep(E, b, i) = contract(contract(E, (1,), b', (1,)), (1, 2), ket[i], (1, 2))
     E = Vector{Any}(undef, L - 1)

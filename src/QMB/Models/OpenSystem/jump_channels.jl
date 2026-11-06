@@ -16,10 +16,10 @@ function doublon_loss_mpo(L::Int; kappa)
     all(>=(0.0), k) ||
         throw(ArgumentError("doublon_loss_mpo: loss rates must be nonnegative, got $k"))
     q = hub4_space()
-    nu = to_concrete(lock(q.Fu', 2) * q.Fu)
-    nd = to_concrete(lock(q.Fd', 2) * q.Fd)
-    nupdn = to_concrete(lock(nu, 1) * nd)
-    return onsite_mpo(L, [to_concrete(k[j] * nupdn) for j = 1:L]; Iloc = q.I)
+    nu = TLArray(lock(q.Fu', 2) * q.Fu)
+    nd = TLArray(lock(q.Fd', 2) * q.Fd)
+    nupdn = TLArray(lock(nu, 1) * nd)
+    return onsite_mpo(L, [TLArray(k[j] * nupdn) for j = 1:L]; Iloc = q.I)
 end
 
 """
@@ -52,7 +52,7 @@ function collective_emission_mpo(
         ),
     )
     q = local_space()
-    n = to_concrete(q.Sz + 0.5 * q.I)
+    n = TLArray(q.Sz + 0.5 * q.I)
     # `xxz_chain(J = 2)` gives each hop vertex unit weight. The MPO applies a vertex as its
     # transpose (see the `liouville_space.jl` header): vertex 1 `(Sp, Sp')` is `S⁻_i S⁺_j`
     # and vertex 2 `(Sm, Sm')` is `S⁺_i S⁻_j`. Only complex couplings see it: with c_ij on
@@ -77,17 +77,17 @@ function collective_emission_mpo(
         mat = Matrix{Any}(nothing, ncol, ncol)
         i < L && (mat[1, 1] = Iid)
         i > 1 && (mat[ncol, ncol] = Iid)
-        mat[1, ncol] = to_concrete((gamma_plus + gamma_minus) * _mpo_block(n, i, tl, tr, :none))
+        mat[1, ncol] = TLArray((gamma_plus + gamma_minus) * _mpo_block(n, i, tl, tr, :none))
         for (c, (t, g, s)) in pairs(chans)
             vt = v[t]
             i < L && (
-                mat[1, 1+c] = to_concrete(
+                mat[1, 1+c] = TLArray(
                     cis(-s * k * x[i]) * _mpo_block(vt.left, i, tl, tr, _side(vt.left, :left)),
                 )
             )
             1 < i < L && (mat[1+c, 1+c] = _charged_transport(vt, q.I, i, tl, tr))
             i > 1 && (
-                mat[1+c, ncol] = to_concrete(
+                mat[1+c, ncol] = TLArray(
                     g *
                     vt.coeff *
                     cis(s * k * x[i]) *
@@ -97,7 +97,7 @@ function collective_emission_mpo(
         end
         i == 1 && (mat = reshape(mat[1, :], 1, ncol))
         i == L && (mat = reshape(mat[:, ncol], ncol, 1))
-        push!(Ws, to_concrete(oplus(mat, (1, 4))))
+        push!(Ws, TLArray(oplus(mat, (1, 4))))
     end
     return MPO(Ws)
 end
@@ -135,9 +135,9 @@ function jump_mpo(L::Int, op, close, coeffs::AbstractVector; Iloc)
                 (r, c) === (:id, :id) ? _mpo_block(Iloc, i, tl, tr, :none) :
                 (r, c) === (:done, :done) ? _charged_transport(vt, Iloc, i, tl, tr) :
                 (r, c) === (:id, :done) && !iszero(coeffs[i]) ?
-                to_concrete(ComplexF64(coeffs[i]) * _mpo_block(op, i, tl, tr, :left)) : nothing
+                TLArray(ComplexF64(coeffs[i]) * _mpo_block(op, i, tl, tr, :left)) : nothing
         end
-        push!(Ws, to_concrete(size(mat) == (1, 1) ? mat[1, 1] : oplus(mat, (1, 4))))
+        push!(Ws, TLArray(size(mat) == (1, 1) ? mat[1, 1] : oplus(mat, (1, 4))))
     end
     return MPO(Ws)
 end
@@ -197,7 +197,7 @@ function pair_loss_channels(L::Int; kappa)
         throw(DimensionMismatch("pair_loss_channels got $(length(k)) rates for $L sites"))
     all(>=(0.0), k) || throw(ArgumentError("pair_loss_channels: rates must be nonnegative, got $k"))
     q = hub4_space()
-    fu, fd = to_concrete(q.Fu'), to_concrete(q.Fd')                  # applied as c↑, c↓
+    fu, fd = TLArray(q.Fu'), TLArray(q.Fd')                  # applied as c↑, c↓
     e2 = hub4_product_state([:empty, :empty])
     su = _unit_scale(SiteOp(1, fu, 1), hub4_product_state([:up, :empty]), e2)
     sd = _unit_scale(SiteOp(1, fd, 1), hub4_product_state([:down, :empty]), e2)
@@ -223,7 +223,7 @@ function collective_emission_channels(
 )
     length(x) == L || throw(DimensionMismatch("got $(length(x)) positions for $L sites"))
     q = local_space()
-    sp = to_concrete(q.Sp')
+    sp = TLArray(q.Sp')
     s = _unit_scale(
         jump_mpo(2, q.Sp, sp, [1.0, 0.0]; Iloc = q.I),
         product_state([:up, :down]),
@@ -301,22 +301,22 @@ function site_op_product(f, psi::SymMPS)
     L, j = length(psi), f.j
     1 <= j <= L || throw(ArgumentError("site $j outside 1:$L"))
     out = Any[psi[i] for i = 1:L]
-    T = to_concrete(f.c * _apply_site_op(psi[j], f.O, j))            # (ℓ_l, s, ℓ_r, op)
-    length(T.inds) == 4 || throw(ArgumentError("SiteOp needs a charged (rank-3) operator"))
+    T = TLArray(f.c * _apply_site_op(psi[j], f.O, j))            # (ℓ_l, s, ℓ_r, op)
+    length(Telum.inds(T)) == 4 || throw(ArgumentError("SiteOp needs a charged (rank-3) operator"))
     F = nothing
     for i = j:L
         if i > j
             # undo the previous fusion on ℓ_l; the op leg comes along and rides on to ℓ_r
-            T = to_concrete(
-                permutedims(to_concrete!(contract(F', (1,), psi[i], (1,))), (2, 3, 4, 1)),
+            T = TLArray(
+                permutedims(contract(F', (1,), psi[i], (1,)), (2, 3, 4, 1)),
             )
         end
-        F = to_concrete(getIdentity((T, 3), (T, 4); itag = "Jf,$(i + 1)"))
-        out[i] = to_concrete!(contract(T, (3, 4), F, (1, 2)))        # (ℓ_l, s, fused)
+        F = TLArray(getIdentity((T, 3), (T, 4); itag = "Jf,$(i + 1)"))
+        out[i] = contract(T, (3, 4), F, (1, 2))        # (ℓ_l, s, fused)
     end
     for i = j:L
-        A = to_concrete(setitag(out[i], 3, "L,$(i + 1)"))
-        out[i] = i == j ? A : to_concrete(setitag(A, 1, "L,$i"))
+        A = TLArray(setitag(out[i], 3, "L,$(i + 1)"))
+        out[i] = i == j ? A : TLArray(setitag(A, 1, "L,$i"))
     end
     return SymMPS(out, L)
 end

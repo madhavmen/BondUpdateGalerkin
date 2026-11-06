@@ -101,14 +101,28 @@ function clear_fusion_cache!()
     return nothing
 end
 
+"""
+    _sector_block(tensor, sector) -> AbstractArray
+
+The values of `tensor`'s sector slot `sector` in its logical leg order. Telum keeps a permutation,
+a conjugation and a scalar factor as deferred view state (`permutedims`, `conj` and `0.5 * X`
+return views), so the stored block alone is not the tensor's value. The result may share the stored
+block when there is no view state: read it, never write into it.
+"""
+function _sector_block(tensor, sector::Int)
+    stored = tensor.RMTs[sector]
+    block, scale = Telum.sector_rmt_permuted(tensor, sector, ntuple(identity, ndims(stored)))
+    return isone(scale) ? block : block .* scale
+end
+
 # The memo key of one leg of `tensor`: everything `fusion_basis` reads off it (spaces, arrow, tags,
 # prime level, lock), as a hashable tuple.
 _leg_key(tensor, leg::Int) = (
-    tensor.spaces[leg],
-    tensor.inds[leg].dir,
-    string(tensor.inds[leg].itags),
-    tensor.inds[leg].plev,
-    tensor.inds[leg].lock,
+    Telum.spaces(tensor)[leg],
+    Telum.inds(tensor)[leg].dir,
+    string(Telum.inds(tensor)[leg].itags),
+    Telum.inds(tensor)[leg].plev,
+    Telum.inds(tensor)[leg].lock,
 )
 
 """
@@ -125,17 +139,18 @@ function fusion_basis(tensor, leg_a::Int = 1, leg_b::Int = 2; tag::AbstractStrin
         _FUSION_CALLS[] += 1
         get(_FUSION_CACHE, key, nothing)
     end
-    hit === nothing || return to_concrete(hit)
+    # the caller owns what it gets: a copy, never the cached tensor
+    hit === nothing || return copy(hit)
     lock(_FUSION_LOCK) do
         _FUSION_MISSES[] += 1
     end
-    identity_map = to_concrete(getIdentity((tensor, leg_a), (tensor, leg_b); itag = tag)')
+    identity_map = TLArray(getIdentity((tensor, leg_a), (tensor, leg_b); itag = tag)')
     # getIdentity's output is always (input_a, input_b, fused), whatever
     # leg numbers the inputs had, so the split is on (1,2) -- NOT (leg_a, leg_b).
-    left_vectors = to_concrete(svd(identity_map, (1, 2); cutoff = 0.0).U)
+    left_vectors = TLArray(svd(identity_map, (1, 2); cutoff = 0.0).U)
     # The SVD relabels the bond to Telum's default, so `tag` is reapplied; the CBE probes need their
     # distinct tags to avoid colliding with a frame's `svdL` bond leg.
-    out = to_concrete(setitag(left_vectors, 3, tag))
+    out = TLArray(setitag(left_vectors, 3, tag))
     # Store, then hand out a copy -- see the memo's note on caller ownership.
     element_count = sum(length(reduced_block) for reduced_block in out.RMTs; init = 0)
     lock(_FUSION_LOCK) do
@@ -148,7 +163,7 @@ function fusion_basis(tensor, leg_a::Int = 1, leg_b::Int = 2; tag::AbstractStrin
         haskey(_FUSION_CACHE, key) || (_FUSION_ELEMS[] += element_count)
         _FUSION_CACHE[key] = out
     end
-    return to_concrete(out)
+    return copy(out)
 end
 
 """
@@ -163,13 +178,13 @@ fusing regroups the product space by charge, it never loses or adds directions.
 function reachable_sectors(tensor, leg_a::Int = 1, leg_b::Int = 2)
     return [
         (charge, block_dim) for
-        (charge, block_dim) in fusion_basis(tensor, leg_a, leg_b).spaces[end]
+        (charge, block_dim) in Telum.spaces(fusion_basis(tensor, leg_a, leg_b))[end]
     ]
 end
 
 "Dimension of sector `charge` on leg `leg` of `tensor`, or 0 if the sector is absent."
 function sector_dim(tensor, leg::Int, charge)
-    for (sector, block_dim) in tensor.spaces[leg]
+    for (sector, block_dim) in Telum.spaces(tensor)[leg]
         sector == charge && return block_dim
     end
     return 0
@@ -200,10 +215,9 @@ two bond legs (different tags and arrows) never need to match.
 function perp_component(frame_basis, new_directions)
     ov = contract(frame_basis', (1, 2), new_directions, (1, 2))  # (basis bond, directions bond)
     proj = contract(frame_basis, (3,), ov, (1,))                 # (link, site, directions bond)
-    # The copying form, not `to_concrete!`: a Telum sum reuses `new_directions`'s block for any
-    # sector `proj` lacks, and the in-place cleanup would rescale it. The result is then a fresh
-    # tensor the caller owns -- wrapping it in another `to_concrete` only copies it again.
-    return to_concrete(new_directions - proj)
+    # A Telum sum may share `new_directions`'s block for a sector `proj` lacks: nothing here
+    # writes into the result, so the sharing is safe.
+    return TLArray(new_directions - proj)
 end
 
 # ── right-frame mirrors ─────────────────────────────────────────────────────
@@ -222,7 +236,7 @@ Row mirror of [`perp_component`](@ref).
 function perp_component_right(frame_basis, new_directions)
     ov = contract(new_directions, (2, 3), frame_basis', (2, 3))  # (directions bond, basis bond)
     proj = contract(ov, (2,), frame_basis, (1,))                 # (directions bond, site, link)
-    return to_concrete(new_directions - proj)
+    return TLArray(new_directions - proj)
 end
 
 # ── MULTIPLETS VERSUS STATES ──
@@ -244,7 +258,7 @@ function state_dim(tensor, leg::Int)
     symmetries = symm(tensor)
     symmetry_count = length(symmetries)
     tot = 0
-    for (charge, block_dim) in tensor.spaces[leg]
+    for (charge, block_dim) in Telum.spaces(tensor)[leg]
         # Irrep dimension of the sector: the product over the symmetry factors.
         irrep_weight = 1
         for symmetry_index = 1:symmetry_count

@@ -18,10 +18,10 @@ include(joinpath(@__DIR__, "..", "..", "..", "common", "dense_reference.jl"))
     hamiltonian = xxz_mpo(chain_length; J = 1.0, delta = 0.0)
     # Q = sum_j gamma_j sigma^+_j sigma^-_j = sum_j gamma_j |up><up|_j, the no-jump decay.
     spin = local_space()
-    up_projector = to_concrete(spin.Sz + 0.5 * spin.I)
+    up_projector = TLArray(spin.Sz + 0.5 * spin.I)
     loss_mpo = onsite_mpo(
         chain_length,
-        [to_concrete(rate * up_projector) for rate in loss_rates];
+        [TLArray(rate * up_projector) for rate in loss_rates];
         Iloc = spin.I,
     )
     channels = site_emission_channels(chain_length; gamma = loss_rates)

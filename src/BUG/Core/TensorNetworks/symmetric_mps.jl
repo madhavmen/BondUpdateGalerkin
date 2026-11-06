@@ -54,7 +54,7 @@ Base.eachindex(psi::SymMPS) = eachindex(psi.tensors)
 Base.copy(psi::SymMPS) = SymMPS(copy(psi.tensors), psi.center)
 
 "Total dimension of leg `leg` of `tensor`, summed over its charge sectors."
-leg_dim(tensor, leg::Int) = sum(block_dim for (_, block_dim) in tensor.spaces[leg]; init = 0)
+leg_dim(tensor, leg::Int) = sum(block_dim for (_, block_dim) in Telum.spaces(tensor)[leg]; init = 0)
 
 """
     bond_dims(psi) -> Vector{Int}
@@ -81,14 +81,13 @@ reachable -- e.g. `<v|H|v>` for a purely off-diagonal (pure XX flip-flop) `H` on
 product state -- and must not need a diagonal regulariser.
 """
 function tensor_inner(bra_tensor, ket_tensor)
-    leg_count = length(bra_tensor.inds)
+    leg_count = length(Telum.inds(bra_tensor))
     # Pair every leg with its namesake: the result is a rank-0 tensor.
     legs = ntuple(identity, leg_count)
     contracted = contract(bra_tensor', legs, ket_tensor, legs)
-    # `to_concrete!`, not `to_concrete`: `contracted` is a fresh contract result nothing else sees,
-    # so a copy would be waste. This is the hottest allocation site, since re-orthogonalised Lanczos
-    # calls it O(maxiter^2) times per solve.
-    rc = to_concrete!(contracted)
+    # `contracted` is used as it is, with no copy: this is the hottest allocation site, since
+    # re-orthogonalised Lanczos calls it O(maxiter^2) times per solve.
+    rc = contracted
     length(rc) == 0 && return 0.0 + 0.0im   # `length` of a TLArray is its sector count
     return ComplexF64(rc[])
 end
@@ -122,7 +121,7 @@ function overlap(bra::SymMPS, ket::SymMPS)
         bra_tensor = bra[site]
         site > 1 && (bra_tensor = setitag(bra_tensor, 1, "BL,$site"))
         site < site_count && (bra_tensor = setitag(bra_tensor, 3, "BL,$(site + 1)"))
-        braR[site] = to_concrete(bra_tensor)
+        braR[site] = TLArray(bra_tensor)
     end
     # Left boundary link (leg 1) pairs here; carry (bra_link_r, ket_link_r) right.
     environment = contract(braR[1]', (1, 2), ket[1], (1, 2))
@@ -137,11 +136,11 @@ function overlap(bra::SymMPS, ket::SymMPS)
     # no sector there they live in different charge sectors and the overlap is
     # structurally zero -- return it rather than let `contract` assert on the
     # mismatched space (the same zero `tensor_inner` gives for no matching blocks).
-    braq = Set(first(sp) for sp in braR[site_count].spaces[3])
-    ketq = Set(first(sp) for sp in ket[site_count].spaces[3])
+    braq = Set(first(sp) for sp in Telum.spaces(braR[site_count])[3])
+    ketq = Set(first(sp) for sp in Telum.spaces(ket[site_count])[3])
     isdisjoint(braq, ketq) && return 0.0 + 0.0im
     closed = contract(tmp, (1, 2, 3), ket[site_count], (1, 2, 3))
-    scalar = to_concrete(closed)
+    scalar = TLArray(closed)
     length(scalar) == 0 && return 0.0 + 0.0im  # `length` of a TLArray is its sector count
     return ComplexF64(scalar[])
 end

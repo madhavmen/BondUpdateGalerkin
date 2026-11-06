@@ -8,7 +8,7 @@ function mps_sum(a::SymMPS, b::SymMPS)
     ts = Any[]
     for i = 1:L
         dims = i == 1 ? (3,) : (i == L ? (1,) : (1, 3))
-        push!(ts, to_concrete(oplus(a[i], b[i], dims)))
+        push!(ts, TLArray(oplus(a[i], b[i], dims)))
     end
     return SymMPS(ts, L)
 end
@@ -43,8 +43,8 @@ end
                 f = bond_frame(psi, i)
                 t = f.U0
                 viaTelum = reachable_sectors(t, 1, 2)
-                mine = fuse_spaces(symm(t), t.spaces[1], t.inds[1].dir, t.spaces[2], t.inds[2].dir)
-                any(q != dual_charge(symm(t), q) for (q, _) in t.spaces[1]) &&
+                mine = fuse_spaces(symm(t), Telum.spaces(t)[1], Telum.inds(t)[1].dir, Telum.spaces(t)[2], Telum.inds(t)[2].dir)
+                any(q != dual_charge(symm(t), q) for (q, _) in Telum.spaces(t)[1]) &&
                     (saw_charged_link[] = true)
                 @test sort(collect(viaTelum), by = string) == sort(collect(mine), by = string)
             end
@@ -58,7 +58,7 @@ end
         for i = 1:5
             canonical!(psi, i)
             f = bond_frame(psi, i)
-            K1 = to_concrete(f.U0 * f.S0)
+            K1 = TLArray(f.U0 * f.S0)
             @test norm(perp_component(f.U0, K1)) < 1e-12
         end
     end

@@ -1,4 +1,15 @@
 # s2: spin * 2
+"""
+    get_SU2_symmops(s2::Int)
+
+Build single-site spin operators for spin `s2 / 2`.
+
+`s2` is twice the physical spin, so the local Hilbert-space dimension is
+`s2 + 1`. The function obtains the SU(2) rank-1 CGT block from LurCGT,
+converts it to floating point, fixes the overall sign convention, and returns
+`(sp, sz, sm, I, lowering)`: raising, z-component, lowering, identity, and the
+SU(2)-normalized lowering operator used as the irrep lowering block.
+"""
 function get_SU2_symmops(s2::Int)
     S = s2 / 2
     CGT = LurCGT.getNsave_cg3(SU{2}, BigInt, ((2,), (s2,)), [(s2,)])[(s2,)]
@@ -14,6 +25,18 @@ function get_SU2_symmops(s2::Int)
     return sp, sz, sm, I, lowering
 end
 
+"""
+    getSymmetryInfo(opts::SpinOptions)
+
+Build symmetry metadata and maximal-weight IROPs for a spin local space.
+
+`opts.spin` is twice the spin quantum number and must be positive.
+`opts.symmetry` may be `:SU2`, `:U1`, or `nothing`. The return value is
+`(symm, weights, lowering_ops, mwirops)`, where `symm` is the tuple of symmetry
+types, `weights` gives one qlabel per local basis state, `lowering_ops` gives
+the local lowering matrices for non-Abelian symmetry generation, and `mwirops`
+contains the spin operators exposed to `getLocalSpace`.
+"""
 function getSymmetryInfo(opts::SpinOptions)
     @assert opts.symmetry === nothing || opts.symmetry == :SU2 || opts.symmetry == :U1 
     "SpinOptions currently only supports :SU2, :U1, or no symmetry"

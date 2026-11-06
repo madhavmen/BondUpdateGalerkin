@@ -43,7 +43,9 @@ symmetry sectors:
 - `symm`         – `NTuple{N, Type{<:Symmetry}}` listing the relevant symmetries.
 - `weights`      – `NTuple{N, Vector}`, weight (charge) of each basis state for
                    each symmetry. These are interpreted as the diagonals of the
-                   Cartan / charge operators for that symmetry.
+                   Cartan / charge operators for that symmetry. Alternatively,
+                   provide a vector of commuting Hermitian matrices in the same
+                   component order; their eigenvalues must be integral.
 - `lowering_ops` – `NTuple{N, Vector{<:AbstractMatrix}}`, lowering operators
                    (empty vector for purely abelian symmetries).
 - `mwirops`      – `Dict{Symbol, AbstractMatrix}` mapping the returned operator
@@ -136,6 +138,8 @@ function _validate_cross_symmetry_commutation(symm::NTuple{N, Any},
     return nothing
 end
 
+include("localspaces/normalize.jl")
+
 # ── Generic pipeline ─────────────────────────────────────────────────────────
 
 """
@@ -147,12 +151,11 @@ representations (IROPs) for the physical site described by `opts`.
 Returns a named tuple whose fields correspond to the standard operators of the
 given space type (e.g. `IS`, `Z`, `F`, `S` for a spinful fermionic site).
 """
-
 function reduceto2d(symm::NTuple{N, Any}, 
-    data_full::Vector{Tuple{NTuple{3, NTuple{N, Tuple{Vararg{Int}}}}, Array{Float64, M}}}) where {N, M}
+    data_full::Vector{Tuple{NTuple{3, NTuple{N, Tuple{Vararg{Int}}}}, Array{T, M}}}) where {N, M, T}
 
     @assert M == N + 3
-    reduced = Vector{Tuple{NTuple{2, NTuple{N, Tuple{Vararg{Int}}}}, Array{Float64, 2+N}}}()
+    reduced = Vector{Tuple{NTuple{2, NTuple{N, Tuple{Vararg{Int}}}}, Array{T, 2+N}}}()
 
     for (qlabels, block) in data_full
         block_idx = (:, :, 1, (Colon() for _=1:N)...)
@@ -162,7 +165,7 @@ function reduceto2d(symm::NTuple{N, Any},
 end
 
 function reduce_irop_blocks(symm::NTuple{N, Any}, 
-    data_full::Vector{Tuple{NTuple{3, NTuple{N, Tuple{Vararg{Int}}}}, Array{Float64, M}}}) where {N, M}
+    data_full::Vector{Tuple{NTuple{3, NTuple{N, Tuple{Vararg{Int}}}}, Array{T, M}}}) where {N, M, T}
 
     @assert M == N + 3
 
@@ -191,11 +194,33 @@ function _mult_ind_to_splist(symm::NTuple{N, Any},
     return splist
 end
 
+"""
+    getLocalSpace(opts, tags=("", "", ""))
+
+Construct symmetry-adapted local operators selected by `opts`, which must be a
+`SpinOptions`, `FermionOptions`, `FermionSOptions`, or another supported
+`LocalSpaceOptions` subtype. `tags` is a three-string tuple assigned to the
+physical input, physical output, and operator legs; two-leg operators use its
+first two entries. Returns a named tuple keyed by operator name, with each
+value a concrete `TLArray`. The function validates cross-symmetry commutation
+before decomposition and throws `ArgumentError` for inconsistent definitions.
+"""
 function getLocalSpace(opts::LocalSpaceOptions,
     tags::Tuple{Vararg{AbstractString, 3}}=("", "", ""))
 
     # Step 1 – symmetry operators that define the local Hilbert space structure
     symm, weights, lowering_ops, mwirops = getSymmetryInfo(opts)
+    weights, lowering_ops, mwirops, _ = _normalize_localspace_data(symm, weights, lowering_ops, mwirops)
+    return _postprocess_localspace!(opts, _localspace_from_data(symm, weights, lowering_ops, mwirops, tags))
+end
+
+"""
+    _localspace_from_data(symm, weights, lowering_ops, mwirops, tags)
+
+Build local operator tensors from normalized diagonal weights, retaining the
+physical operator scalar type. This shared entry point also supports tests.
+"""
+function _localspace_from_data(symm, weights, lowering_ops, mwirops, tags=("", "", ""))
     _validate_cross_symmetry_commutation(symm, weights, lowering_ops)
 
     isempty(symm) && return _getLocalSpace_no_symmetry(mwirops, tags)
@@ -247,6 +272,7 @@ function getLocalSpace(opts::LocalSpaceOptions,
     return NamedTuple(Telum)
 end
 
+"""Construct unsymmetrized local-operator `TLArray`s from maximal-weight operator dictionary `mwirops` and three leg tags. This is the no-symmetry fast path used by `getLocalSpace`."""
 function _getLocalSpace_no_symmetry(mwirops::Dict{Symbol, <:AbstractMatrix},
                                     tags::Tuple{Vararg{AbstractString, 3}})
     isempty(mwirops) && throw(ArgumentError("no-symmetry local space has no operators"))
@@ -267,8 +293,36 @@ function _getLocalSpace_no_symmetry(mwirops::Dict{Symbol, <:AbstractMatrix},
     for (name, op) in mwirops
         size(op) == (spdim, spdim) ||
             throw(ArgumentError("operator $name has size $(size(op)), expected ($spdim, $spdim)"))
-        RMTs = [Matrix{Float64}(op)]
+        RMTs = [Matrix{promote_type(Float64, eltype(op))}(op)]
         tensors[name] = TLArray(symm, qlabels, copy(wmatdata), copy(wmatinfo), RMTs, inds, spaces)
     end
     return NamedTuple(tensors)
+end
+
+"""
+    _postprocess_localspace!(opts, operators)
+
+Return local operators unchanged unless an option-specific method assembles
+internal multiplets under their public names.
+"""
+_postprocess_localspace!(opts::LocalSpaceOptions, operators) = operators
+
+"""
+    _localspace_wmat(block, leg) -> (W, reduced, singular_values)
+
+Factor one local-space CGT multiplicity axis with real orthonormal columns.
+For complex physical payloads, span both real and imaginary parts with a real
+SVD and retain all complex amplitudes in `reduced`. This preserves W'W = I
+without requiring complex CGT storage.
+"""
+_localspace_wmat(block::AbstractArray{<:Real}, leg) = svd_leg(block, leg)
+function _localspace_wmat(block::AbstractArray{<:Complex,N}, leg) where N
+    perm = (leg, (i for i in 1:N if i != leg)...)
+    moved = permutedims(block, perm)
+    mat = reshape(moved, size(block, leg), :)
+    decomposition = svd(hcat(real.(mat), imag.(mat)))
+    keep = decomposition.S .> 1e-12
+    W = decomposition.U[:, keep]
+    reduced = reshape(W' * mat, size(W,2), size(moved)[2:end]...)
+    return W, permutedims(reduced, invperm(collect(perm))), decomposition.S[keep]
 end

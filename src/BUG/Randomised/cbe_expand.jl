@@ -169,11 +169,11 @@ function cbe_expand(
     joint, resj, err_fnl = 0, nothing, 0.0
     if !preselect_only && njl > 0 && njr > 0
         # The small matrix `QL' (H Theta) QR'` of candidate-pair weights, legs (left, right).
-        UMU = to_concrete(permutedims(contract(skl(QR), (1, 2), QL', (1, 2)), (2, 1)))
+        UMU = TLArray(permutedims(contract(skl(QR), (1, 2), QL', (1, 2)), (2, 1)))
         # EMPTY: the left and right candidate spaces share no charge sector, so no pair of them
         # can carry amplitude (the reference's `Empty` branch, :461; the same constraint
         # `pairable_charges` enforces for the random fill). Now only disables the JOINT ranking.
-        if length(UMU.qlabels) > 0 && norm(UMU) >= 1e-11
+        if length(Telum.logical_qlabels(UMU)) > 0 && norm(UMU) >= 1e-11
             joint = min(dex_l, dex_r, njl, njr)
             if joint > 0
                 resj = svd(UMU, (1,); Nkeep = joint, cutoff = stol_fnl, get_lists = true)
@@ -218,7 +218,7 @@ function cbe_expand(
     UL =
         oneL ?
         _one_sided_tail(
-            to_concrete(contract(QL', (1, 2), skl(full_local_basis(right_frame, :right)), (1, 2))),
+            TLArray(contract(QL', (1, 2), skl(full_local_basis(right_frame, :right)), (1, 2))),
             alloc,
             dex_l,
             stol_fnl,
@@ -227,7 +227,7 @@ function cbe_expand(
     UR =
         oneR ?
         _one_sided_tail(
-            to_concrete(contract(QR', (2, 3), skr(full_local_basis(left_frame, :left)), (2, 3))),
+            TLArray(contract(QR', (2, 3), skr(full_local_basis(left_frame, :left)), (2, 3))),
             alloc,
             dex_r,
             stol_fnl,
@@ -238,18 +238,18 @@ function cbe_expand(
     TLC = if njl == 0
         nothing
     elseif resj !== nothing && dex_l <= joint
-        to_concrete!(contract(QL, (3,), resj.U, (1,)))
+        contract(QL, (3,), resj.U, (1,))
     elseif oneL
-        UL === nothing ? nothing : to_concrete!(contract(QL, (3,), UL, (1,)))
+        UL === nothing ? nothing : contract(QL, (3,), UL, (1,))
     else
         _trim_total(QL, 3, dex_l)
     end
     TRC = if njr == 0
         nothing
     elseif resj !== nothing && dex_r <= joint
-        to_concrete!(contract(resj.Vd, (2,), QR, (1,)))
+        contract(resj.Vd, (2,), QR, (1,))
     elseif oneR
-        UR === nothing ? nothing : to_concrete!(contract(UR, (1,), QR, (1,)))
+        UR === nothing ? nothing : contract(UR, (1,), QR, (1,))
     else
         _trim_total(QR, 1, dex_r)
     end
@@ -269,16 +269,16 @@ function cbe_expand(
         return CBEExpansion(left_frame, right_frame, 0, 0, err_pre, 0.0)
 
     # Direct sum `[U0 | TLC]` on the bond leg (and `[V0; TRC]`), with the frames' bond tags.
-    ltag, rtag = left_frame.inds[3].itags, right_frame.inds[1].itags
+    ltag, rtag = Telum.inds(left_frame)[3].itags, Telum.inds(right_frame)[1].itags
     U_ex, n_l = if TLC === nothing
         (left_frame, 0)
     else
-        (to_concrete(oplus([left_frame, to_concrete(setitag(TLC, 3, ltag))], (3,))), leg_dim(TLC, 3))
+        (TLArray(oplus([left_frame, TLArray(setitag(TLC, 3, ltag))], (3,))), leg_dim(TLC, 3))
     end
     V_ex, n_r = if TRC === nothing
         (right_frame, 0)
     else
-        (to_concrete(oplus([right_frame, to_concrete(setitag(TRC, 1, rtag))], (1,))), leg_dim(TRC, 1))
+        (TLArray(oplus([right_frame, TLArray(setitag(TRC, 1, rtag))], (1,))), leg_dim(TRC, 1))
     end
 
     # No rotation of the expanded frame: an expansion is lossless, and rank grows only where the
@@ -331,12 +331,12 @@ function _trim_total(basis, leg::Int, column_count::Int)
     leg_dim(basis, leg) <= column_count && return basis
     left = column_count
     keep = Dict{Any,Int}()
-    for (sector, sector_size) in basis.spaces[leg]
+    for (sector, sector_size) in Telum.spaces(basis)[leg]
         keep[sector] = min(sector_size, left)
         left -= keep[sector]
     end
     any(kept > 0 for kept in values(keep)) || return nothing
-    return to_concrete(
+    return TLArray(
         getsub(
             basis,
             leg,

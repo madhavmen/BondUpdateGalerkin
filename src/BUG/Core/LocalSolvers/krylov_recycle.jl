@@ -98,7 +98,7 @@ end
 function _rb(site_tensor, site::Int, site_count::Int)
     site > 1 && (site_tensor = setitag(site_tensor, 1, "RB,$site"))
     site < site_count && (site_tensor = setitag(site_tensor, 3, "RB,$(site + 1)"))
-    return to_concrete(site_tensor)
+    return TLArray(site_tensor)
 end
 
 """
@@ -117,22 +117,22 @@ function _tail_overlaps(Anew::SymMPS, Aold::SymMPS, side::Symbol)
             # ket site tensor with the environment to its right absorbed: (link, phys, bra link)
             ket_with_env =
                 overlaps[site+1] === nothing ? Aold[site] :
-                to_concrete!(contract(Aold[site], (3,), overlaps[site+1], (2,)))
+                contract(Aold[site], (3,), overlaps[site+1], (2,))
             # close the physical and right legs against the conjugated bra site
-            overlaps[site] = to_concrete!(
+            overlaps[site] = 
                 contract(_rb(Anew[site], site, site_count)', (2, 3), ket_with_env, (2, 3)),
-            )
+            
         end
     else
         for site = 1:(site_count-2)
             # the environment to the left absorbed into the ket site tensor: (bra link, phys, link)
             ket_with_env =
                 overlaps[site] === nothing ? Aold[site] :
-                to_concrete!(contract(overlaps[site], (2,), Aold[site], (1,)))
+                contract(overlaps[site], (2,), Aold[site], (1,))
             # close the left and physical legs against the conjugated bra site
-            overlaps[site+1] = to_concrete!(
+            overlaps[site+1] = 
                 contract(_rb(Anew[site], site, site_count)', (1, 2), ket_with_env, (1, 2)),
-            )
+            
         end
     end
     return overlaps
@@ -152,26 +152,26 @@ function _recycle_transport(entry, side::Symbol, Pm, Fnew, overlaps, bond::Int)
         Ek = overlaps[bond+2]
         Fn = setitag(Fnew, 1, "RCb")
         Ek === nothing || (Fn = setitag(Fn, 3, "RB,$(bond + 2)"))
-        old_with_tail = Ek === nothing ? Fold : to_concrete!(contract(Fold, (3,), Ek, (2,)))
+        old_with_tail = Ek === nothing ? Fold : contract(Fold, (3,), Ek, (2,))
         # (new*, old): the old opposite leg projected on the new one
-        overlap_map = to_concrete!(contract(to_concrete(Fn)', (2, 3), old_with_tail, (2, 3)))
-        tag = Fnew.inds[1].itags
+        overlap_map = contract(TLArray(Fn)', (2, 3), old_with_tail, (2, 3))
+        tag = Telum.inds(Fnew)[1].itags
         return map(entry.basis) do old_vector
-            moved = Pm === nothing ? old_vector : to_concrete!(contract(Pm, (2,), old_vector, (1,)))
-            to_concrete(setitag(to_concrete!(contract(moved, (3,), overlap_map, (2,))), 3, tag))
+            moved = Pm === nothing ? old_vector : contract(Pm, (2,), old_vector, (1,))
+            TLArray(setitag(contract(moved, (3,), overlap_map, (2,)), 3, tag))
         end
     end
     Ek = overlaps[bond]                     # opposite frame: (link_{bond-1}, site_bond, bond)
     Fn = setitag(Fnew, 3, "RCb")
     Ek === nothing || (Fn = setitag(Fn, 1, "RB,$bond"))
-    old_with_tail = Ek === nothing ? Fold : to_concrete!(contract(Ek, (2,), Fold, (1,)))
+    old_with_tail = Ek === nothing ? Fold : contract(Ek, (2,), Fold, (1,))
     # (new*, old): the old opposite leg projected on the new one
-    overlap_map = to_concrete!(contract(to_concrete(Fn)', (1, 2), old_with_tail, (1, 2)))
-    tag = Fnew.inds[3].itags
+    overlap_map = contract(TLArray(Fn)', (1, 2), old_with_tail, (1, 2))
+    tag = Telum.inds(Fnew)[3].itags
     return map(entry.basis) do old_vector
-        moved = to_concrete!(contract(overlap_map, (2,), old_vector, (1,)))
-        Pm === nothing || (moved = to_concrete!(contract(moved, (3,), Pm, (1,))))
-        to_concrete(setitag(moved, 1, tag))
+        moved = contract(overlap_map, (2,), old_vector, (1,))
+        Pm === nothing || (moved = contract(moved, (3,), Pm, (1,)))
+        TLArray(setitag(moved, 1, tag))
     end
 end
 
@@ -255,23 +255,23 @@ function _krylov_enrich_recycled(
     ranked = alloc.krylov_rank > 0
     candidates = Any[]                                   # the ranked rule's collected residuals
     # the block: the normalised seed, then each recycled vector that survives orthogonalisation
-    block_basis, ws = Any[to_concrete((1.0 / seed_norm) * seed)], Float64[amp]
+    block_basis, ws = Any[TLArray((1.0 / seed_norm) * seed)], Float64[amp]
     for recycled_vector in recycled_vectors
         orth_part = _orth_against(block_basis, recycled_vector)
         nx = norm(orth_part)
         nx > 1e-8 * max(norm(recycled_vector), eps()) &&
-            push!(block_basis, to_concrete((1.0 / nx) * orth_part))
+            push!(block_basis, TLArray((1.0 / nx) * orth_part))
     end
     nrec = length(block_basis) - 1
     # Score `vector` by `weight` times its part outside the current frame and append it to the
     # frame when that exceeds `alloc.krylov`; returns false once the work cap stops growth.
     function score!(vector, weight, first)
-        perp_part = to_concrete(perp(frame, vector))
+        perp_part = TLArray(perp(frame, vector))
         eta = weight * norm(perp_part)
         first ? (eta_c = max(eta_c, eta)) : (eta_d = max(eta_d, eta))
         eta > alloc.krylov || return true
         # ranked: collect against the unchanged `frame_start`, select after the recurrence
-        ranked && (push!(candidates, to_concrete(weight * perp_part)); return true)
+        ranked && (push!(candidates, TLArray(weight * perp_part)); return true)
         room = workcap > 0 ? workcap - leg_dim(frame, fl) : typemax(Int)
         room <= 0 && return false
         frame, nadd, fits =
@@ -304,7 +304,7 @@ function _krylov_enrich_recycled(
     for column = 1:length(block_basis), row = (column+1):length(block_basis)
         ov = tensor_inner(block_basis[row], Rs[column])
         Hm[row, column] += ov
-        Rs[column] = to_concrete(Rs[column] - ov * block_basis[row])
+        Rs[column] = TLArray(Rs[column] - ov * block_basis[row])
     end
     basis_count = length(block_basis)
     if nrec > 0
@@ -333,7 +333,7 @@ function _krylov_enrich_recycled(
             term = (teff * ph[column]) * Rs[column]
             defect = defect === nothing ? term : defect + term
         end
-        defect = to_concrete(defect)
+        defect = TLArray(defect)
         nd = norm(defect)
         # Saad's defect can cancel while the residual does not: continue then along the heaviest
         # residual column instead
@@ -351,20 +351,20 @@ function _krylov_enrich_recycled(
         if weight <= alloc.krylov
             # kept, never applied: the active frontier a next round would continue from (as
             # `_krylov_enrich` keeps its last vector)
-            push!(block_basis, to_concrete((1.0 / nd) * defect))
+            push!(block_basis, TLArray((1.0 / nd) * defect))
             push!(ws, weight)
             closed = true
             break
         end
         basis_count >= nmax && (capped = true; break)
-        bn = to_concrete((1.0 / nd) * _orth_against(block_basis, defect))
-        bn = to_concrete((1.0 / norm(bn)) * bn)
+        bn = TLArray((1.0 / nd) * _orth_against(block_basis, defect))
+        bn = TLArray((1.0 / norm(bn)) * bn)
         push!(block_basis, bn)
         push!(ws, weight)
         for column = 1:basis_count                      # old residuals lose their bn part
             ov = tensor_inner(bn, Rs[column])
             Hm[basis_count+1, column] += ov
-            Rs[column] = to_concrete(Rs[column] - ov * bn)
+            Rs[column] = TLArray(Rs[column] - ov * bn)
         end
         image!(basis_count + 1)
         nnew += 1
@@ -430,7 +430,7 @@ function _recycled_or_fresh(
         perp = side === :left ? perp_component : perp_component_right
         frame, nseed = frame_start, 0
         for (vector, weight) in zip(recycled_vectors, entry.weights)
-            perp_part = to_concrete(perp(frame, vector))
+            perp_part = TLArray(perp(frame, vector))
             weight * norm(perp_part) > alloc.krylov || continue
             frame, seeded, _ = _extend_frame(frame, perp_part, vector, side, weight, alloc.krylov)
             nseed += seeded

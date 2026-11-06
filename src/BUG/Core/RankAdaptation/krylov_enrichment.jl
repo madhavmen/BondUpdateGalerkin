@@ -158,15 +158,15 @@ function _extend_frame(
     keep_rank < nk && (res = svd(residual, legs, _TAG_K, _TAG_KR; Nkeep = keep_rank, cutoff = cut))
     # A right frame carries its bond leg first, so the SVD's new leg moves to the front.
     new_block =
-        side === :left ? _reortho_left(frame, to_concrete(res.U)) :
-        _reortho_right(frame, to_concrete(permutedims(res.U, (3, 1, 2))))
+        side === :left ? _reortho_left(frame, TLArray(res.U)) :
+        _reortho_right(frame, TLArray(permutedims(res.U, (3, 1, 2))))
     # roundoff in a saturated sector must not become a column (`_cap_to_local_room`)
     new_block = _cap_to_local_room(frame, new_block, side)
     new_block === nothing && return (frame, 0, fits)
     fl = side === :left ? 3 : 1
     # Direct sum on the frame leg, the new block relabelled with the frame's own bond tag.
-    grown_frame = to_concrete(
-        oplus([frame, to_concrete(setitag(new_block, fl, frame.inds[fl].itags))], (fl,)),
+    grown_frame = TLArray(
+        oplus([frame, TLArray(setitag(new_block, fl, Telum.inds(frame)[fl].itags))], (fl,)),
     )
     return (_check_frame(grown_frame, side, "_extend_frame"), leg_dim(new_block, fl), fits)
 end
@@ -188,7 +188,7 @@ function _append_ranked(frame, candidates, side::Symbol, allowance::Float64, wor
     fl = side === :left ? 3 : 1
     room = workcap > 0 ? workcap - leg_dim(frame, fl) : typemax(Int)
     # the residuals' own bond leg (to the rest of the chain) is the leg the block is summed over
-    block = length(candidates) == 1 ? candidates[1] : to_concrete(oplus(candidates, (fl,)))
+    block = length(candidates) == 1 ? candidates[1] : TLArray(oplus(candidates, (fl,)))
     room <= 0 && return (frame, 0, norm(block) <= allowance)
     # the weights are folded into the block, so the tail rule runs at weight 1
     return _extend_frame(frame, block, block, side, 1.0, allowance; room = room)
@@ -244,13 +244,13 @@ function _krylov_enrich(
     eta_c, eta_d, added, added_d = 0.0, 0.0, 0, 0
     # Tests C/D on one direction, growing `frame` in place; false = capped.
     function score(direction, weight, first::Bool)
-        residual = to_concrete(perp(frame, direction))
+        residual = TLArray(perp(frame, direction))
         eta = weight * norm(residual)
         first ? (eta_c = eta) : (eta_d = max(eta_d, eta))
         eta > allow || return true
         if ranked
             # `frame` stays `start_frame`: every candidate is measured against the same frame
-            push!(candidates, to_concrete(weight * residual))
+            push!(candidates, TLArray(weight * residual))
             first || (n_test_d_candidates += 1)
             return true
         end
@@ -312,7 +312,7 @@ end
 seeding it).
 """
 function _merge_frame(frame, other_frame, side::Symbol)
-    residual = to_concrete(
+    residual = TLArray(
         side === :left ? perp_component(frame, other_frame) :
         perp_component_right(frame, other_frame),
     )

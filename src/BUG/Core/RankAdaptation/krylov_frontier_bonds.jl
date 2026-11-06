@@ -11,45 +11,45 @@ the grown basis of the bond before), which contains the range of `carry`, so the
 """
 function _frame_onto_left(left_isometry, carry, right)
     res_r = svd(right, (1,), "bV,L", "bV,R"; cutoff = 0.0)
-    right_isometry = to_concrete(res_r.Vd)
+    right_isometry = TLArray(res_r.Vd)
     # The carry seen through the prescribed left isometry, times the right site's `U S`.
-    bond_matrix = to_concrete(
-        to_concrete!(contract(left_isometry', (1, 2), carry, (1, 2))) *
-        to_concrete(res_r.U * res_r.S),
+    bond_matrix = TLArray(
+        contract(left_isometry', (1, 2), carry, (1, 2)) *
+        TLArray(res_r.U * res_r.S),
     )
     return BondFrame(
         left_isometry,
         bond_matrix,
         right_isometry,
-        carry.inds[1],
-        carry.inds[2],
-        carry.inds[3],
-        right.inds[2],
-        right.inds[3],
+        Telum.inds(carry)[1],
+        Telum.inds(carry)[2],
+        Telum.inds(carry)[3],
+        Telum.inds(right)[2],
+        Telum.inds(right)[3],
         leg_dim(left_isometry, 3),
-        copy(carry.spaces[3]),
+        copy(Telum.spaces(carry)[3]),
     )
 end
 
 "Row mirror of [`_frame_onto_left`](@ref): the right isometry `right_isometry` is prescribed."
 function _frame_onto_right(left, carry, right_isometry)
     res_l = svd(left, (1, 2), "bU,L", "bU,R"; cutoff = 0.0)
-    left_isometry = to_concrete(res_l.U)
-    bond_matrix = to_concrete(
-        to_concrete(res_l.S * res_l.Vd) *
-        to_concrete!(contract(carry, (2, 3), right_isometry', (2, 3))),
+    left_isometry = TLArray(res_l.U)
+    bond_matrix = TLArray(
+        TLArray(res_l.S * res_l.Vd) *
+        contract(carry, (2, 3), right_isometry', (2, 3)),
     )
     return BondFrame(
         left_isometry,
         bond_matrix,
         right_isometry,
-        left.inds[1],
-        left.inds[2],
-        left.inds[3],
-        carry.inds[2],
-        carry.inds[3],
+        Telum.inds(left)[1],
+        Telum.inds(left)[2],
+        Telum.inds(left)[3],
+        Telum.inds(carry)[2],
+        Telum.inds(carry)[3],
         leg_dim(right_isometry, 1),
-        copy(left.spaces[3]),
+        copy(Telum.spaces(left)[3]),
     )
 end
 
@@ -65,7 +65,7 @@ miss.
 """
 function _right_leak(right_isometry, two_site)
     ov = contract(two_site, (3, 4), right_isometry', (2, 3))           # (link_l, site_l, bond)
-    return norm(to_concrete(two_site - to_concrete!(contract(ov, (3,), right_isometry, (1,)))))
+    return norm(TLArray(two_site - contract(ov, (3,), right_isometry, (1,))))
 end
 
 """
@@ -140,13 +140,13 @@ function _bond_measurements(
         if side === :left
             carry[bond] =
                 projected === nothing ? Fm[bond] :
-                to_concrete!(contract(projected, (2,), Fm[bond], (1,)))
-            projected = to_concrete!(contract(fr.left_frames[bond]', (1, 2), carry[bond], (1, 2)))
+                contract(projected, (2,), Fm[bond], (1,))
+            projected = contract(fr.left_frames[bond]', (1, 2), carry[bond], (1, 2))
         else
             carry[bond] =
                 projected === nothing ? Fm[bond+1] :
-                to_concrete!(contract(Fm[bond+1], (3,), projected, (1,)))
-            projected = to_concrete!(contract(carry[bond], (2, 3), fr.right_frames[bond]', (2, 3)))
+                contract(Fm[bond+1], (3,), projected, (1,))
+            projected = contract(carry[bond], (2, 3), fr.right_frames[bond]', (2, 3))
         end
     end
     rngs = Vector{Any}(undef, site_count - 1)
@@ -206,8 +206,8 @@ end
 
 "How many charge sectors `new` carries on `leg` that `old` did not."
 function _new_sectors(old, new, leg::Int)
-    have = Set(first(sector) for sector in old.spaces[leg])
-    return count(sector -> !(first(sector) in have), new.spaces[leg])
+    have = Set(first(sector) for sector in Telum.spaces(old)[leg])
+    return count(sector -> !(first(sector) in have), Telum.spaces(new)[leg])
 end
 
 """

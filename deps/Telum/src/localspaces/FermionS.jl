@@ -1,4 +1,15 @@
 # N: The number of channels
+"""
+    FermionS_basicops(N::Int)
+
+Build elementary spinful-fermion operators for `N` channels.
+
+Returns `(FF, NN, SS, CC, SZ, chan_l, chan_z)`. `FF[spin, channel]` annihilates
+one spin component, `NN` stores number operators, `SS[channel]` lowers spin,
+`CC[channel]` lowers charge SU(2) by pair annihilation, `SZ[channel]` is the
+spin-z operator, and `chan_l`/`chan_z` define the SU(N) channel algebra over the
+spinful Fock basis.
+"""
 function FermionS_basicops(N::Int)
     @assert N > 0 "Number of channels must be positive"
 
@@ -85,8 +96,26 @@ function FermionS_basicops(N::Int)
     return (; FF, NN, SS, CC, SZ, chan_l, chan_z)
 end
 
+"""
+    FermionS_L3(FF::AbstractMatrix) -> SparseMatrixCSC{ComplexF64, Int}
+
+Construct the two-orbital orbital-angular-momentum operator `L₃` in Telum's
+spinful-fermion Fock basis. `FF[spin, channel]` must contain annihilation
+operators for exactly two channels. The result is
+`i ∑σ (FF[σ,1]'FF[σ,2] - FF[σ,2]'FF[σ,1])` and follows the channel-major,
+spin-minor tensor-product ordering used by `FermionS_basicops`.
+"""
+function FermionS_L3(FF::AbstractMatrix)
+    size(FF) == (2, 2) || throw(ArgumentError("L₃ requires two spin components and two channels"))
+    return 1.0im * sum(FF[spin, 1]' * FF[spin, 2] - FF[spin, 2]' * FF[spin, 1] for spin in 1:2)
+end
+
 const sym_dict = Dict(:U1 => U1, :SU2 => SU{2})
 
+
+# For now, we only implement U1 charge relative to half-filling
+# Charge symmetry is not nothing here
+# TODO: Z_N charge symmetry, relative to other fillings, etc.
 """
     charge_symmops(opts::FermionSOptions, basic_ops)
 
@@ -98,10 +127,6 @@ half-filling.  `:U1` charge symmetry has no lowering operators.  `:SU2` charge
 symmetry uses the channel-summed pair-annihilation operator as the lowering
 operator.
 """
-
-# For now, we only implement U1 charge relative to half-filling
-# Charge symmetry is not nothing here
-# TODO: Z_N charge symmetry, relative to other fillings, etc.
 function charge_symmops(opts::FermionSOptions, basic_ops)
     N = opts.nchannels
     weights, symms, lops = [], [], []
@@ -124,6 +149,8 @@ function charge_symmops(opts::FermionSOptions, basic_ops)
     return weights, symms, lops
 end
 
+# This covers U1 and SU(2) spin symmetries since the weights are 
+# just the total spin-z component
 """
     spin_symmops(opts::FermionSOptions, basic_ops)
 
@@ -134,9 +161,6 @@ the total spin-z values on those channels.  `:U1` spin symmetry has no lowering
 operators.  `:SU2` spin symmetry uses the channel-summed spin-lowering
 operator.
 """
-
-# This covers U1 and SU(2) spin symmetries since the weights are 
-# just the total spin-z component
 function spin_symmops(opts::FermionSOptions, basic_ops)
     N = opts.nchannels
     weights, symms, lops = [], [], []
@@ -164,27 +188,52 @@ end
 
 Build channel-symmetry data for each channel group in `opts.channel_symm`.
 
-The current implementation supports symbols of the form `:SU2`, `:SU3`, ...
-where the SU(N) rank must match the number of listed channels.  It returns the
-Dynkin-basis channel weights and adjacent channel-lowering operators.
+The current implementation supports `:SU`, `:SU2`, `:SU3`, ... with the SU(N)
+size matching the number of listed channels, and `:SO` or `:SO3` for exactly
+three channels. `:SO2` selects two ordered channels with the Hermitian L3
+matrix and returns Abelian `U1` with no lowering operators. Other entries
+return diagonal weights and lowering operators in their symmetry convention.
 """
-
-# For now, we only implement SU(N) channel symmetry
-# TODO: generalize to another channel symmetry
 function chan_symmops(opts::FermionSOptions, basic_ops)
     N = opts.nchannels; FF = basic_ops.FF
     weights, symms, lops = [], [], []
     for (ssymbol, channs) in opts.channel_symm
 
+        if ssymbol == :SO2
+            length(channs) == 2 || throw(ArgumentError("Channel symmetry :SO2 requires exactly two channels"))
+            channs[1] != channs[2] && all(c -> 1 <= c <= opts.nchannels, channs) ||
+                throw(ArgumentError("Channel symmetry :SO2 requires distinct valid channels, got $channs"))
+            # Preserve the supplied channel order, which fixes L3's sign.
+            z = FermionS_L3(FF[:, channs])
+            push!(symms, U1)
+            push!(weights, [z])
+            push!(lops, SparseMatrixCSC{ComplexF64,Int}[])
+            continue
+        end
+
+        if ssymbol == :SO || ssymbol == :SO3
+            _check_channels(channs, opts.nchannels, "Channel symmetry $ssymbol")
+            length(channs) == 3 || throw(ArgumentError(
+                "Channel symmetry $ssymbol requires exactly three channels"))
+            a, b, c = channs
+            zvals = Int.(diag(2 * (basic_ops.NN[1, a] + basic_ops.NN[2, a] -
+                                     basic_ops.NN[1, c] - basic_ops.NN[2, c])))
+            lop = sqrt(2) * sum(FF[spin, to]' * FF[spin, from]
+                for spin in 1:2 for (to, from) in ((b, a), (c, b)))
+            push!(symms, SO{3})
+            push!(weights, [(z,) for z in zvals])
+            push!(lops, [lop])
+            continue
+        end
+
         # Get symmetry type and number of channels involved
         str = String(ssymbol)
-        if startswith(str, "SU")
-            num_part = str[3:end]
-            if isempty(num_part) N = length(channs)
-            else N = parse(Int, num_part) end
-            @assert N >= 2 && N == length(channs)
-            push!(symms, SU{N})
-        end
+        startswith(str, "SU") || throw(ArgumentError("Unsupported channel symmetry: $ssymbol"))
+        num_part = str[3:end]
+        if isempty(num_part) N = length(channs)
+        else N = parse(Int, num_part) end
+        @assert N >= 2 && N == length(channs)
+        push!(symms, SU{N})
 
         lop = Vector{SparseMatrixCSC{Float64, Int}}(undef, N-1)
         zvals = Vector{Vector{Int}}(undef, N-1)
@@ -203,11 +252,21 @@ function chan_symmops(opts::FermionSOptions, basic_ops)
     return weights, symms, lops
 end
 
+"""
+    _add_spin_components!(mwirops, channs, N::Int, basic_ops)
+
+Add explicit spin-vector components for a channel group.
+
+`channs` selects physical channels, `N` is the total channel count used for
+naming, and `basic_ops` supplies `SS` and `SZ`. The emitted operators are
+`S<channels>p`, `S<channels>z`, and `S<channels>m` in spherical-component
+normalization; the suffix is omitted when `channs` covers all channels.
+"""
 function _add_spin_components!(
-    mwirops::Dict{Symbol, SparseMatrixCSC{Float64, Int}},
+    mwirops::Dict{Symbol, SparseMatrixCSC{T, Int}},
     channs::AbstractVector{<:Integer},
     N::Int,
-    basic_ops)
+    basic_ops) where T
 
     suffix_channs = collect(channs)
     mwirops[_spin_symbol(suffix_channs, N, "p")] =
@@ -218,11 +277,20 @@ function _add_spin_components!(
         (1 / sqrt(2)) * sum(basic_ops.SS[i] for i in suffix_channs)
 end
 
+"""
+    _add_spin_irop!(mwirops, channs, N::Int, basic_ops)
+
+Add one fused SU(2)-spin maximal-weight IROP for a channel group.
+
+`channs` selects the channels being fused. The stored operator is the
+maximal-weight spin component, named `S<channels>` with the channel suffix
+omitted for an all-channel group.
+"""
 function _add_spin_irop!(
-    mwirops::Dict{Symbol, SparseMatrixCSC{Float64, Int}},
+    mwirops::Dict{Symbol, SparseMatrixCSC{T, Int}},
     channs::AbstractVector{<:Integer},
     N::Int,
-    basic_ops)
+    basic_ops) where T
 
     suffix_channs = collect(channs)
     mwirops[_spin_symbol(suffix_channs, N)] =
@@ -248,8 +316,8 @@ Channel-symmetry groups must either be disjoint from all spin-symmetry groups,
 or be contained in exactly one already selected multi-channel spin group.
 Crossing multiple spin groups is ambiguous and raises an error.
 """
-function add_spin_irop!(mwirops::Dict{Symbol, SparseMatrixCSC{Float64, Int}}, 
-                   opts::FermionSOptions, basic_ops)
+function add_spin_irop!(mwirops::Dict{Symbol, SparseMatrixCSC{T, Int}},
+                   opts::FermionSOptions, basic_ops) where T
     N = opts.nchannels
 
     spin_groups = opts.spin_symm === nothing ? Tuple{Symbol, Vector{Int}}[] : opts.spin_symm
@@ -270,7 +338,7 @@ function add_spin_irop!(mwirops::Dict{Symbol, SparseMatrixCSC{Float64, Int}},
 
     for (ssymbol, channs) in channel_groups
         _check_channels(channs, N, "Channel symmetry $ssymbol")
-        startswith(String(ssymbol), "SU") ||
+        (startswith(String(ssymbol), "SU") || ssymbol in (:SO, :SO3, :SO2)) ||
             error("Unsupported channel symmetry for spin IROPs: $ssymbol")
 
         overlap_with_channel = intersect(channel_selected, channs)
@@ -307,6 +375,16 @@ function add_spin_irop!(mwirops::Dict{Symbol, SparseMatrixCSC{Float64, Int}},
     end
 end
 
+"""
+    _annihilation_primary_blocks(opts::FermionSOptions, N::Int)
+
+Create initial spinful annihilation blocks from charge and SU(2)-spin groups.
+
+Each returned block has fields `channs`, `charge_su2`, `spin_su2`, and
+`channel_symm`. Channels sharing the same charge group and SU(2)-spin group are
+fused into one block so the later IROP emission can choose the correct
+maximal-weight annihilation component.
+"""
 function _annihilation_primary_blocks(opts::FermionSOptions, N::Int)
     charge_groups = opts.charge_symm === nothing ? Tuple{Symbol, Vector{Int}}[] : opts.charge_symm
     spin_groups = opts.spin_symm === nothing ? Tuple{Symbol, Vector{Int}}[] : opts.spin_symm
@@ -364,12 +442,22 @@ function _annihilation_primary_blocks(opts::FermionSOptions, N::Int)
     return blocks
 end
 
+"""
+    _split_annihilation_blocks_by_channel_symmetry(blocks, opts, N)
+
+Refine spinful annihilation blocks using channel SU(N) symmetry groups.
+
+`blocks` is modified in place. A channel group may create a new block on
+otherwise unselected channels or split one already generated multi-channel
+block. The split preserves `charge_su2` and `spin_su2` flags so operator
+components remain consistent with the charge/spin fusion already chosen.
+"""
 function _split_annihilation_blocks_by_channel_symmetry(blocks, opts::FermionSOptions, N::Int)
     channel_groups = opts.channel_symm === nothing ? Tuple{Symbol, Vector{Int}}[] : opts.channel_symm
     channel_selected = Set{Int}()
 
     for (ssymbol, channs) in channel_groups
-        startswith(String(ssymbol), "SU") ||
+        (startswith(String(ssymbol), "SU") || ssymbol in (:SO, :SO3, :SO2)) ||
             error("Unsupported channel symmetry for annihilation IROPs: $ssymbol")
         _check_channels(channs, N, "Channel symmetry $ssymbol")
 
@@ -426,11 +514,21 @@ function _split_annihilation_blocks_by_channel_symmetry(blocks, opts::FermionSOp
     return blocks
 end
 
+"""
+    _add_annihilation_block!(mwirops, block, N::Int, basic_ops)
+
+Emit one spinful fermion annihilation IROP block.
+
+`block.channs` controls naming and channel support. `block.charge_su2` switches
+annihilation to the charge-SU(2) conjugate creation component, `block.spin_su2`
+fuses up/down spin components into one operator, and `block.channel_symm`
+selects only the last channel as the channel maximal-weight component.
+"""
 function _add_annihilation_block!(
-    mwirops::Dict{Symbol, SparseMatrixCSC{Float64, Int}},
+    mwirops::Dict{Symbol, SparseMatrixCSC{T, Int}},
     block,
     N::Int,
-    basic_ops)
+    basic_ops) where T
 
     channs = block.channs
     op_channs = block.channel_symm ? [last(channs)] : channs
@@ -468,10 +566,12 @@ When a generated operator covers all channels, the channel suffix is omitted.
 For each generated set, `F<indices>u`/`F<indices>d` are emitted when charge and
 spin are not both SU(2)-fused.  `F<indices>` is emitted when SU(2) spin fuses
 the spin-up and spin-down annihilation components.  If the set also has channel
-symmetry, the maximal-weight operator is taken only from `last(indices)`.
+symmetry, the maximal-weight operator is taken only from `last(indices)` for
+SU(N)/SO(3). SO(2) uses two circular seeds with private names, assembled into
+the usual public name by local-space postprocessing.
 """
-function add_annihilation_irop!(mwirops::Dict{Symbol, SparseMatrixCSC{Float64, Int}}, 
-                            opts::FermionSOptions, basic_ops)
+function add_annihilation_irop!(mwirops::Dict{Symbol, SparseMatrixCSC{T, Int}},
+                            opts::FermionSOptions, basic_ops) where T
     N = opts.nchannels
 
     blocks = _annihilation_primary_blocks(opts, N)
@@ -479,7 +579,11 @@ function add_annihilation_irop!(mwirops::Dict{Symbol, SparseMatrixCSC{Float64, I
 
     selected = Set{Int}()
     for block in blocks
-        _add_annihilation_block!(mwirops, block, N, basic_ops)
+        if _is_so2_group(opts, block.channs)
+            _add_so2_annihilation_block!(mwirops, block, N, basic_ops)
+        else
+            _add_annihilation_block!(mwirops, block, N, basic_ops)
+        end
         union!(selected, block.channs)
     end
 
@@ -495,6 +599,17 @@ function add_annihilation_irop!(mwirops::Dict{Symbol, SparseMatrixCSC{Float64, I
 end
 
 
+"""
+    getSymmetryInfo(opts::FermionSOptions)
+
+Build symmetry metadata and maximal-weight IROPs for a spinful fermion space.
+
+`opts.nchannels` gives local dimension `4^N`. Charge, spin, and channel
+symmetry options each append symmetry types, per-basis weights, and lowering
+operators. The returned `mwirops` dictionary contains spin operators,
+annihilation operators, parity `Z`, and identity `I` with names determined by
+the selected channel groups.
+"""
 function getSymmetryInfo(opts::FermionSOptions)
     # For N-channel SU(2)-spin case, local Hilbert space is:
     #   |0>, |↑>, |↓>, |↑↓>
@@ -504,14 +619,14 @@ function getSymmetryInfo(opts::FermionSOptions)
 
     basic_ops = FermionS_basicops(N)
     symms = Vector{Type{<:Symmetry}}()
-    weights = Vector{<:Tuple{Vararg{Int}}}[]
-    lowering_ops = Vector{<:AbstractMatrix{<:Real}}[]
+    weights = ()
+    lowering_ops = Vector{<:AbstractMatrix{<:Number}}[]
 
     # If charge symmetry is present, add it 
     if opts.charge_symm !== nothing
         ws, ss, ls = charge_symmops(opts, basic_ops)
         append!(symms, ss)
-        append!(weights, ws)
+        weights = (weights..., ws...)
         append!(lowering_ops, ls)
     end
 
@@ -519,7 +634,7 @@ function getSymmetryInfo(opts::FermionSOptions)
     if opts.spin_symm !== nothing
         ws, ss, ls = spin_symmops(opts, basic_ops)
         append!(symms, ss)
-        append!(weights, ws)
+        weights = (weights..., ws...)
         append!(lowering_ops, ls)
     end
 
@@ -527,16 +642,86 @@ function getSymmetryInfo(opts::FermionSOptions)
     if opts.channel_symm !== nothing
         ws, ss, ls = chan_symmops(opts, basic_ops)
         append!(symms, ss)
-        append!(weights, ws)
+        weights = (weights..., ws...)
         append!(lowering_ops, ls)
     end
 
     totalN = diag(sum(basic_ops.NN[i] for i in 1:2*N))
-    mwirops = Dict{Symbol, SparseMatrixCSC{Float64, Int}}()
+    T = opts.channel_symm !== nothing && any(g -> g[1] == :SO2, opts.channel_symm) ? ComplexF64 : Float64
+    mwirops = Dict{Symbol, SparseMatrixCSC{T, Int}}()
     add_spin_irop!(mwirops, opts, basic_ops)
     add_annihilation_irop!(mwirops, opts, basic_ops)
     mwirops[:Z] = spdiagm(0 => Float64[i%2==0 ? 1 : -1 for i in totalN])
     mwirops[:I] = spdiagm(0 => ones(Float64, 4^N))
 
     return Tuple(symms), Tuple(weights), Tuple(lowering_ops), mwirops
+end
+
+"""
+    _is_so2_group(opts, channels) -> Bool
+
+Identify an ordered SO(2) channel group in normalized fermion options.
+"""
+_is_so2_group(opts::FermionSOptions, channels) = opts.channel_symm !== nothing &&
+    any(g -> g[1] == :SO2 && g[2] == channels, opts.channel_symm)
+
+"""
+    _so2_seed_key(name, plus) -> Symbol
+
+Generate a private, deterministic circular-component key for a public fermion
+name. `plus` labels the annihilation weight before charge-SU(2) selection.
+"""
+_so2_seed_key(name::Symbol, plus::Bool) = Symbol("_so2_", name, plus ? "_plus" : "_minus")
+
+"""
+    _add_so2_annihilation_block!(mwirops, block, N, basic_ops)
+
+Emit both circular channel seeds with fixed phases, applying the existing
+spin/charge selection to each. Only temporary dictionary names are exposed
+until local-space postprocessing; the source elementary operators are untouched.
+"""
+function _add_so2_annihilation_block!(mwirops::Dict{Symbol,SparseMatrixCSC{T,Int}}, block, N, basic_ops) where T
+    a, b = block.channs
+    for plus in (true, false)
+        FF = SparseMatrixCSC{T,Int}[sparse(T.(op)) for op in basic_ops.FF]
+        for spin in 1:2
+            FF[spin,b] = (basic_ops.FF[spin,a] + (plus ? -im : im) * basic_ops.FF[spin,b]) / sqrt(2)
+        end
+        seeds = Dict{Symbol,SparseMatrixCSC{T,Int}}()
+        _add_annihilation_block!(seeds, block, N, merge(basic_ops, (; FF)))
+        for (name, op) in seeds
+            mwirops[_so2_seed_key(name, plus)] = op
+        end
+    end
+    return mwirops
+end
+
+"""
+    _postprocess_localspace!(opts::FermionSOptions, operators)
+
+Collect SO(2) circular components by direct sum on operator leg 3, retaining
+both U1 weights and the usual public fermion names. Physical spaces are shared;
+temporary names are removed and the usual spin tensors are preserved.
+"""
+function _postprocess_localspace!(opts::FermionSOptions, operators)
+    opts.channel_symm === nothing && return operators
+    any(g -> g[1] == :SO2, opts.channel_symm) || return operators
+    result = Dict{Symbol,TLArray}(pairs(operators))
+    blocks = _annihilation_primary_blocks(opts, opts.nchannels)
+    _split_annihilation_blocks_by_channel_symmetry(blocks, opts, opts.nchannels)
+    for block in blocks
+        _is_so2_group(opts, block.channs) || continue
+        suffixes = block.spin_su2 ? ("",) : ("u", "d")
+        for suffix in suffixes
+            name = _fermion_symbol(block.channs, opts.nchannels, suffix)
+            plus = pop!(result, _so2_seed_key(name, true))
+            minus = pop!(result, _so2_seed_key(name, false))
+            # Default local-space tags are identical. Give oplus unambiguous
+            # leg identities temporarily, then restore the caller's indices.
+            tags = ("_so2_output", "_so2_input", "_so2_operator")
+            combined = oplus(TLArray(plus, tags), TLArray(minus, tags), 3)
+            result[name] = TLArray(combined, inds(plus))
+        end
+    end
+    return NamedTuple(result)
 end

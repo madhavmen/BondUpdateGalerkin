@@ -102,7 +102,7 @@ function dmrg_cbe1s_sweep!(
     # Scale-free indicators: the Lanczos solves return unit vectors anyway, so normalising the
     # start only makes the first bond's residual comparable with the rest.
     n0 = norm(psi[1])
-    n0 > 0 && (psi[1] = to_concrete((1.0 / n0) * psi[1]))
+    n0 > 0 && (psi[1] = TLArray((1.0 / n0) * psi[1]))
     alloc = basis_allocation(budget, L - 1; tau = 1.0, nrm = 1.0)
     share = budget.trunc / sqrt(L - 1)          # each split's relative discarded-norm share
     swept = [0.0, 0.0]                          # squared discarded norm, per half-sweep
@@ -165,12 +165,12 @@ function dmrg_cbe1s_sweep!(
             # The denominator must be real: `tensor_inner` returns ComplexF64, and `max` on complex numbers is a
             # MethodError, so `norm(x0)^2` is used.
             ip = tensor_inner(x0, w) / max(norm(x0)^2, eps())
-            r = to_concrete(w + (-ip) * x0)
+            r = TLArray(w + (-ip) * x0)
             nr = norm(r)
             if nr > 1e-14
                 # 0.1 of the current norm: enough to enter the Krylov space at iteration 1,
                 # small enough that the start is still essentially the current state.
-                x0 = to_concrete(x0 + (0.1 * norm(x0) / nr) * r)
+                x0 = TLArray(x0 + (0.1 * norm(x0) / nr) * r)
             end
         end
         A, e, kd = lanczos_lowest(apply, x0; maxiter = maxiter, restol = restol)
@@ -202,10 +202,10 @@ function dmrg_cbe1s_sweep!(
         # Split with the amplitude moving RIGHT, truncating: this is the only place rank is
         # removed, and `Nkeep` is in MULTIPLETS under a non-abelian symmetry.
         res = split!(A, (1, 2), i, bondlg, info, 1)
-        tag = psi[i].inds[3].itags
-        C = to_concrete(res.S * res.Vd)
-        psi[i] = to_concrete(setitag(res.U, 3, tag))
-        psi[i+1] = to_concrete(setitag(contract(C, (2,), psi[i+1], (1,)), 1, tag))
+        tag = Telum.inds(psi[i])[3].itags
+        C = TLArray(res.S * res.Vd)
+        psi[i] = TLArray(setitag(res.U, 3, tag))
+        psi[i+1] = TLArray(setitag(contract(C, (2,), psi[i+1], (1,)), 1, tag))
         psi.center = i + 1
 
         lch = push_left_channels(lch, mpo, psi[i], i)
@@ -236,10 +236,10 @@ function dmrg_cbe1s_sweep!(
 
         A = solve1(i + 1, lch1, rch; expanded = true)
         res = split!(A, (1,), i, bondlg, info, 2)
-        tag = psi[i].inds[3].itags
-        C = to_concrete(res.U * res.S)
-        psi[i+1] = to_concrete(setitag(res.Vd, 1, tag))
-        psi[i] = to_concrete(setitag(contract(psi[i], (3,), C, (1,)), 3, tag))
+        tag = Telum.inds(psi[i])[3].itags
+        C = TLArray(res.U * res.S)
+        psi[i+1] = TLArray(setitag(res.Vd, 1, tag))
+        psi[i] = TLArray(setitag(contract(psi[i], (3,), C, (1,)), 3, tag))
         psi.center = i
 
         rch = push_right_channels(rch, mpo, psi[i+1], i + 1)
@@ -544,12 +544,12 @@ function _write_bond!(
         svd(S, (1,); cutoff = max(trunc_thresh, 1e-14), Nkeep = maxdim, get_lists = true)
     tag = f.link_mid.itags
     if moving === :right
-        psi[i] = to_concrete(setitag(to_concrete(U_aug * res.U), 3, tag))
-        psi[i+1] = to_concrete(setitag(to_concrete((res.S * res.Vd) * V_aug), 1, tag))
+        psi[i] = TLArray(setitag(TLArray(U_aug * res.U), 3, tag))
+        psi[i+1] = TLArray(setitag(TLArray((res.S * res.Vd) * V_aug), 1, tag))
         psi.center = i + 1
     else
-        psi[i] = to_concrete(setitag(to_concrete(U_aug * to_concrete(res.U * res.S)), 3, tag))
-        psi[i+1] = to_concrete(setitag(to_concrete(res.Vd * V_aug), 1, tag))
+        psi[i] = TLArray(setitag(TLArray(U_aug * TLArray(res.U * res.S)), 3, tag))
+        psi[i+1] = TLArray(setitag(TLArray(res.Vd * V_aug), 1, tag))
         psi.center = i
     end
     return leg_dim(psi[i], 3), max(leg_dim(U_aug, 3), leg_dim(V_aug, 1))

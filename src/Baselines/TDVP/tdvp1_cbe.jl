@@ -63,7 +63,7 @@ function _tdvp1_cbe_bond!(
 
     if dir === :right
         _absorb_right!(psi, i, ex.V_ex)              # psi[i+1] = V_ex, centre stays at i
-        tag = psi[i].inds[3].itags
+        tag = Telum.inds(psi[i])[3].itags
 
         rch1 = push_right_channels(rch, h, psi[i+1], i + 1)
 
@@ -82,7 +82,7 @@ function _tdvp1_cbe_bond!(
         acc[3] = max(acc[3], _trunc_weight(res))
 
         psi[i] = res.U
-        C = to_concrete(res.S * res.Vd)
+        C = TLArray(res.S * res.Vd)
 
         H0 = zero_site_h(h, i, lch, rch, psi[i], psi[i+1])
         C = expv(
@@ -97,8 +97,8 @@ function _tdvp1_cbe_bond!(
 
         # Absorb, then rename BOTH ends of the bond to `tag` in the same breath. Each result is
         # rank-3 with only one leg wanting `tag`, so neither construction sees a duplicate.
-        psi[i+1] = to_concrete(setitag(to_concrete!(contract(C, (2,), psi[i+1], (1,))), 1, tag))
-        psi[i] = to_concrete(setitag(psi[i], 3, tag))
+        psi[i+1] = TLArray(setitag(contract(C, (2,), psi[i+1], (1,)), 1, tag))
+        psi[i] = TLArray(setitag(psi[i], 3, tag))
         psi.center = i + 1
 
         lnext = push_left_channels(lch, h, psi[i], i)
@@ -106,7 +106,7 @@ function _tdvp1_cbe_bond!(
         return lnext
     else
         _absorb_left!(psi, i, ex.U_ex)               # psi[i] = U_ex, centre moves to i+1
-        tag = psi[i].inds[3].itags
+        tag = Telum.inds(psi[i])[3].itags
         lch1 = push_left_channels(lch, h, psi[i], i)
 
         # ---- forward: one-site at site i+1, +tau ----
@@ -125,7 +125,7 @@ function _tdvp1_cbe_bond!(
         # Mirror of the rightward branch: `C` is `(bond_ex, new)`, two different spaces, so the
         # SVD's tag stays on the new leg until after the zero-site step.
         psi[i+1] = res.Vd
-        C = to_concrete(res.U * res.S)
+        C = TLArray(res.U * res.S)
 
         # ---- backward: zero-site, -tau ----
         H0 = zero_site_h(h, i, lch, rch, psi[i], psi[i+1])
@@ -139,8 +139,8 @@ function _tdvp1_cbe_bond!(
             reorth = reorth,
         )
 
-        psi[i] = to_concrete(setitag(to_concrete!(contract(psi[i], (3,), C, (1,))), 3, tag))
-        psi[i+1] = to_concrete(setitag(psi[i+1], 1, tag))
+        psi[i] = TLArray(setitag(contract(psi[i], (3,), C, (1,)), 3, tag))
+        psi[i+1] = TLArray(setitag(psi[i+1], 1, tag))
         psi.center = i
 
         rnext = push_right_channels(rch, h, psi[i+1], i + 1)
@@ -431,9 +431,9 @@ function tdvp_cbe1s_step!(
         peak!(M)
         res = svd(M, (1, 2); cutoff = cut, Nkeep = maxdim, get_lists = true)
         disc = max(disc, _trunc_weight(res))
-        tag = psi[i].inds[3].itags
+        tag = Telum.inds(psi[i])[3].itags
         psi[i] = res.U
-        C = to_concrete(res.S * res.Vd)
+        C = TLArray(res.S * res.Vd)
 
         # --- backward bond (0-site) update, -tau/2 ---
         # The environments are pushed through the tensors AS THEY NOW STAND: `psi[i]` is the
@@ -455,8 +455,8 @@ function tdvp_cbe1s_step!(
 
         # Retag BOTH ends of the bond in one breath: each result is rank-3 with only one leg
         # wanting `tag`, so neither construction ever sees a duplicate index.
-        psi[i+1] = to_concrete(setitag(to_concrete!(contract(C, (2,), psi[i+1], (1,))), 1, tag))
-        psi[i] = to_concrete(setitag(psi[i], 3, tag))
+        psi[i+1] = TLArray(setitag(contract(C, (2,), psi[i+1], (1,)), 1, tag))
+        psi[i] = TLArray(setitag(psi[i], 3, tag))
         psi.center = i + 1
 
         lch = push_left_channels(lch, mpo, psi[i], i)
@@ -485,9 +485,9 @@ function tdvp_cbe1s_step!(
 
         res = svd(M, (1,); cutoff = cut, Nkeep = maxdim, get_lists = true)
         disc = max(disc, _trunc_weight(res))
-        tag = psi[i].inds[3].itags
+        tag = Telum.inds(psi[i])[3].itags
         psi[i+1] = res.Vd
-        C = to_concrete(res.U * res.S)
+        C = TLArray(res.U * res.S)
 
         H0 = zero_site_h(mpo, i, left_channels(lstack, i), rch, psi[i], psi[i+1])
         C = expv(
@@ -502,8 +502,8 @@ function tdvp_cbe1s_step!(
             substeps = substeps,
         )
 
-        psi[i] = to_concrete(setitag(to_concrete!(contract(psi[i], (3,), C, (1,))), 3, tag))
-        psi[i+1] = to_concrete(setitag(psi[i+1], 1, tag))
+        psi[i] = TLArray(setitag(contract(psi[i], (3,), C, (1,)), 3, tag))
+        psi[i+1] = TLArray(setitag(psi[i+1], 1, tag))
         psi.center = i
 
         rch = push_right_channels(rch, mpo, psi[i+1], i + 1)

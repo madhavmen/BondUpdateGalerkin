@@ -37,26 +37,24 @@ one_site_h(mpo::MPO, site::Int, lenv::MPOLeftEnvStack, renv::MPORightEnvStack) =
 `H_eff site_tensor` for a site tensor with legs `(link_l, site, link_r)`, in and out.
 """
 function apply_one_site(effective_h::MPOOneSiteH, site_tensor)
-    # `to_concrete!` on the contraction results: this is the hot path, and `to_concrete` on an already
-    # concrete tensor would deep-copy every block.
-    # Safe only because every argument is a fresh `contract` result; the inputs belong to callers
-    # and keep `to_concrete`.
+    # `contract` returns a concrete tensor; `TLArray(...)` materialises the lazy singleton
+    # deletion (and is the identity on a concrete tensor, so it never copies).
     contracted = if effective_h.l === nothing
         # (ℓ_l, ℓ_r, w_l, s_bra, w_r)
-        partial = to_concrete!(contract(site_tensor, (2,), effective_h.w, (2,)))
-        to_concrete(deleteSingleton(partial, 3))            # (ℓ_l, ℓ_r, s_bra, w_r)
+        partial = contract(site_tensor, (2,), effective_h.w, (2,))
+        TLArray(deleteSingleton(partial, 3))            # (ℓ_l, ℓ_r, s_bra, w_r)
     else
         # (bra_l, w, s, ℓ_r), then (bra_l, ℓ_r, s_bra, w_r)
-        partial = to_concrete!(contract(effective_h.l, (3,), site_tensor, (1,)))
-        partial = to_concrete!(contract(partial, (2, 3), effective_h.w, (1, 2)))
+        partial = contract(effective_h.l, (3,), site_tensor, (1,))
+        partial = contract(partial, (2, 3), effective_h.w, (1, 2))
         partial
     end                                                    # (link_l, ℓ_r, s_bra, w_r)
 
     contracted = if effective_h.r === nothing
-        partial = to_concrete(deleteSingleton(contracted, 4))  # (link_l, ℓ_r, s_bra)
-        to_concrete(permutedims(partial, (1, 3, 2)))
+        partial = TLArray(deleteSingleton(contracted, 4))  # (link_l, ℓ_r, s_bra)
+        TLArray(permutedims(partial, (1, 3, 2)))
     else
-        to_concrete!(contract(contracted, (4, 2), effective_h.r, (2, 3)))  # (link_l, s_bra, bra_r)
+        contract(contracted, (4, 2), effective_h.r, (2, 3))  # (link_l, s_bra, bra_r)
     end
 
     # Each environment's bra leg replaced a link leg: give it that link's prime level back.
@@ -103,8 +101,8 @@ contributes its bra leg in place of the ket leg it consumes, so the result carri
 own legs after unpriming.
 """
 function apply_zero_site(effective_h::MPOZeroSiteH, core)
-    contracted = to_concrete!(contract(effective_h.l, (3,), core, (1,)))  # (bra_l, mpo, bond_r)
-    contracted = to_concrete!(contract(contracted, (2, 3), effective_h.r, (2, 3)))  # (bra_l, bra_r)
+    contracted = contract(effective_h.l, (3,), core, (1,))  # (bra_l, mpo, bond_r)
+    contracted = contract(contracted, (2, 3), effective_h.r, (2, 3))  # (bra_l, bra_r)
     return _unprime(_unprime(contracted, 1), 2)
 end
 
@@ -126,9 +124,9 @@ shift_h(operator, shift::Real) = iszero(shift) ? operator : ShiftedH(operator, F
 
 # The shifted actions `(H - s) site_tensor` and `(H - s) core`.
 apply_one_site(shifted::ShiftedH, site_tensor) =
-    to_concrete(apply_one_site(shifted.h, site_tensor) - shifted.s * site_tensor)
+    TLArray(apply_one_site(shifted.h, site_tensor) - shifted.s * site_tensor)
 apply_zero_site(shifted::ShiftedH, core) =
-    to_concrete(apply_zero_site(shifted.h, core) - shifted.s * core)
+    TLArray(apply_zero_site(shifted.h, core) - shifted.s * core)
 
 # ── zero-site generator, frame construction and truncation sweeps ──
 # The Lubich sweep that used to sit here was removed. Its re-ranking growth passes do not carry over
@@ -151,11 +149,11 @@ Replace `psi[bond]` by the expanded left frame and push the (zero-padded) remain
 formed, and the intermediate is `bond_ex x bond_old`.
 """
 function _absorb_left!(psi::SymMPS, bond::Int, U_ex)
-    tag = psi[bond].inds[3].itags
+    tag = Telum.inds(psi[bond])[3].itags
     overlap_matrix = contract(U_ex', (1, 2), psi[bond], (1, 2))  # (bond_ex, bond_old)
     next_tensor = contract(overlap_matrix, (2,), psi[bond+1], (1,))  # (bond_ex, site_r, link_r)
-    psi[bond] = to_concrete(setitag(U_ex, 3, tag))
-    psi[bond+1] = to_concrete(setitag(next_tensor, 1, tag))
+    psi[bond] = TLArray(setitag(U_ex, 3, tag))
+    psi[bond+1] = TLArray(setitag(next_tensor, 1, tag))
     psi.center = bond + 1
     return psi
 end
@@ -167,11 +165,11 @@ Mirror: `psi[bond+1]` becomes the expanded right frame and the remainder goes in
 leaving the centre at `bond`.
 """
 function _absorb_right!(psi::SymMPS, bond::Int, V_ex)
-    tag = psi[bond].inds[3].itags
+    tag = Telum.inds(psi[bond])[3].itags
     overlap_matrix = contract(psi[bond+1], (2, 3), V_ex', (2, 3))  # (bond_old, bond_ex)
     site_tensor = contract(psi[bond], (3,), overlap_matrix, (1,))  # (link_l, site_l, bond_ex)
-    psi[bond] = to_concrete(setitag(site_tensor, 3, tag))
-    psi[bond+1] = to_concrete(setitag(V_ex, 1, tag))
+    psi[bond] = TLArray(setitag(site_tensor, 3, tag))
+    psi[bond+1] = TLArray(setitag(V_ex, 1, tag))
     psi.center = bond
     return psi
 end
@@ -187,7 +185,7 @@ It previously sat in `jan_bug.jl`, and deleting that file took `cbe_bug_step!` d
 the helper is not specific to any one integrator.
 """
 _relink(tensor, left_tag, right_tag) =
-    to_concrete(setitag(setitag(tensor, 1, left_tag), 3, right_tag))
+    TLArray(setitag(setitag(tensor, 1, left_tag), 3, right_tag))
 
 """
     _frame_from(left, right) -> BondFrame
@@ -202,21 +200,21 @@ in `right`.
 function _frame_from(left, right)
     res_l = svd(left, (1, 2), "bU,L", "bU,R"; cutoff = 0.0)
     res_r = svd(right, (1,), "bV,L", "bV,R"; cutoff = 0.0)
-    left_isometry = to_concrete(res_l.U)
-    right_isometry = to_concrete(res_r.Vd)
+    left_isometry = TLArray(res_l.U)
+    right_isometry = TLArray(res_r.Vd)
     # The bond core joins both SVDs' remainders: (S Vd)_left * (U S)_right.
-    bond_core = to_concrete(to_concrete(res_l.S * res_l.Vd) * to_concrete(res_r.U * res_r.S))
+    bond_core = TLArray(TLArray(res_l.S * res_l.Vd) * TLArray(res_r.U * res_r.S))
     return BondFrame(
         left_isometry,
         bond_core,
         right_isometry,
-        left.inds[1],
-        left.inds[2],
-        left.inds[3],
-        right.inds[2],
-        right.inds[3],
+        Telum.inds(left)[1],
+        Telum.inds(left)[2],
+        Telum.inds(left)[3],
+        Telum.inds(right)[2],
+        Telum.inds(right)[3],
         leg_dim(left_isometry, 3),
-        copy(left.spaces[3]),
+        copy(Telum.spaces(left)[3]),
     )
 end
 
@@ -260,7 +258,7 @@ function zero_site_h(chain::XXZChain, bond::Int, lch::ChannelSet, rch::ChannelSe
     for term_index = 1:nt
         lch.open[term_index] === ZERO && continue
         contribution = _left_step(lch.open[term_index], U_ex, terms[term_index].right, bond)
-        dl = _accum(dl, to_concrete(terms[term_index].coeff * contribution))
+        dl = _accum(dl, TLArray(terms[term_index].coeff * contribution))
     end
     ol = Any[_left_step(lch.id, U_ex, terms[term_index].left, bond) for term_index = 1:nt]
 
@@ -269,7 +267,7 @@ function zero_site_h(chain::XXZChain, bond::Int, lch::ChannelSet, rch::ChannelSe
     for term_index = 1:nt
         rch.open[term_index] === ZERO && continue
         contribution = _right_step(rch.open[term_index], V_ex, terms[term_index].left, bond + 1)
-        dr = _accum(dr, to_concrete(terms[term_index].coeff * contribution))
+        dr = _accum(dr, TLArray(terms[term_index].coeff * contribution))
     end
     or = Any[_right_step(rch.id, V_ex, terms[term_index].right, bond + 1) for term_index = 1:nt]
 
@@ -290,15 +288,15 @@ result carries the core's own legs after unpriming -- the same convention `_env_
 """
 function apply_zero_site(effective_h::ZeroSiteH, core)
     acc = nothing
-    add!(summand) = (acc = acc === nothing ? to_concrete(summand) : to_concrete(acc + summand))
+    add!(summand) = (acc = acc === nothing ? TLArray(summand) : TLArray(acc + summand))
 
     if effective_h.done_l !== ZERO
         # (bra_l, bond_r) <- done_l's bra replaces bond_l
-        add!(_unprime(to_concrete!(contract(effective_h.done_l, (2,), core, (1,))), 1))
+        add!(_unprime(contract(effective_h.done_l, (2,), core, (1,)), 1))
     end
     if effective_h.done_r !== ZERO
         out = contract(core, (2,), effective_h.done_r, (2,))       # (bond_l, bra_r)
-        add!(_unprime(to_concrete(out), 2))
+        add!(_unprime(TLArray(out), 2))
     end
     for term_index in eachindex(effective_h.open_l)
         ol, or = effective_h.open_l[term_index], effective_h.open_r[term_index]
@@ -307,14 +305,14 @@ function apply_zero_site(effective_h::ZeroSiteH, core)
         # carries the +/-2 charge that makes the pair allowed) or NEITHER does (SzSz, and
         # every term without symmetry). One rank test covers both channels.
         left = contract(ol, (2,), core, (1,))          # (bra_l, [op,] bond_r)
-        out = if length(ol.inds) == 3
+        out = if length(Telum.inds(ol)) == 3
             contract(left, (2, 3), or, (3, 2))         # close the op-leg too
         else
             contract(left, (2,), or, (2,))
         end                                             # (bra_l, bra_r)
         add!(
-            to_concrete(
-                effective_h.coeffs[term_index] * _unprime(_unprime(to_concrete(out), 1), 2),
+            TLArray(
+                effective_h.coeffs[term_index] * _unprime(_unprime(TLArray(out), 1), 2),
             ),
         )
     end
@@ -377,7 +375,7 @@ and leg 3 unchanged, and it already handles closing an op-leg (or not) by rank.
 function apply_one_site(effective_h::OneSiteH, site_tensor)
     site = effective_h.site
     acc = nothing
-    add!(summand) = (acc = acc === nothing ? to_concrete(summand) : to_concrete(acc + summand))
+    add!(summand) = (acc = acc === nothing ? TLArray(summand) : TLArray(acc + summand))
 
     # Completed terms on either side, then each open half-term closed on this site.
     effective_h.done_l === ZERO || add!(_env_on_link(site_tensor, effective_h.done_l, 1))
@@ -385,14 +383,14 @@ function apply_one_site(effective_h::OneSiteH, site_tensor)
     for (term_index, term) in enumerate(effective_h.terms)
         open_env = effective_h.open_l[term_index]
         open_env === ZERO || add!(
-            to_concrete(
+            TLArray(
                 term.coeff *
                 _env_on_link(_apply_site_op(site_tensor, term.right, site), open_env, 1),
             ),
         )
         open_env = effective_h.open_r[term_index]
         open_env === ZERO || add!(
-            to_concrete(
+            TLArray(
                 term.coeff *
                 _env_on_link(_apply_site_op(site_tensor, term.left, site), open_env, 3),
             ),

@@ -41,22 +41,22 @@ two will be contractable.
 """
 function _outer(A, B)
     try
-        return to_concrete(A ⊗ B)
+        return TLArray(A ⊗ B)
     catch
     end
-    A1 = to_concrete(addSingleton(A, (length(A.inds) + 1,)))
-    B1 = to_concrete(addSingleton(B, (1,)))
+    A1 = TLArray(addSingleton(A, (length(Telum.inds(A)) + 1,)))
+    B1 = TLArray(addSingleton(B, (1,)))
     for (x, y) in ((A1, B1), (B1, A1))
         try
-            T = to_concrete!(contract(x, (length(x.inds),), y, (1,)))
+            T = contract(x, (length(Telum.inds(x)),), y, (1,))
             # Restore (A's legs..., B's legs...) if the contractable order was the other one.
             return x === A1 ? T :
-                   to_concrete(
+                   TLArray(
                 permutedims(
                     T,
                     (
-                        ntuple(k -> length(B.inds) + k, length(A.inds))...,
-                        ntuple(k -> k, length(B.inds))...,
+                        ntuple(k -> length(Telum.inds(B)) + k, length(Telum.inds(A)))...,
+                        ntuple(k -> k, length(Telum.inds(B)))...,
                     ),
                 ),
             )
@@ -85,7 +85,7 @@ function _charged_transport(v::PairVertex, Iloc, i::Int, tl::AbstractString, tr:
     Iid = _mpo_block(Iloc, i, tl, tr, :none)
     # Charge-NEUTRAL channel: the virtual space is the vacuum, so the plain identity block IS
     # the transport. Tested by SPACE -- see the docstring for why a dimension test is wrong.
-    op_i.spaces[4] == Iid.spaces[4] && return Iid
+    Telum.spaces(op_i)[4] == Telum.spaces(Iid)[4] && return Iid
 
     # EVERY TEST PARTNER LIVES AT SITE `i+1`, and that is not bookkeeping fussiness. `contract`
     # matches on ITAGS as well as arrows, and the site legs of two blocks built for the same site
@@ -101,9 +101,9 @@ function _charged_transport(v::PairVertex, Iloc, i::Int, tl::AbstractString, tr:
 
     for (ref, l) in ((op_i, 4), (cl_n, 1))
         Iw = try
-            w = to_concrete(getIdentity(ref, l))
-            length(w.inds) == 2 || continue
-            to_concrete(setitag(setitag(w, 1, tA), 2, tB))
+            w = TLArray(getIdentity(ref, l))
+            length(Telum.inds(w)) == 2 || continue
+            TLArray(setitag(setitag(w, 1, tA), 2, tB))
         catch
             continue
         end
@@ -111,16 +111,16 @@ function _charged_transport(v::PairVertex, Iloc, i::Int, tl::AbstractString, tr:
         for perm in ((1, 3, 4, 2), (2, 3, 4, 1))
             Tt, Tn = try
                 (
-                    to_concrete(
+                    TLArray(
                         setitag(
-                            setitag(to_concrete(permutedims(_outer(Iw, Isite_i), perm)), 1, tl),
+                            setitag(TLArray(permutedims(_outer(Iw, Isite_i), perm)), 1, tl),
                             4,
                             tr,
                         ),
                     ),
-                    to_concrete(
+                    TLArray(
                         setitag(
-                            setitag(to_concrete(permutedims(_outer(Iw, Isite_n), perm)), 1, tr),
+                            setitag(TLArray(permutedims(_outer(Iw, Isite_n), perm)), 1, tr),
                             4,
                             tnext,
                         ),
@@ -245,7 +245,7 @@ function _pair_mpo(
     m = length(triples)
     n + m >= 1 || throw(ArgumentError("pair_mpo needs at least one vertex or triple"))
     for (k, tt) in pairs(triples)
-        length(tt.A.inds) == 2 || throw(
+        length(Telum.inds(tt.A)) == 2 || throw(
             ArgumentError("pair_mpo: triple $k's first operator must be charge-neutral (rank 2)"),
         )
         length(tt.w) == L - 2 || throw(
@@ -253,13 +253,13 @@ function _pair_mpo(
                 "pair_mpo: triple $k needs $(L - 2) weights (one per j = 1..L-2), got $(length(tt.w))",
             ),
         )
-        nl, nr = length(tt.pair.left.inds), length(tt.pair.right.inds)
+        nl, nr = length(Telum.inds(tt.pair.left)), length(Telum.inds(tt.pair.right))
         (nl in (2, 3) && nl == nr) || throw(
             ArgumentError("pair_mpo: triple $k's pair joins a rank-$nl to a rank-$nr operator"),
         )
     end
     for (k, v) in pairs(vertices)
-        nl, nr = length(v.left.inds), length(v.right.inds)
+        nl, nr = length(Telum.inds(v.left)), length(Telum.inds(v.right))
         (nl in (2, 3) && nr in (2, 3)) || throw(
             ArgumentError(
                 "pair_mpo: vertex $k has operators of rank $nl / $nr; only 2 or 3 are operators",
@@ -303,7 +303,7 @@ function _pair_mpo(
     for i = 1:L
         tl, tr = "W,$(i - 1)", "W,$i"
         Iid = _mpo_block(Iloc, i, tl, tr, :none)
-        Znil = to_concrete(0.0 * Iid)
+        Znil = TLArray(0.0 * Iid)
 
         # Opening/closing/transport blocks for this site, one set per vertex.
         opens = [_mpo_block(v.left, i, tl, tr, _side(v.left, :left)) for v in vertices]
@@ -340,7 +340,7 @@ function _pair_mpo(
             c = coupling(o, i, t) * vertices[t].coeff
             # An explicit zero, not a gap: with one matrix per vertex a channel can be alive while this
             # vertex's coupling vanishes, and `oplus` cannot infer a hole.
-            mat[rowof[(o, t)], ncol] = to_concrete((c == 0.0 ? zero(c) : c) * closes[t])
+            mat[rowof[(o, t)], ncol] = TLArray((c == 0.0 ? zero(c) : c) * closes[t])
         end
         # Triples: `id -(A)-> pre`, `pre -(B)-> mid`, `mid -(w C)-> done` -- the same opening and
         # closing block forms as a pair, with a neutral (vacuum) `pre` state in front.
@@ -355,7 +355,7 @@ function _pair_mpo(
                 )
             if haskey(trow, (t, :mid))
                 c = tt.w[i-2] * tt.pair.coeff
-                mat[trow[(t, :mid)], ncol] = to_concrete(
+                mat[trow[(t, :mid)], ncol] = TLArray(
                     (isreal(c) ? real(c) : c) *
                     _mpo_block(tt.pair.right, i, tl, tr, _side(tt.pair.right, :right)),
                 )
@@ -377,7 +377,7 @@ function _pair_mpo(
             mat = reshape(mat[:, ncol], nrow, 1)
             nrow > 1 && field === nothing && (mat[1, 1] = Znil)
         end
-        push!(Ws, to_concrete(oplus(mat, (1, 4))))
+        push!(Ws, TLArray(oplus(mat, (1, 4))))
     end
     return MPO(Ws)
 end

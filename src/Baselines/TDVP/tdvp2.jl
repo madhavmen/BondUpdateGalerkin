@@ -55,14 +55,14 @@ function _tdvp2_bond!(
     amp::Bool = false,
     bnorms::Union{Nothing,Vector{Float64}} = nothing,
 )
-    Theta = to_concrete(psi[i] * psi[i+1])        # rank 4 -- the object being compared
+    Theta = TLArray(psi[i] * psi[i+1])        # rank 4 -- the object being compared
     acc[2] = max(acc[2], tensor_elements(Theta))
     acc[4] = max(acc[4], _state_stored(psi) + tensor_elements(Theta))
     # `acc[1]` is the operator-application counter -- see `TDVP2Info.krylov_dims`. It was an
     # unused slot before, so nothing else reads it. The generator is `H - eshift` (see
     # `tdvp2_step!`); `eshift = 0` skips the subtraction, so the unshifted step is bit-identical.
     h2(x) =
-        (y = apply_h_two_site(x, h, i, lch, rch); iszero(eshift) ? y : to_concrete(y - eshift * x))
+        (y = apply_h_two_site(x, h, i, lch, rch); iszero(eshift) ? y : TLArray(y - eshift * x))
     Theta = expv(
         x -> (acc[1] += 1; h2(x)),
         tau,
@@ -84,14 +84,14 @@ function _tdvp2_bond!(
     acc[3] = max(acc[3], _trunc_weight(res))
     acc[4+sweep] += _sq_weight(res.trunc_list)
     acc[7] = max(acc[7], _sq_weight(res.kept_list) + _sq_weight(res.trunc_list))
-    tag = psi[i].inds[3].itags
+    tag = Telum.inds(psi[i])[3].itags
 
     if dir === :right
-        psi[i] = to_concrete(setitag(res.U, 3, tag))
+        psi[i] = TLArray(setitag(res.U, 3, tag))
         # The backward half-step sits at site i+1, so its left channels are this bond's
         # pushed through the isometry just written -- no rebuild.
         lnext = push_left_channels(lch, h, psi[i], i)
-        M = to_concrete(setitag(to_concrete(res.S * res.Vd), 1, tag))
+        M = TLArray(setitag(TLArray(res.S * res.Vd), 1, tag))
         if i < length(psi) - 1
             M = _tdvp2_backward(
                 shift_h(one_site_h(h, i + 1, lnext, rch), eshift),
@@ -111,9 +111,9 @@ function _tdvp2_bond!(
         psi.center = i + 1
         return lnext
     else
-        psi[i+1] = to_concrete(setitag(res.Vd, 1, tag))
+        psi[i+1] = TLArray(setitag(res.Vd, 1, tag))
         rnext = push_right_channels(rch, h, psi[i+1], i + 1)
-        M = to_concrete(setitag(to_concrete(res.U * res.S), 3, tag))
+        M = TLArray(setitag(TLArray(res.U * res.S), 3, tag))
         if i > 1
             M = _tdvp2_backward(
                 shift_h(one_site_h(h, i, lch, rnext), eshift),

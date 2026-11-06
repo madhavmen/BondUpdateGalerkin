@@ -69,8 +69,8 @@ function sketch_bond_left(frame::BondFrame, gate, Om)
     HT = apply_gate(gate, frame_theta(frame), tl, tr)       # (link_l, site_l, site_r, link_r)
     # Remove the kept space: `perp_action = (I - U0 U0') HT`.
     kept_coeffs = contract(frame.U0', (1, 2), HT, (1, 2))   # (bond, site_r, link_r)
-    perp_action = to_concrete(HT - to_concrete!(contract(frame.U0, (3,), kept_coeffs, (1,))))
-    return to_concrete!(contract(perp_action, (3, 4), Om', (2, 3)))    # (link_l, site_l, g)
+    perp_action = TLArray(HT - contract(frame.U0, (3,), kept_coeffs, (1,)))
+    return contract(perp_action, (3, 4), Om', (2, 3))    # (link_l, site_l, g)
 end
 
 """
@@ -85,9 +85,9 @@ function sketch_bond_right(frame::BondFrame, gate, Om)
     HT = apply_gate(gate, frame_theta(frame), tl, tr)
     # Remove the kept space: `perp_action = HT (I - V0' V0)`.
     kept_coeffs = contract(HT, (3, 4), frame.V0', (2, 3))   # (link_l, site_l, bond)
-    perp_action = to_concrete(HT - to_concrete!(contract(kept_coeffs, (3,), frame.V0, (1,))))
+    perp_action = TLArray(HT - contract(kept_coeffs, (3,), frame.V0, (1,)))
     sketch = contract(perp_action, (1, 2), Om', (1, 2))     # (site_r, link_r, g)
-    return to_concrete(permutedims(sketch, (3, 1, 2)))      # (g, site_r, link_r)
+    return TLArray(permutedims(sketch, (3, 1, 2)))      # (g, site_r, link_r)
 end
 
 """
@@ -153,14 +153,14 @@ function cbe_bond_update(
     # is called -- see the loop below for why that is the whole correctness argument.
     function galerkin(U_aug, V_aug)
         S_start =
-            to_concrete!(contract(contract(U_aug', (1, 2), theta0, (1, 2)), (2, 3), V_aug', (2, 3)))
+            contract(contract(U_aug', (1, 2), theta0, (1, 2)), (2, 3), V_aug', (2, 3))
         # The projected gate `U_aug' gate (U_aug core_vector V_aug) V_aug'` on a root core.
         function apply_s(core_vector)
             nmv[] += 1
-            theta = to_concrete((U_aug * core_vector) * V_aug)
+            theta = TLArray((U_aug * core_vector) * V_aug)
             evolved = apply_gate(gate, theta, tl, tr)
             proj = contract(U_aug', (1, 2), evolved, (1, 2))
-            return to_concrete!(contract(proj, (2, 3), V_aug', (2, 3)))
+            return contract(proj, (2, 3), V_aug', (2, 3))
         end
         return expv(
             apply_s,
@@ -221,8 +221,8 @@ function cbe_bond_update(
     # Truncate the evolved core and absorb its factors into the augmented frames.
     res = svd(S_new, (1,); cutoff = max(trunc_thresh, 1e-14), Nkeep = maxdim, get_lists = true)
     tag = frame.link_mid.itags
-    left_core = to_concrete(setitag(to_concrete(U_aug * res.U), 3, tag))
-    right_core = to_concrete(setitag(to_concrete((res.S * res.Vd) * V_aug), 1, tag))
+    left_core = TLArray(setitag(TLArray(U_aug * res.U), 3, tag))
+    right_core = TLArray(setitag(TLArray((res.S * res.Vd) * V_aug), 1, tag))
 
     svals = [singular_value for (singular_value, _, _, _) in res.kept_list]
     return (;
@@ -268,20 +268,20 @@ function _expanding_krylov(
     probe::Symbol = :residual,
 )
     # Project a two-site tensor onto the root space of the given frames: `left' th right'`.
-    project(left_basis, right_basis, th) = to_concrete!(
+    project(left_basis, right_basis, th) = 
         contract(contract(left_basis', (1, 2), th, (1, 2)), (2, 3), right_basis', (2, 3)),
-    )
+    
 
     # Embed a core from the (Uo,Vo) basis into (Un,Vn) by computed overlaps (robust to a rotation by
     # the orthonormality guard); the overlaps are built once per growth pass, not per stored vector.
     embed_ops(Uo, Vo, Un, Vn) = (
-        to_concrete!(contract(Un', (1, 2), Uo, (1, 2))),         # PL (new_l, old_l)
-        to_concrete!(contract(Vo, (2, 3), Vn', (2, 3))),
+        contract(Un', (1, 2), Uo, (1, 2)),         # PL (new_l, old_l)
+        contract(Vo, (2, 3), Vn', (2, 3)),
     )         # PR (old_r, new_r)
 
     # Apply the overlaps: `PL core PR`.
     embed_with(PL, PR, core) =
-        to_concrete!(contract(contract(PL, (2,), core, (1,)), (2,), PR, (1,)))
+        contract(contract(PL, (2,), core, (1,)), (2,), PR, (1,))
 
     left_frame, right_frame = frame.U0, frame.V0
     root_start = project(left_frame, right_frame, theta0)
@@ -297,7 +297,7 @@ function _expanding_krylov(
         (; err_pre, err_fnl, n_grow, beta_final = 0.0, ranks = Int[], value = NaN),
     )
 
-    basis = Any[to_concrete((1.0 / beta0) * root_start)]
+    basis = Any[TLArray((1.0 / beta0) * root_start)]
     alpha, betas, ranks = Float64[], Float64[], Int[leg_dim(left_frame, 3)]
     b_last = 0.0
 
@@ -324,17 +324,17 @@ function _expanding_krylov(
         push!(ranks, leg_dim(left_frame, 3))
 
         nmv[] += 1
-        theta = to_concrete((left_frame * basis[it]) * right_frame)
+        theta = TLArray((left_frame * basis[it]) * right_frame)
         residual = project(left_frame, right_frame, applyH(theta))
         image = residual          # this iteration's output, carried to the next expansion
 
         # Three-term recurrence, then two full reorthogonalisation passes against the basis.
         diagonal_entry = real(tensor_inner(basis[it], residual))
         push!(alpha, diagonal_entry)
-        residual = to_concrete(residual + (-diagonal_entry) * basis[it])
-        it > 1 && (residual = to_concrete(residual + (-betas[it-1]) * basis[it-1]))
+        residual = TLArray(residual + (-diagonal_entry) * basis[it])
+        it > 1 && (residual = TLArray(residual + (-betas[it-1]) * basis[it-1]))
         for _pass = 1:2, basis_vector in basis
-            residual = to_concrete(residual - tensor_inner(basis_vector, residual) * basis_vector)
+            residual = TLArray(residual - tensor_inner(basis_vector, residual) * basis_vector)
         end
 
         # `b_last` is the TERMINATING residual, not the last accepted one. Reporting
@@ -345,16 +345,16 @@ function _expanding_krylov(
         residual_norm < tol && break
         it == maxiter && break
         push!(betas, residual_norm)
-        push!(basis, to_concrete((1.0 / residual_norm) * residual))
+        push!(basis, TLArray((1.0 / residual_norm) * residual))
     end
 
     # THE ONLY MODE-DEPENDENT LINE IN THE WHOLE FUNCTION. `coeff` already carries `beta0` for
     # the propagator and deliberately does not for the eigensolve, so the accumulation below
     # is identical either way.
     coeff, value = _reduce_krylov(solver, alpha, betas, beta0)
-    root_result = to_concrete(coeff[1] * basis[1])
+    root_result = TLArray(coeff[1] * basis[1])
     for column = 2:length(coeff)
-        root_result = to_concrete(root_result + coeff[column] * basis[column])
+        root_result = TLArray(root_result + coeff[column] * basis[column])
     end
     return (
         left_frame,
@@ -373,9 +373,9 @@ Fraction of the evolved core's norm on the directions the last pass added,
 function _new_direction_weight(U_prev, V_prev, U_aug, V_aug, core)
     core_norm = norm(core)
     core_norm == 0 && return 0.0
-    PL = to_concrete!(contract(U_prev', (1, 2), U_aug, (1, 2)))     # (prev_l, new_l)
-    PR = to_concrete!(contract(V_aug, (2, 3), V_prev', (2, 3)))     # (new_r, prev_r)
-    S_old = to_concrete!(contract(contract(PL, (2,), core, (1,)), (2,), PR, (1,)))
+    PL = contract(U_prev', (1, 2), U_aug, (1, 2))     # (prev_l, new_l)
+    PR = contract(V_aug, (2, 3), V_prev', (2, 3))     # (new_r, prev_r)
+    S_old = contract(contract(PL, (2,), core, (1,)), (2,), PR, (1,))
     return sqrt(max(core_norm^2 - norm(S_old)^2, 0.0)) / core_norm
 end
 

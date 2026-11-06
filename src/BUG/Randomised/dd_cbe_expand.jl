@@ -30,8 +30,8 @@ function _trim_by_weight(directions, projected_action, side::Symbol, keep_count:
             cutoff = 0.0,
             Nkeep = keep_count,
         ).U                                                           # (g, k)
-    return left ? to_concrete(contract(directions, (3,), left_vectors, (1,))) :  # (link, site, k)
-           to_concrete(contract(left_vectors, (1,), directions, (1,)))         # (k, site, link)
+    return left ? TLArray(contract(directions, (3,), left_vectors, (1,))) :  # (link, site, k)
+           TLArray(contract(left_vectors, (1,), directions, (1,)))         # (k, site, link)
 end
 
 """
@@ -252,10 +252,10 @@ function dd_cbe_expand(
     directions === nothing && return none()
     nq = leg_dim(directions, fl)
     kc.n_sector_new +=
-        count(((charge, _),) -> sector_dim(frame, fl, charge) == 0, directions.spaces[fl])
+        count(((charge, _),) -> sector_dim(frame, fl, charge) == 0, Telum.spaces(directions)[fl])
     ledger === nothing || (ledger.n_selected += nq)
-    grown = to_concrete(
-        oplus([frame, to_concrete(setitag(directions, fl, frame.inds[fl].itags))], (fl,)),
+    grown = TLArray(
+        oplus([frame, TLArray(setitag(directions, fl, Telum.inds(frame)[fl].itags))], (fl,)),
     )
     # The grown frame replaces its side; the other frame passes through unchanged.
     if left

@@ -1,4 +1,4 @@
-const _TLARRAY_HDF5_SCHEMA_VERSION = "1.0"
+const _TLARRAY_HDF5_SCHEMA_VERSION = "2.0"
 
 _h5_attrs(obj) = HDF5.attrs(obj)
 
@@ -10,6 +10,14 @@ end
 _h5_attr(obj, name::AbstractString) = _h5_attrs(obj)[name]
 _h5_attr_string(obj, name::AbstractString) = String(_h5_attr(obj, name))
 
+"""
+    _package_version_string(mod::Module) -> String
+
+Return the package version string recorded in TLArray HDF5 metadata.
+
+If `Base.pkgversion(mod)` is unavailable or throws, `"unknown"` is returned.
+This keeps file writing robust for checked-out development packages.
+"""
 function _package_version_string(mod::Module)
     try
         v = Base.pkgversion(mod)
@@ -19,6 +27,16 @@ function _package_version_string(mod::Module)
     end
 end
 
+"""
+    _eltype_tag(T) -> String
+    _eltype_from_tag(tag::AbstractString) -> Type
+
+Map supported RMT element types to stable HDF5 schema tags and back.
+
+Only `Float64`, `Float32`, `ComplexF64`, and `ComplexF32` are supported. Other
+types are rejected explicitly so files do not silently encode unserializable
+Julia-specific element types.
+"""
 _eltype_tag(::Type{Float64}) = "Float64"
 _eltype_tag(::Type{Float32}) = "Float32"
 _eltype_tag(::Type{ComplexF64}) = "ComplexF64"
@@ -34,6 +52,16 @@ function _eltype_from_tag(tag::AbstractString)
     throw(ArgumentError("unsupported TLArray HDF5 RMT element type $tag"))
 end
 
+"""
+    _symmetry_family_parameter(::Type{S}) -> (String, Int)
+    _symmetry_from_family_parameter(family, parameter) -> Type{<:Symmetry}
+
+Convert symmetry types to stable HDF5 family/parameter metadata and back.
+
+Parameterized families such as `SU{N}`, `SO{N}`, `Sp{N}`, and `Z{N}` store `N`
+as `parameter`. Unparameterized families such as `U1` and `G2` store parameter
+zero.
+"""
 function _symmetry_family_parameter(::Type{S}) where {S<:Symmetry}
     S === U1 && return ("U1", 0)
     S === LurCGT.G2 && return ("G2", 0)
@@ -54,6 +82,16 @@ function _symmetry_from_family_parameter(family::AbstractString, parameter::Inte
     throw(ArgumentError("unsupported symmetry family $family in TLArray HDF5 file"))
 end
 
+"""
+    _write_symmetries!(parent, symm) -> HDF5.Group
+    _read_symmetries(parent) -> Tuple
+
+Write and read the product-symmetry tuple in TLArray HDF5 files.
+
+The stored group records the number of symmetry factors and one child group per
+factor with family, parameter, and Abelian metadata. Reading reconstructs the
+symmetry type tuple from those stable tags.
+"""
 function _write_symmetries!(parent, symm::NTuple{N, Any}) where {N}
     g = HDF5.create_group(parent, "symmetries")
     g["count"] = N
@@ -78,8 +116,26 @@ function _read_symmetries(parent)
     end
 end
 
+"""
+    _qlabel_width(symm) -> Int
+
+Return the flattened integer width of one product-symmetry qlabel.
+
+The width is the sum of `nzops` over every symmetry factor and determines row
+counts in HDF5 qlabel matrices.
+"""
 @inline _qlabel_width(symm) = sum(n -> nzops(symm[n]), eachindex(symm); init=0)
 
+"""
+    _encode_oneleg_qlabels(qlabels, symm) -> Matrix{Int}
+    _decode_oneleg_qlabels(data, symm) -> Vector
+
+Flatten and reconstruct qlabels for one leg space list.
+
+Columns correspond to space-list entries. Rows concatenate the qlabel
+coordinates for every symmetry factor. Decoding validates the expected row
+count and reconstructs the concrete `qlabeltype(symm)`.
+"""
 function _encode_oneleg_qlabels(qlabels::AbstractVector, symm)
     width = _qlabel_width(symm)
     data = Matrix{Int}(undef, width, length(qlabels))
@@ -115,6 +171,16 @@ function _decode_oneleg_qlabels(data::AbstractMatrix{<:Integer}, symm)
     return result
 end
 
+"""
+    _encode_sector_qlabels(qlabels, symm) -> Matrix{Int}
+    _decode_sector_qlabels(data, symm, ::Val{QD}) -> Vector
+
+Flatten and reconstruct full per-sector qlabel tuples.
+
+Rows are grouped by visible leg, and within each leg by symmetry-factor qlabel
+coordinates. Columns correspond to sector slots. Decoding validates
+`QD * _qlabel_width(symm)` rows before rebuilding `NTuple{QD,QT}` sector labels.
+"""
 function _encode_sector_qlabels(qlabels::AbstractVector{<:NTuple{QD}}, symm) where {QD}
     width = _qlabel_width(symm)
     data = Matrix{Int}(undef, QD * width, length(qlabels))
@@ -155,6 +221,16 @@ function _decode_sector_qlabels(data::AbstractMatrix{<:Integer}, symm, ::Val{QD}
     return result
 end
 
+"""
+    _write_indices!(parent, inds) -> HDF5.Group
+    _read_indices(parent, ::Val{QD}) -> NTuple{QD,TLIndex}
+
+Write and read visible TLIndex metadata.
+
+Stored arrays contain normalized tags, direction bytes, prime levels, lock
+levels, and dual flags. Reading checks that every metadata array has length
+`QD` before reconstructing `TLIndex` values.
+"""
 function _write_indices!(parent, inds::NTuple{QD, TLIndex}) where {QD}
     g = HDF5.create_group(parent, "indices")
     g["itags"] = String[String(idx.itags) for idx in inds]
@@ -178,6 +254,17 @@ function _read_indices(parent, ::Val{QD}) where {QD}
     return ntuple(i -> TLIndex(itags[i], Char(dirs[i]), plev[i], lock[i], duals[i]), Val(QD))
 end
 
+"""
+    _write_spaces!(parent, spaces, symm) -> HDF5.Group
+    _read_spaces(parent, symm, ::Val{QD}) -> NTuple
+
+Write and read TLArray visible leg space lists.
+
+For each leg, qlabels are stored through `_encode_oneleg_qlabels` and RMT
+dimensions are stored as an integer vector. Reading reconstructs
+`Vector{Tuple{QT,Int}}` entries for each leg and checks qlabel/dimension length
+agreement.
+"""
 function _write_spaces!(parent, spaces::NTuple{QD, <:AbstractVector}, symm) where {QD}
     g = HDF5.create_group(parent, "spaces")
     for leg in 1:QD
@@ -202,6 +289,16 @@ function _read_spaces(parent, symm, ::Val{QD}) where {QD}
     end
 end
 
+"""
+    _encode_wmatinfo(wmatinfo) -> Vector{Int}
+    _decode_wmatinfo(data, sector_count::Int, ::Val{M}) -> Vector{WMatInfo{M}}
+
+Flatten and reconstruct w-matrix arena descriptors.
+
+Each descriptor stores `(offset, nrows, ncols)` for each non-Abelian symmetry
+slot in each sector. The encoded vector has length `3 * M * sector_count`, which
+is checked during decoding.
+"""
 function _encode_wmatinfo(wmatinfo::Vector{WMatInfo{M}}) where {M}
     data = Vector{Int}(undef, 3 * M * length(wmatinfo))
     p = 1
@@ -228,15 +325,40 @@ function _decode_wmatinfo(data::AbstractVector{<:Integer}, sector_count::Int, ::
     return wmatinfo
 end
 
+"""
+    _write_wmat_storage!(parent, q::TLArray) -> HDF5.Group
+    _read_wmat_storage(parent, sector_count::Int, ::Val{M})
+
+Write and read contiguous w-matrix arena storage.
+
+The `data` dataset stores the raw `Float64` arena and `info` stores flattened
+`WMatInfo` descriptors. Attributes record tuple width and sector count so schema
+mismatches can be detected while reading.
+"""
 function _write_wmat_storage!(parent, q::TLArray{T, QD, N, RD, QT, PS, M}) where {T, QD, N, RD, QT, PS, M}
     g = HDF5.create_group(parent, "wmat")
     g["data"] = q.wmatdata
     g["info"] = _encode_wmatinfo(q.wmatinfo)
     _h5_set_attr!(g, "tuple_width", M)
-    _h5_set_attr!(g, "sector_count", length(q.qlabels))
+    _h5_set_attr!(g, "sector_count", sector_count(q))
     return g
 end
 
+"""
+    _read_wmat_storage(parent, sector_count::Int, ::Val{M}) -> (data, info)
+
+Read the w-matrix arena for a concrete `TLArray` from an HDF5 parent object.
+
+`parent` is the group that owns the `"wmat"` subgroup. `sector_count` is the
+number of sector slots already decoded from sector metadata and is checked
+against the stored attribute before allocation. `Val{M}` carries the number of
+non-Abelian symmetry slots per sector so that decoded `WMatInfo{M}` entries have
+the same tuple width as the tensor type being reconstructed.
+
+Returns the contiguous `Vector{Float64}` arena and the decoded per-sector
+descriptor vector. This routine deliberately does not inspect RMT state; sector
+slot numbering is validated separately by sector metadata and RMT readers.
+"""
 function _read_wmat_storage(parent, sector_count::Int, ::Val{M}) where {M}
     g = parent["wmat"]
     Int(_h5_attr(g, "tuple_width")) == M ||
@@ -246,18 +368,31 @@ function _read_wmat_storage(parent, sector_count::Int, ::Val{M}) where {M}
     return Vector{Float64}(read(g["data"])), _decode_wmatinfo(read(g["info"]), sector_count, Val(M))
 end
 
-function _validate_eager_tlarray_for_hdf5(q::TLArray)
-    sector_count = length(q.qlabels)
-    length(q.RMTs) == sector_count && length(q.isdefined) == sector_count &&
-        length(q.iszero) == sector_count ||
+"""
+    _validate_concrete_tlarray_for_hdf5(q::TLArray) -> Union{Type,Nothing}
+
+Check that an eager concrete tensor can be serialized without changing its
+sector semantics.
+
+`q` is the source tensor. The function verifies that `RMTs`, `isdefined`, and
+`iszero` have one entry per sector slot; that every sector marked defined has an
+assigned RMT payload; that every undefined sector is explicitly marked zero; and
+that all defined RMT payloads share one concrete storage type. The returned
+value is that concrete RMT type, or `nothing` when no sectors are defined.
+
+The check mirrors Telum's eager-sector invariant and prevents writing ambiguous
+lazy/view-like state into the compact HDF5 arena format.
+"""
+function _validate_concrete_tlarray_for_hdf5(q::TLArray)
+    nslots = sector_count(q)
+    length(q.RMTs) == nslots && length(q.isdefined) == nslots &&
+        length(q.iszero) == nslots ||
         throw(ArgumentError("inconsistent TLArray sector storage lengths"))
     rmt_type = nothing
     for sector in sector_slots(q)
         if q.isdefined[sector]
             isassigned(q.RMTs, sector) ||
                 throw(ArgumentError("sector $sector is marked defined but has no assigned RMT"))
-            q.iszero[sector] &&
-                throw(ArgumentError("sector $sector is both defined and zero"))
             current = typeof(q.RMTs[sector])
             rmt_type === nothing || current === rmt_type ||
                 throw(ArgumentError("all defined RMTs in one TLArray must have the same concrete type"))
@@ -270,16 +405,38 @@ function _validate_eager_tlarray_for_hdf5(q::TLArray)
     return rmt_type
 end
 
+"""
+    _rmt_storage_tag(::Type{RMT}) -> String
+
+Map a concrete RMT payload type to the HDF5 storage backend tag.
+
+Dense Julia arrays use `"dense_arena"` and `DiagRMT` values use `"diag_arena"`.
+Any other `RMT` type is rejected because the reader only knows how to rebuild
+these two arena layouts. The tag is stored both on the tensor group and on the
+RMT subgroup so schema mismatches can be diagnosed locally while reading.
+"""
 @inline _rmt_storage_tag(::Type{<:Array}) = "dense_arena"
 @inline _rmt_storage_tag(::Type{<:DiagRMT}) = "diag_arena"
 @inline _rmt_storage_tag(::Type{RMT}) where {RMT} =
     throw(ArgumentError("unsupported RMT storage type $RMT for TLArray HDF5 I/O"))
 
-function _write_dense_rmt_arena!(g, q::TLArray{T, QD, N, RD}) where {T, QD, N, RD}
-    data = T[]
-    info = zeros(Int, 2 + RD, length(q.qlabels))
+"""
+    _write_dense_rmt_arena!(g, q::TLArray) -> HDF5.Group
+
+Write dense RMT payloads into a single flat arena.
+
+`g` is the already-created `"rmt"` HDF5 group. `q` is a concrete `TLArray` whose
+defined sector payloads are dense `Array{T,RD}` values. Defined sectors append
+`vec(rmt)` to the `data` dataset and store `(offset, length, axis sizes...)` in
+the `info` matrix at the same sector slot. Undefined sectors leave an all-zero
+metadata column, preserving sector slot numbering rather than compacting active
+sectors.
+"""
+function _write_dense_rmt_arena!(g, q::TLArray{T, QD, N, RD, QT, PS, M, RMT}) where {T, QD, N, RD, QT, PS, M, RMT}
+    data = eltype(RMT)[]
+    info = zeros(Int, 2 + RD, sector_count(q))
     for sector in sector_slots(q)
-        q.iszero[sector] && continue
+        q.isdefined[sector] || continue
         rmt = q.RMTs[sector]
         offset = length(data) + 1
         append!(data, vec(rmt))
@@ -295,11 +452,23 @@ function _write_dense_rmt_arena!(g, q::TLArray{T, QD, N, RD}) where {T, QD, N, R
     return g
 end
 
-function _write_diag_rmt_arena!(g, q::TLArray{T}) where {T}
-    data = T[]
-    info = zeros(Int, 4, length(q.qlabels))
+"""
+    _write_diag_rmt_arena!(g, q::TLArray) -> HDF5.Group
+
+Write diagonal RMT payloads into a compact arena.
+
+`g` is the `"rmt"` HDF5 group. `q` is a concrete tensor whose defined sector
+payloads are `DiagRMT` values. For each defined sector, `diag` entries are
+appended to `data`, while `info[:, sector]` records the arena offset, diagonal
+length, and the two dense axes represented by the diagonal storage. Undefined
+sectors keep zero metadata columns so that HDF5 sector indices match TLArray
+sector slots exactly.
+"""
+function _write_diag_rmt_arena!(g, q::TLArray{T, QD, N, RD, QT, PS, M, RMT}) where {T, QD, N, RD, QT, PS, M, RMT}
+    data = eltype(RMT)[]
+    info = zeros(Int, 4, sector_count(q))
     for sector in sector_slots(q)
-        q.iszero[sector] && continue
+        q.isdefined[sector] || continue
         rmt = q.RMTs[sector]
         offset = length(data) + 1
         append!(data, rmt.diag)
@@ -313,12 +482,24 @@ function _write_diag_rmt_arena!(g, q::TLArray{T}) where {T}
     return g
 end
 
+"""
+    _write_rmt_storage!(parent, q::TLArray) -> HDF5.Group
+
+Create and populate the `"rmt"` subgroup for a concrete tensor.
+
+`parent` is the tensor group being written. `q` supplies the element type,
+rank-dependent RMT dimensionality, sector state bits, and concrete RMT payloads.
+The method records the selected storage backend, one-based arena alignment, and
+sector count, then delegates to either the dense-array or diagonal-RMT arena
+writer. The selected backend is based only on the concrete RMT type parameter,
+not on individual sector contents.
+"""
 function _write_rmt_storage!(parent, q::TLArray{T, QD, N, RD, QT, PS, M, RMT}) where {T, QD, N, RD, QT, PS, M, RMT}
     g = HDF5.create_group(parent, "rmt")
     storage = _rmt_storage_tag(RMT)
     _h5_set_attr!(g, "storage", storage)
     _h5_set_attr!(g, "alignment", 1)
-    _h5_set_attr!(g, "sector_count", length(q.qlabels))
+    _h5_set_attr!(g, "sector_count", sector_count(q))
     if storage == "dense_arena"
         _write_dense_rmt_arena!(g, q)
     else
@@ -327,6 +508,16 @@ function _write_rmt_storage!(parent, q::TLArray{T, QD, N, RD, QT, PS, M, RMT}) w
     return g
 end
 
+"""
+    _check_rmt_range(data_len, offset, len, sector) -> nothing
+
+Validate one defined sector's slice into an RMT arena.
+
+`data_len` is the total length of the flat arena. `offset` is the one-based
+starting position stored in HDF5. `len` is the number of scalar entries assigned
+to this sector. `sector` is used only for precise error messages. The function
+throws if the range is empty, non-positive, or extends past `data_len`.
+"""
 function _check_rmt_range(data_len::Int, offset::Int, len::Int, sector::Int)
     offset > 0 || throw(ArgumentError("defined sector $sector has non-positive RMT arena offset"))
     len > 0 || throw(ArgumentError("defined sector $sector has non-positive RMT arena length"))
@@ -335,6 +526,20 @@ function _check_rmt_range(data_len::Int, offset::Int, len::Int, sector::Int)
     return nothing
 end
 
+"""
+    _read_dense_rmts(parent, ::Type{T}, ::Val{RD}, isdefined_bits, iszero_bits)
+
+Reconstruct dense `Array{T,RD}` RMT payload storage from an HDF5 arena.
+
+`parent` owns the `"rmt"` group. `T` is the element type decoded from the tensor
+schema. `Val{RD}` is the dense RMT rank. `isdefined_bits` selects sectors that
+must be materialized from the arena. `iszero_bits` is accepted for the common
+reader interface and documents that sector state is controlled externally by
+metadata, not inferred from nonzero payloads.
+
+The returned vector has one slot per sector. Only defined slots are assigned;
+undefined slots remain unassigned and must also have zero arena metadata.
+"""
 function _read_dense_rmts(parent, ::Type{T}, ::Val{RD}, isdefined_bits::BitVector, iszero_bits::BitVector) where {T, RD}
     g = parent["rmt"]
     data = Vector{T}(read(g["data"]))
@@ -345,7 +550,7 @@ function _read_dense_rmts(parent, ::Type{T}, ::Val{RD}, isdefined_bits::BitVecto
     RMTs = Vector{Array{T, RD}}(undef, sector_count)
     for sector in 1:sector_count
         offset, len = info[1, sector], info[2, sector]
-        if isdefined_bits[sector] && !iszero_bits[sector]
+        if isdefined_bits[sector]
             _check_rmt_range(length(data), offset, len, sector)
             shape = ntuple(axis -> info[2 + axis, sector], Val(RD))
             prod(shape) == len ||
@@ -353,12 +558,26 @@ function _read_dense_rmts(parent, ::Type{T}, ::Val{RD}, isdefined_bits::BitVecto
             RMTs[sector] = Array(reshape(copy(view(data, offset:offset + len - 1)), shape))
         else
             offset == 0 && len == 0 ||
-                throw(ArgumentError("undefined zero sector $sector must have zero RMT arena range"))
+                throw(ArgumentError("undefined sector $sector must have zero RMT arena range"))
         end
     end
     return RMTs
 end
 
+"""
+    _read_diag_rmts(parent, ::Type{T}, ::Val{RD}, isdefined_bits, iszero_bits)
+
+Reconstruct `DiagRMT{T,RD}` payload storage from an HDF5 arena.
+
+`parent` owns the `"rmt"` group. `T` is the scalar type. `Val{RD}` carries the
+rank of the dense RMT that the diagonal object represents. `isdefined_bits`
+determines which sector columns contain live payloads; `iszero_bits` is part of
+the shared RMT-reader signature and keeps the call aligned with sector metadata.
+
+For each defined sector, the method reads the diagonal vector and the pair of
+axes stored in `info`. Undefined sectors are required to have all-zero metadata
+so stale arena ranges cannot accidentally revive a sector.
+"""
 function _read_diag_rmts(parent, ::Type{T}, ::Val{RD}, isdefined_bits::BitVector, iszero_bits::BitVector) where {T, RD}
     g = parent["rmt"]
     data = Vector{T}(read(g["data"]))
@@ -369,18 +588,29 @@ function _read_diag_rmts(parent, ::Type{T}, ::Val{RD}, isdefined_bits::BitVector
     RMTs = Vector{DiagRMT{T, RD}}(undef, sector_count)
     for sector in 1:sector_count
         offset, len = info[1, sector], info[2, sector]
-        if isdefined_bits[sector] && !iszero_bits[sector]
+        if isdefined_bits[sector]
             _check_rmt_range(length(data), offset, len, sector)
             axis = (info[3, sector], info[4, sector])
             RMTs[sector] = DiagRMT(Vector{T}(view(data, offset:offset + len - 1)), Val(RD), axis)
         else
             all(iszero, view(info, :, sector)) ||
-                throw(ArgumentError("undefined zero sector $sector must have zero diagonal RMT metadata"))
+                throw(ArgumentError("undefined sector $sector must have zero diagonal RMT metadata"))
         end
     end
     return RMTs
 end
 
+"""
+    _read_rmt_storage(parent, ::Type{T}, ::Val{RD}, isdefined_bits, iszero_bits)
+
+Dispatch HDF5 RMT reconstruction based on the stored backend tag.
+
+`parent` is the tensor group, `T` is the decoded raw RMT scalar type, and
+`Val{RD}` is the dense RMT rank. `isdefined_bits` and `iszero_bits` come from
+sector metadata and define the exact sector slot state for the returned RMT
+vector. The function checks arena alignment and sector count before delegating
+to the dense or diagonal reader.
+"""
 function _read_rmt_storage(parent, ::Type{T}, ::Val{RD}, isdefined_bits::BitVector, iszero_bits::BitVector) where {T, RD}
     g = parent["rmt"]
     storage = _h5_attr_string(g, "storage")
@@ -393,9 +623,24 @@ function _read_rmt_storage(parent, ::Type{T}, ::Val{RD}, isdefined_bits::BitVect
     throw(ArgumentError("unsupported RMT storage $storage in TLArray HDF5 file"))
 end
 
+"""
+    _write_sector_metadata!(parent, q::TLArray) -> HDF5.Group
+    _read_sector_metadata(parent, symmetries, ::Val{QD}) -> (qlabels, isdefined, iszero)
+
+Write and read the sector table for a concrete tensor.
+
+`parent` is the tensor group. `q` supplies ordered stored q-labels and sector
+state bits. `symmetries` is the decoded product-symmetry tuple used to decode
+serialized q-labels. `Val{QD}` is the visible tensor rank and therefore the
+number of q-label entries per sector.
+
+The q-label list, `isdefined`, and `iszero` arrays are required to have identical
+lengths. During read, every undefined sector must be marked zero, preserving the
+eager `TLArray` invariant that undefined concrete slots are known zero sectors.
+"""
 function _write_sector_metadata!(parent, q::TLArray)
     g = HDF5.create_group(parent, "sectors")
-    g["qlabels"] = _encode_sector_qlabels(q.qlabels, symm(q))
+    g["qlabels"] = _encode_sector_qlabels(stored_qlabels(q), symm(q))
     g["isdefined"] = collect(Bool, q.isdefined)
     g["iszero"] = collect(Bool, q.iszero)
     return g
@@ -412,14 +657,27 @@ function _read_sector_metadata(parent, symmetries, ::Val{QD}) where {QD}
     for sector in 1:sector_count
         (!isdefined_bits[sector] && !iszero_bits[sector]) &&
             throw(ArgumentError("undefined sector $sector is not marked zero"))
-        (isdefined_bits[sector] && iszero_bits[sector]) &&
-            throw(ArgumentError("sector $sector is both defined and zero"))
     end
     return qlabels, isdefined_bits, iszero_bits
 end
 
+"""
+    _write_tlarray_group!(h5, name, q::TLArray) -> TLArray
+
+Write a complete concrete `TLArray` object below `h5[name]`.
+
+`h5` is an open HDF5 file or group handle. `name` is the child group name to
+create; existing objects with the same name are rejected. `q` is the concrete
+tensor to serialize. Type parameters determine the scalar element tag, visible
+rank `QD`, number of symmetry factors `N`, dense RMT rank `RD`, q-label type,
+number of non-Abelian w-matrix slots `M`, and RMT storage backend.
+
+The method writes top-level writer/schema attributes, then stores symmetries,
+indices, spaces, sector state, w-matrix arena data, and RMT arena data. It
+returns `q` so callers can use it in fluent save paths without re-reading.
+"""
 function _write_tlarray_group!(h5, name::AbstractString, q::TLArray{T, QD, N, RD, QT, PS, M, RMT}) where {T, QD, N, RD, QT, PS, M, RMT}
-    _validate_eager_tlarray_for_hdf5(q)
+    _validate_concrete_tlarray_for_hdf5(q)
     haskey(h5, name) && throw(ArgumentError("HDF5 object $name already exists"))
 
     _h5_set_attr!(h5, "telum_hdf5_schema_version", _TLARRAY_HDF5_SCHEMA_VERSION)
@@ -432,46 +690,53 @@ function _write_tlarray_group!(h5, name::AbstractString, q::TLArray{T, QD, N, RD
     _h5_set_attr!(g, "object_type", "TLArray")
     _h5_set_attr!(g, "schema_version", _TLARRAY_HDF5_SCHEMA_VERSION)
     _h5_set_attr!(g, "eltype", _eltype_tag(T))
+    _h5_set_attr!(g, "rmt_eltype", _eltype_tag(eltype(RMT)))
     _h5_set_attr!(g, "rmt_storage", _rmt_storage_tag(RMT))
+    _h5_set_attr!(g, "conj", stored_conj(q))
+    _h5_set_attr!(g, "scale", stored_scale(q))
+    _h5_set_attr!(g, "perm", collect(stored_perm(q)))
     _h5_set_attr!(g, "qd", QD)
     _h5_set_attr!(g, "nsymms", N)
     _h5_set_attr!(g, "rd", RD)
-    _h5_set_attr!(g, "sector_count", length(q.qlabels))
+    _h5_set_attr!(g, "sector_count", sector_count(q))
     _h5_set_attr!(g, "nonzero_sector_count", nsectors(q))
 
     _write_symmetries!(g, symm(q))
-    _write_indices!(g, q.inds)
-    _write_spaces!(g, q.spaces, symm(q))
+    _write_indices!(g, stored_inds(q))
+    _write_spaces!(g, stored_spaces(q), symm(q))
     _write_sector_metadata!(g, q)
     _write_wmat_storage!(g, q)
     _write_rmt_storage!(g, q)
     return q
 end
 
-function save_tlarray(path::AbstractString, q::AbstractTLArray; name::AbstractString="tensor")
+"""
+    save_tlarray(path, q; name="tensor")
+    save_tlarray(h5, name, q)
+
+Write concrete tensor `q` to HDF5 group `name`. In the path form, `path` is
+opened for writing and the path is returned; in the handle form, `h5` is an
+existing HDF5 file/group handle and the written group is returned. Lazy
+evaluation objects are not serializable through this API.
+Existing data at `name` may be replaced, so callers should choose paths/groups
+carefully. The source tensor is never mutated.
+"""
+function save_tlarray(path::AbstractString, q::TLArray; name::AbstractString="tensor")
     HDF5.h5open(path, "w") do h5
         save_tlarray(h5, name, q)
     end
     return path
 end
 
-save_tlarray(h5, name::AbstractString, q::TLArray) =
-    _write_tlarray_group!(h5, name, q)
-
-_hdf5_concrete_tlarray(q::TLArray) = q
-_hdf5_concrete_tlarray(q::TLArrayView) = _eager_tlarray(q)
-_hdf5_concrete_tlarray(q::AbstractTLArray) = _eager_tlarray(materialize(q))
-
-function save_tlarray(h5, name::AbstractString, q::AbstractTLArray)
-    concrete = _hdf5_concrete_tlarray(q)
-    return save_tlarray(h5, name, concrete)
+function save_tlarray(h5, name::AbstractString, q::TLArray)
+    return _write_tlarray_group!(h5, name, q)
 end
 
 function _read_tlarray_group(parent)
     _h5_attr_string(parent, "object_type") == "TLArray" ||
         throw(ArgumentError("HDF5 group does not contain a TLArray"))
     schema_version = _h5_attr_string(parent, "schema_version")
-    schema_version == _TLARRAY_HDF5_SCHEMA_VERSION ||
+    schema_version in ("1.0", _TLARRAY_HDF5_SCHEMA_VERSION) ||
         throw(ArgumentError("unsupported TLArray HDF5 schema version $schema_version"))
 
     QD = Int(_h5_attr(parent, "qd"))
@@ -485,6 +750,7 @@ function _read_tlarray_group(parent)
         throw(ArgumentError("symmetry count does not match tensor metadata"))
     M = n_nonabelian_symmetries(productsymm(symmetries))
     T = _eltype_from_tag(_h5_attr_string(parent, "eltype"))
+    RT = schema_version == "1.0" ? T : _eltype_from_tag(_h5_attr_string(parent, "rmt_eltype"))
 
     qlabels, isdefined_bits, iszero_bits = _read_sector_metadata(parent, symmetries, Val(QD))
     sector_count = length(qlabels)
@@ -496,9 +762,15 @@ function _read_tlarray_group(parent)
     inds = _read_indices(parent, Val(QD))
     spaces = _read_spaces(parent, symmetries, Val(QD))
     wmatdata, wmatinfo = _read_wmat_storage(parent, sector_count, Val(M))
-    RMTs = _read_rmt_storage(parent, T, Val(RD), isdefined_bits, iszero_bits)
+    RMTs = _read_rmt_storage(parent, RT, Val(RD), isdefined_bits, iszero_bits)
+    conj_flag = schema_version == "1.0" ? false : Bool(_h5_attr(parent, "conj"))
+    scale = schema_version == "1.0" ? one(T) : convert(T, _h5_attr(parent, "scale"))
+    perm = schema_version == "1.0" ? ntuple(identity, Val(QD)) :
+           ntuple(i -> Int(_h5_attr(parent, "perm")[i]), Val(QD))
+    _is_valid_perm(perm) || throw(ArgumentError("stored permutation is invalid"))
 
-    q = TLArray(symmetries, qlabels, wmatdata, wmatinfo, RMTs, inds, spaces)
+    q = TLArray(Val(:alias_storage_view_state), symmetries, qlabels, wmatdata, wmatinfo,
+                RMTs, isdefined_bits, iszero_bits, inds, spaces, conj_flag, scale, perm)
     q.isdefined == isdefined_bits ||
         throw(ArgumentError("loaded TLArray isdefined bits do not match stored bits"))
     q.iszero == iszero_bits ||
@@ -506,6 +778,16 @@ function _read_tlarray_group(parent)
     return q
 end
 
+"""
+    load_tlarray(path; name="tensor") -> TLArray
+    load_tlarray(h5, name) -> TLArray
+
+Read concrete tensor metadata, w-matrices, sector flags, and RMT storage from
+HDF5 group `name`. `path` is opened read-only by the path overload; `h5` is an
+already open handle in the handle overload. Returns a newly owned concrete
+`TLArray` and validates the serialized shape/type/symmetry metadata, throwing
+an error for incompatible or corrupted files.
+"""
 function load_tlarray(path::AbstractString; name::AbstractString="tensor")
     HDF5.h5open(path, "r") do h5
         return load_tlarray(h5, name)

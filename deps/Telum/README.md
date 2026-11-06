@@ -27,6 +27,9 @@ using LurCGT
 using Telum
 ```
 
+The proposed eager-default, opt-in lazy-evaluation design is documented in
+[docs/LAZY_EVALUATION_PLAN.md](docs/LAZY_EVALUATION_PLAN.md).
+
 ## Testing
 
 ```julia
@@ -34,4 +37,3 @@ using Pkg
 Pkg.develop(path="../LurCGT.jl")
 Pkg.test()
 ```
-

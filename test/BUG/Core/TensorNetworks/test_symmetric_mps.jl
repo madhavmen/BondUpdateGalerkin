@@ -17,17 +17,17 @@ using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
         psi = domain_wall_state(6)
         for i = 1:6
             A = psi[i]
-            @test length(A.inds) == 3
-            @test A.inds[1].itags == "L,$i"
-            @test A.inds[2].itags == "S,$i"
-            @test A.inds[3].itags == "L,$(i + 1)"
+            @test length(Telum.inds(A)) == 3
+            @test Telum.inds(A)[1].itags == "L,$i"
+            @test Telum.inds(A)[2].itags == "S,$i"
+            @test Telum.inds(A)[3].itags == "L,$(i + 1)"
             # the physical leg keeps the full local space, so local operators
             # stay contractible against it
             @test leg_dim(A, 2) == 2
         end
         # bonds carry opposite arrows -- the invariant canonical! maintains
         for i = 1:5
-            @test psi[i].inds[3].dir != psi[i+1].inds[1].dir
+            @test Telum.inds(psi[i])[3].dir != Telum.inds(psi[i+1])[1].dir
         end
     end
 
@@ -46,8 +46,8 @@ using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
         psi = neel_state(6)
         canonical!(psi, 2)                       # forces left moves
         for i = 1:5
-            @test psi[i].inds[3].dir != psi[i+1].inds[1].dir
-            @test psi[i].inds[3].itags == psi[i+1].inds[1].itags
+            @test Telum.inds(psi[i])[3].dir != Telum.inds(psi[i+1])[1].dir
+            @test Telum.inds(psi[i])[3].itags == Telum.inds(psi[i+1])[1].itags
         end
     end
 
@@ -72,7 +72,7 @@ using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
     @testset "`*` is greedy -- the reason left_gram primes the bond" begin
         psi = domain_wall_state(4)
         A = psi[1]
-        @test length((A' * A).inds) == 0         # bond closed, rank-0 scalar
-        @test length(left_gram(A).inds) == 2     # bond kept open
+        @test length(Telum.inds((A' * A))) == 0         # bond closed, rank-0 scalar
+        @test length(Telum.inds(left_gram(A))) == 2     # bond kept open
     end
 end

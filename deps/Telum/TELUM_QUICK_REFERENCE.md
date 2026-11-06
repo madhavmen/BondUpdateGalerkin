@@ -146,7 +146,7 @@ builds a type encoding that product symmetry.
   symmetry tuple and index tuple.
 - `empty_tlarray(q; T=Float64)`: create an empty tensor with `q`'s symmetries and
   indices.
-- `getvac(q, itags=("", ""))`: build a rank-2 vacuum tensor with one incoming
+- `getvac(q, itag=("", ""))`: build a rank-2 vacuum tensor with one incoming
   and one outgoing trivial leg.
 - `getIdentity((q, leg)...; itag="", plev=0, lock=0)`: build a fused identity
   tensor for one or more selected legs.
@@ -262,11 +262,29 @@ spaces are reused through the constructor.
 - `svd(q, left_tag="svdL", right_tag="svdR"; selectors..., cutoff=1e-12,
   Nkeep=nothing)`: choose SVD left legs using index selectors.
 - `svd_cgtsvd(q, args...; kwargs...)`: exported alias for `svd(q, ...)`.
+- Randomized SVD (both overloads and alias): `randomize=true` requires positive
+  `Nkeep`. `random_mode=:proportional` (default) allocates
+  `min(dᵢ, ceil(Nkeep * (1 + random_tol) * dᵢ / sum(dⱼ)))` largest candidates
+  per class, with `dᵢ = min(mᵢ, nᵢ)` and `random_tol=0.1`. It can miss globally
+  important values. `random_mode=:per_class` requests `min(dᵢ, Nkeep)` per class
+  for sufficient candidate slots, subject to approximation error. Unsymmetric
+  tensors request the leading `Nkeep` pairs directly. `random_niter=2` controls
+  power iterations; `random_oversampling=10` adds sketch columns (nonnegative
+  integer), capped at the smaller matrix dimension, while returning only the
+  requested candidates. Set it to `0` for the original sketch width.
+  `random_rng=Random.default_rng()` accepts a seeded RNG.
+  Full-rank requests use exact SVD. Global cutoff/`Nkeep` selection is preserved;
+  lists contain only computed candidates. Exact mode ignores `random_*` options.
 - `eigen(q, eig_tag="eig"; hermitian=false)`: eigendecompose a rank-2
   `TLArray`. Auto-detects Hermitian input unless forced.
-- `discard_eigen(result, Nkeep, tol=0.1, kept_tag="eigK",
-  discarded_tag="eigD"; hermitian=isnothing(result.V_inv))`: split an
-  `EigenResult` into kept and discarded eigen-subspaces.
+- `discard_eigen(result, kept_tag="eigK", discarded_tag="eigD";
+  Nkeep=nothing, threshold=nothing, keep_low=true, tol=0.1)`: split an
+  `EigenResult` using exactly one of a count or an explicit threshold.
+  Compare real eigenvalues by signed value. `keep_low=true` keeps low values
+  (`<= threshold`); `false` keeps high values (`>= threshold`). Count mode can
+  expand at the largest gap within its `tol` window; a window reaching the end
+  keeps all entries. `tol=0` uses the exact count. Threshold mode ignores the
+  window adjustment. Zero eigenvalues count normally; output lists are ascending.
 
 ### Contraction Internals Exposed For Advanced Use
 

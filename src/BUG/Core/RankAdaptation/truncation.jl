@@ -18,20 +18,20 @@ function truncate_sweep!(psi::SymMPS; maxdim::Int = 200, cutoff::Float64 = 1e-12
     canonical!(psi, 1)
     for site = 1:(site_count-1)
         res = svd(psi[site], (1, 2); cutoff = cutoff, Nkeep = maxdim)
-        tag = psi[site].inds[3].itags
+        tag = Telum.inds(psi[site])[3].itags
         # Keep `U` on this site and push `S Vd` (bond x right link) into the next one.
-        weight_block = to_concrete(res.S * res.Vd)
-        psi[site] = to_concrete(setitag(res.U, 3, tag))
-        psi[site+1] = to_concrete(setitag(contract(weight_block, (2,), psi[site+1], (1,)), 1, tag))
+        weight_block = TLArray(res.S * res.Vd)
+        psi[site] = TLArray(setitag(res.U, 3, tag))
+        psi[site+1] = TLArray(setitag(contract(weight_block, (2,), psi[site+1], (1,)), 1, tag))
         psi.center = site + 1
     end
     for site = site_count:-1:2
         res = svd(psi[site], (1,); cutoff = cutoff, Nkeep = maxdim)
-        tag = psi[site-1].inds[3].itags
+        tag = Telum.inds(psi[site-1])[3].itags
         # Mirror: keep `Vd` here and push `U S` (left link x bond) into the previous site.
-        weight_block = to_concrete(res.U * res.S)
-        psi[site] = to_concrete(setitag(res.Vd, 1, tag))
-        psi[site-1] = to_concrete(setitag(contract(psi[site-1], (3,), weight_block, (1,)), 3, tag))
+        weight_block = TLArray(res.U * res.S)
+        psi[site] = TLArray(setitag(res.Vd, 1, tag))
+        psi[site-1] = TLArray(setitag(contract(psi[site-1], (3,), weight_block, (1,)), 3, tag))
         psi.center = site - 1
     end
     return psi
@@ -127,12 +127,12 @@ function truncate_recursive!(
     for site = root:-1:2
         res = cut(psi[site], (1,))
         account!(res, 1, site - 1)            # splits bond (site-1, site)
-        tag = psi[site-1].inds[3].itags
+        tag = Telum.inds(psi[site-1])[3].itags
         # `A = U S Vd`: keep `Vd` here and hand `U S` outward, so the child receives the weight
         # and its own SVD is a genuine Schmidt decomposition.
-        psi[site] = to_concrete(setitag(res.Vd, 1, tag))
-        psi[site-1] = to_concrete(
-            setitag(contract(psi[site-1], (3,), to_concrete(res.U * res.S), (1,)), 3, tag),
+        psi[site] = TLArray(setitag(res.Vd, 1, tag))
+        psi[site-1] = TLArray(
+            setitag(contract(psi[site-1], (3,), TLArray(res.U * res.S), (1,)), 3, tag),
         )
         psi.center = site - 1
     end
@@ -146,10 +146,10 @@ function truncate_recursive!(
     for site = root:(site_count-1)
         res = cut(psi[site], (1, 2))
         account!(res, 2, site)                # splits bond (site, site+1)
-        tag = psi[site].inds[3].itags
-        psi[site] = to_concrete(setitag(res.U, 3, tag))
-        psi[site+1] = to_concrete(
-            setitag(contract(to_concrete(res.S * res.Vd), (2,), psi[site+1], (1,)), 1, tag),
+        tag = Telum.inds(psi[site])[3].itags
+        psi[site] = TLArray(setitag(res.U, 3, tag))
+        psi[site+1] = TLArray(
+            setitag(contract(TLArray(res.S * res.Vd), (2,), psi[site+1], (1,)), 1, tag),
         )
         psi.center = site + 1
     end
@@ -211,17 +211,17 @@ function _preselect_left(left_frame, sketch, stol::Float64)
     outside_norm = norm(outside_part)
     outside_norm <= _CBE_EPS * max(norm(sketch), 1.0) && return (nothing, 0.0)
     res = svd(
-        to_concrete((1.0 / outside_norm) * outside_part),
+        TLArray((1.0 / outside_norm) * outside_part),
         (1, 2),
         _TAG_L,
         _TAG_LR;
         cutoff = _rank_cut(stol, sketch, outside_norm),
         get_lists = true,
     )
-    new_directions = to_concrete(res.U)
+    new_directions = TLArray(res.U)
     repaired_part = perp_component(left_frame, new_directions)  # RepairOrtho
     norm(repaired_part) <= _CBE_EPS * norm(new_directions) && return (nothing, 0.0)
-    new_directions = to_concrete(svd(repaired_part, (1, 2), _TAG_L, _TAG_LR; cutoff = 1e-13).U)
+    new_directions = TLArray(svd(repaired_part, (1, 2), _TAG_L, _TAG_LR; cutoff = 1e-13).U)
     return (new_directions, _trunc_weight(res))
 end
 
@@ -236,7 +236,7 @@ function _preselect_right(right_frame, sketch, stol::Float64)
     outside_norm = norm(outside_part)
     outside_norm <= _CBE_EPS * max(norm(sketch), 1.0) && return (nothing, 0.0)
     res = svd(
-        to_concrete((1.0 / outside_norm) * outside_part),
+        TLArray((1.0 / outside_norm) * outside_part),
         (2, 3),
         _TAG_R,
         _TAG_RR;
@@ -244,10 +244,10 @@ function _preselect_right(right_frame, sketch, stol::Float64)
         get_lists = true,
     )
     # Telum returns `U` as (site_r, link_r, bond); move the new bond leg to the front.
-    new_directions = to_concrete(permutedims(res.U, (3, 1, 2)))
+    new_directions = TLArray(permutedims(res.U, (3, 1, 2)))
     repaired_part = perp_component_right(right_frame, new_directions)  # RepairOrtho
     norm(repaired_part) <= _CBE_EPS * norm(new_directions) && return (nothing, 0.0)
-    new_directions = to_concrete(
+    new_directions = TLArray(
         permutedims(svd(repaired_part, (2, 3), _TAG_R, _TAG_RR; cutoff = 1e-13).U, (3, 1, 2)),
     )
     return (new_directions, _trunc_weight(res))
@@ -286,7 +286,7 @@ function _trim_per_sector(tensor, leg::Int, counts::Dict)
     # Per-sector selector for `getsub`: the leading `counts[sector]` columns, or none.
     keep = sector -> (kept_width = get(counts, sector, 0); kept_width <= 0 ? nothing : 1:kept_width)
     any(allotted > 0 for allotted in values(counts)) || return nothing
-    return to_concrete(getsub(tensor, leg, keep))
+    return TLArray(getsub(tensor, leg, keep))
 end
 
 """
@@ -298,9 +298,9 @@ the fused leg's arrow (`align_charge`).
 """
 function _frame_sector_dims(frame, side::Symbol, fused, where::AbstractString)
     fl = side === :left ? 3 : 1
-    dfull = Dict(charge => space_dim for (charge, space_dim) in fused.spaces[3])
+    dfull = Dict(charge => space_dim for (charge, space_dim) in Telum.spaces(fused)[3])
     syms_ = symm(frame)
-    fdir, bdir = fused.inds[3].dir, frame.inds[fl].dir
+    fdir, bdir = Telum.inds(fused)[3].dir, Telum.inds(frame)[fl].dir
     dT = Dict(
         charge => sector_dim(frame, fl, align_charge(syms_, charge, fdir, bdir)) for
         charge in keys(dfull)
@@ -342,7 +342,7 @@ function _cap_to_local_room(frame, candidates, side::Symbol)
     counts = Dict{Any,Int}()
     over = false
     for (charge, local_width) in dfull
-        uq = align_charge(syms_, charge, fused.inds[3].dir, candidates.inds[fl].dir)
+        uq = align_charge(syms_, charge, Telum.inds(fused)[3].dir, Telum.inds(candidates)[fl].dir)
         du = sector_dim(candidates, fl, uq)
         du == 0 && continue
         counts[uq] = min(du, local_width - dT[charge])
@@ -390,7 +390,7 @@ _reortho_right(right_frame, block) = _reortho(
 # `orth(perp(block))`, or `nothing` when the block lies (to roundoff) inside the frame.
 function _reortho(block, perp, orth)
     block === nothing && return nothing
-    outside_part = to_concrete(perp(block))
+    outside_part = TLArray(perp(block))
     norm(outside_part) <= _CBE_EPS * max(norm(block), 1.0) && return nothing
-    return to_concrete(orth(outside_part))
+    return TLArray(orth(outside_part))
 end

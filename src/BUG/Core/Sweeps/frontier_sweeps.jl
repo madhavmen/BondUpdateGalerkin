@@ -29,7 +29,7 @@ function _polar_frame(frame, side::Symbol)
         matrix_block isa Telum.DiagRMT ? (matrix_block.diag .= unit.(matrix_block.diag)) :
         (unit_values.RMTs[block] = map(unit, matrix_block))
     end
-    return to_concrete(res.U * (unit_values * res.Vd))
+    return TLArray(res.U * (unit_values * res.Vd))
 end
 
 """
@@ -103,14 +103,14 @@ function _frontier_left(
         enrich || (lch = chain[bond])
         old_frame = _check_frame(
             Pm === nothing ? fr.left_frames[bond] :
-            to_concrete!(contract(Pm, (2,), fr.left_frames[bond], (1,))),
+            contract(Pm, (2,), fr.left_frames[bond], (1,)),
             :left,
             "frontier U0 = Pm W[$bond] (gen $(fr.gen))",
         )
         if pre === nothing
             # the frontier's site tensor in the grown left gauge, then its two-site action
             site_core =
-                carry === nothing ? Fm[bond] : to_concrete!(contract(carry, (2,), Fm[bond], (1,)))
+                carry === nothing ? Fm[bond] : contract(carry, (2,), Fm[bond], (1,))
             two_site_frame = _frame_onto_left(old_frame, site_core, Fm[bond+1])
             rch = right_channels(rstack, bond + 2)
             skl, skr, leak[bond], two_site_calls = _bond_action(
@@ -140,8 +140,8 @@ function _frontier_left(
         Wi = if enrich && !quiet
             ex = _frontier_expand(two_site_frame, mpo, bond, lch, rch, :left, ckw, bl, rng)
             # the next site projected onto the expansion's right directions: (link, b_ex)
-            right_projected = to_concrete!(contract(Fm[bond+1], (2, 3), ex.V_ex', (2, 3)))
-            Kex = to_concrete!(contract(site_core, (3,), right_projected, (1,)))
+            right_projected = contract(Fm[bond+1], (2, 3), ex.V_ex', (2, 3))
+            Kex = contract(site_core, (3,), right_projected, (1,))
             one_site_op = shift_h(
                 one_site_h(mpo, bond, lch, push_right_channels(rch, mpo, ex.V_ex, bond + 1)),
                 fr.eshift,
@@ -178,7 +178,7 @@ function _frontier_left(
             old_frame
         end
         Wn[bond] =
-            enrich ? _polar_frame(to_concrete(setitag(Wi, 3, _tagWg(bond, gen))), :left) : old_frame
+            enrich ? _polar_frame(TLArray(setitag(Wi, 3, _tagWg(bond, gen))), :left) : old_frame
         _check_frame(Wn[bond], :left, "frontier Wn[$bond] (gen $gen)")
         nadd = leg_dim(Wn[bond], 3) - leg_dim(old_frame, 3)
         nsec = _new_sectors(old_frame, Wn[bond], 3)
@@ -199,8 +199,8 @@ function _frontier_left(
                 rec_defect = rdef,
             ),
         )
-        enrich && (Pm = to_concrete!(contract(Wn[bond]', (1, 2), old_frame, (1, 2))))  # (new, old)
-        pre === nothing && (carry = to_concrete!(contract(Wn[bond]', (1, 2), site_core, (1, 2))))
+        enrich && (Pm = contract(Wn[bond]', (1, 2), old_frame, (1, 2)))  # (new, old)
+        pre === nothing && (carry = contract(Wn[bond]', (1, 2), site_core, (1, 2)))
         lchs[bond] = lch
         bond == root_link && (lenv = lch)
         enrich && bond < root_link && (lch = push_left_channels(lch, mpo, Wn[bond], bond))
@@ -281,7 +281,7 @@ function _frontier_right(
         enrich || (rch = chain[bond])
         old_frame = _check_frame(
             Pm === nothing ? fr.right_frames[bond] :
-            to_concrete!(contract(fr.right_frames[bond], (3,), Pm, (1,))),
+            contract(fr.right_frames[bond], (3,), Pm, (1,)),
             :right,
             "frontier V0 = Z[$bond] Pm (gen $(fr.gen))",
         )
@@ -289,7 +289,7 @@ function _frontier_right(
             # the frontier's site tensor in the grown right gauge, then its two-site action
             site_core =
                 carry === nothing ? Fm[bond+1] :
-                to_concrete!(contract(Fm[bond+1], (3,), carry, (1,)))
+                contract(Fm[bond+1], (3,), carry, (1,))
             two_site_frame = _frame_onto_right(Fm[bond], site_core, old_frame)
             lch = left_channels(lstack, bond)
             skl, skr, leak[bond], two_site_calls = _bond_action(
@@ -319,8 +319,8 @@ function _frontier_right(
         Zj = if enrich && !quiet
             ex = _frontier_expand(two_site_frame, mpo, bond, lch, rch, :right, ckw, bl, rng)
             # the previous site projected onto the expansion's left directions: (b_ex, link)
-            left_projected = to_concrete!(contract(ex.U_ex', (1, 2), Fm[bond], (1, 2)))
-            Bex = to_concrete!(contract(left_projected, (2,), site_core, (1,)))
+            left_projected = contract(ex.U_ex', (1, 2), Fm[bond], (1, 2))
+            Bex = contract(left_projected, (2,), site_core, (1,))
             one_site_op = shift_h(
                 one_site_h(mpo, bond + 1, push_left_channels(lch, mpo, ex.U_ex, bond), rch),
                 fr.eshift,
@@ -357,7 +357,7 @@ function _frontier_right(
             old_frame
         end
         Zn[bond] =
-            enrich ? _polar_frame(to_concrete(setitag(Zj, 1, _tagZg(bond, gen))), :right) :
+            enrich ? _polar_frame(TLArray(setitag(Zj, 1, _tagZg(bond, gen))), :right) :
             old_frame
         _check_frame(Zn[bond], :right, "frontier Zn[$bond] (gen $gen)")
         nadd = leg_dim(Zn[bond], 1) - leg_dim(old_frame, 1)
@@ -379,8 +379,8 @@ function _frontier_right(
                 rec_defect = rdef,
             ),
         )
-        enrich && (Pm = to_concrete!(contract(old_frame, (2, 3), Zn[bond]', (2, 3))))  # (old, new)
-        pre === nothing && (carry = to_concrete!(contract(site_core, (2, 3), Zn[bond]', (2, 3))))
+        enrich && (Pm = contract(old_frame, (2, 3), Zn[bond]', (2, 3)))  # (old, new)
+        pre === nothing && (carry = contract(site_core, (2, 3), Zn[bond]', (2, 3)))
         rchs[bond] = rch
         bond == root_link && (renv = rch)
         enrich && bond > root_link && (rch = push_right_channels(rch, mpo, Zn[bond], bond + 1))

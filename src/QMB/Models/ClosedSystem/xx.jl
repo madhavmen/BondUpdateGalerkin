@@ -18,7 +18,7 @@ end
 the other one. The sum `H_s` is symmetric and does not see it; `spin_current_mpo` does.
 """
 _spin_xx_vertices(q) =
-    [PairVertex(q.Sp, to_concrete(q.Sp'), 1.0), PairVertex(q.Sm, to_concrete(q.Sm'), 1.0)]
+    [PairVertex(q.Sp, TLArray(q.Sp'), 1.0), PairVertex(q.Sm, TLArray(q.Sm'), 1.0)]
 
 """
     spin_xx_mpo(L, twoS; J = 1.0) -> MPO

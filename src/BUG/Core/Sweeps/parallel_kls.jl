@@ -38,13 +38,13 @@ function _kls_start(
     # The frames' carries up to the root's neighbours, in any gauge (full contractions).
     CL = root_link == 1 ? nothing : _overlap_left(psi, left_frames, root_link - 1)                     # (b_{c-1}, link_c)
     DR = root_link == site_count - 1 ? nothing : _overlap_right(psi, right_frames, root_link + 1)                   # (link_{c+2}, b_{c+1})
-    Kc = CL === nothing ? psi[root_link] : to_concrete!(contract(CL, (2,), psi[root_link], (1,)))
+    Kc = CL === nothing ? psi[root_link] : contract(CL, (2,), psi[root_link], (1,))
     Lc =
-        DR === nothing ? psi[root_link+1] : to_concrete!(contract(psi[root_link+1], (3,), DR, (1,)))
-    AR = to_concrete!(contract(Lc, (2, 3), right_frames[root_link]', (2, 3)))  # (link_{c+1}, b_R)
-    AL = to_concrete!(contract(left_frames[root_link]', (1, 2), Kc, (1, 2)))   # (b_L, link_{c+1})
-    k_start = to_concrete!(contract(Kc, (3,), AR, (1,)))                   # (b_{c-1}, s_c, b_R)
-    l_start = to_concrete!(contract(AL, (2,), Lc, (1,)))                   # (b_L, s_{c+1}, b_{c+1})
+        DR === nothing ? psi[root_link+1] : contract(psi[root_link+1], (3,), DR, (1,))
+    AR = contract(Lc, (2, 3), right_frames[root_link]', (2, 3))  # (link_{c+1}, b_R)
+    AL = contract(left_frames[root_link]', (1, 2), Kc, (1, 2))   # (b_L, link_{c+1})
+    k_start = contract(Kc, (3,), AR, (1,))                   # (b_{c-1}, s_c, b_R)
+    l_start = contract(AL, (2,), Lc, (1,))                   # (b_L, s_{c+1}, b_{c+1})
     kK, kL = KernelCounters(), KernelCounters()
     # K sees the root's right frame as its right environment, L the root's left frame
     HK = OneSiteOp(
@@ -122,21 +122,21 @@ function _kls_finish(
     (Kh, tK, _), (Lh, tL, _) = _join(st.k_stage), _join(st.l_stage)
     Up, _ = _preselect_left(left_root, Kh, 0.0)            # numerical rank only: no physical cut
     Vp, _ = _preselect_right(right_root, Lh, 0.0)
-    Up === nothing || (Up = to_concrete(setitag(Up, 3, left_root.inds[3].itags)))
-    Vp === nothing || (Vp = to_concrete(setitag(Vp, 1, right_root.inds[1].itags)))
-    Wn = Up === nothing ? left_root : to_concrete(oplus([left_root, Up], (3,)))
-    Zn = Vp === nothing ? right_root : to_concrete(oplus([right_root, Vp], (1,)))
-    EL = to_concrete!(contract(Wn', (1, 2), left_root, (1, 2)))            # (b_L', b_L)
-    ER = to_concrete!(contract(right_root, (2, 3), Zn', (2, 3)))           # (b_R, b_R')
+    Up === nothing || (Up = TLArray(setitag(Up, 3, Telum.inds(left_root)[3].itags)))
+    Vp === nothing || (Vp = TLArray(setitag(Vp, 1, Telum.inds(right_root)[1].itags)))
+    Wn = Up === nothing ? left_root : TLArray(oplus([left_root, Up], (3,)))
+    Zn = Vp === nothing ? right_root : TLArray(oplus([right_root, Vp], (1,)))
+    EL = contract(Wn', (1, 2), left_root, (1, 2))            # (b_L', b_L)
+    ER = contract(right_root, (2, 3), Zn', (2, 3))           # (b_R, b_R')
     # a core in the old root frames, rewritten in the enlarged ones: EL core ER
     embed(core) =
-        to_concrete!(contract(to_concrete!(contract(EL, (2,), core, (1,))), (2,), ER, (1,)))
+        contract(contract(EL, (2,), core, (1,)), (2,), ER, (1,))
     kc = merge_counters!(merge_counters!(KernelCounters(), st.kK), st.kL)
     omitted_block, missing = nothing, 0.0
     if Up !== nothing && Vp !== nothing                    # one side alone leaves no omitted block
         HV, dt, db = _measure(
             () -> _stream_left(
-                to_concrete(left_root * root_start),
+                TLArray(left_root * root_start),
                 right_root,
                 mpo,
                 root_link,
@@ -150,7 +150,7 @@ function _kls_finish(
         kc.t_stream += dt
         kc.b_stream += db
         # (b_+L, b_+R)
-        omitted_block = _scaled(tau, to_concrete!(contract(Up', (1, 2), HV, (1, 2))))
+        omitted_block = _scaled(tau, contract(Up', (1, 2), HV, (1, 2)))
         missing = norm(omitted_block) / max(nrm, eps())
     end
     fallback = missing > tol_missing
@@ -161,29 +161,29 @@ function _kls_finish(
         acc = embed(Sh)
         Up === nothing || (
             acc =
-                acc + to_concrete!(
+                acc + 
                     contract(
-                        to_concrete!(contract(Wn', (1, 2), perp_component(left_root, Kh), (1, 2))),
+                        contract(Wn', (1, 2), perp_component(left_root, Kh), (1, 2)),
                         (2,),
                         ER,
                         (1,),
                     ),
-                )
+                
         )
         Vp === nothing || (
             acc =
-                acc + to_concrete!(
+                acc + 
                     contract(
                         EL,
                         (2,),
-                        to_concrete!(
+                        
                             contract(perp_component_right(right_root, Lh), (2, 3), Zn', (2, 3)),
-                        ),
+                        ,
                         (1,),
                     ),
-                )
+                
         )
-        to_concrete(acc)
+        TLArray(acc)
     end
     account = (
         schedule = st.schedule,

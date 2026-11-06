@@ -25,7 +25,7 @@ function pxp_operators()
     q = local_space(:none)
     # `S^z` must be the spin-1/2 generator, not the Pauli matrix, or `P = 1/2 - S^z` is not a
     # projector at all (`P² ≠ P`) and every blockade in the model is silently wrong.
-    Mz = Matrix(q.Sz.RMTs[1])
+    Mz = Matrix(_sector_block(q.Sz, 1))
     (
         maximum(abs.(sort(real.(diag(Mz))) .- [-0.5, 0.5])) < 1e-12 &&
         maximum(abs.(Mz .- Diagonal(diag(Mz)))) < 1e-12
@@ -35,9 +35,9 @@ function pxp_operators()
             "`P = 1/2 - S^z` is only the |∘⟩ projector for that normalisation.",
         ),
     )
-    P = to_concrete(0.5 * q.I - q.Sz)               # projector on |∘⟩ = the S^z = -1/2 state
-    X = to_concrete(2.0 * sx_operator())            # σ^x = 2 S^x -- see the docstring
-    MX = Matrix(X.RMTs[1])
+    P = TLArray(0.5 * q.I - q.Sz)               # projector on |∘⟩ = the S^z = -1/2 state
+    X = TLArray(2.0 * sx_operator())            # σ^x = 2 S^x -- see the docstring
+    MX = Matrix(_sector_block(X, 1))
     maximum(abs.(MX .- [0.0 1.0; 1.0 0.0])) < 1e-12 || throw(
         ErrorException(
             "pxp_operators: built X = $MX, expected σ^x = [0 1; 1 0]. A non-symmetric X makes the " *
@@ -71,16 +71,16 @@ function pxp_mpo(L::Int; Omega::Float64 = 1.0)
         Iid = _mpo_block(ops.I, i, tl, tr, :none)
         Pblk = _mpo_block(ops.P, i, tl, tr, :none)
         Xblk = _mpo_block(ops.X, i, tl, tr, :none)
-        Znil = to_concrete(0.0 * Iid)
+        Znil = TLArray(0.0 * Iid)
         mat = Matrix{Any}(nothing, W, W)
 
         i < L && (mat[1, 1] = Iid)                                  # stay `id`
         i > 1 && (mat[W, W] = Iid)                                  # stay `done`
         i <= L - 1 && (mat[1, 2] = Pblk)                            # open with the left P
         i >= 2 && i <= L - 1 && (mat[2, 3] = Xblk)                  # the bulk flip
-        i >= 2 && (mat[3, W] = to_concrete(Omega * Pblk))           # close with the right P
+        i >= 2 && (mat[3, W] = TLArray(Omega * Pblk))           # close with the right P
         i == 1 && (mat[1, 3] = Xblk)                                # X_1 P_2: no left P exists
-        i == L && (mat[2, W] = to_concrete(Omega * Xblk))           # P_{L-1} X_L: no right P
+        i == L && (mat[2, W] = TLArray(Omega * Xblk))           # P_{L-1} X_L: no right P
         # `id -> done` is EMPTY BY PHYSICS -- PXP has no on-site term -- but it is the only entry
         # of column `W` at `i = 1` and of row 1 at `i = L`, and `oplus` cannot infer a zero block
         # for a row/column it has no other entry in. An explicit zero, not a gap.
@@ -91,7 +91,7 @@ function pxp_mpo(L::Int; Omega::Float64 = 1.0)
         elseif i == L
             mat = reshape(mat[:, W], W, 1)
         end
-        push!(Ws, to_concrete(oplus(mat, (1, 4))))
+        push!(Ws, TLArray(oplus(mat, (1, 4))))
     end
     return MPO(Ws)
 end

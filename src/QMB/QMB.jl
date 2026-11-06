@@ -16,7 +16,7 @@ module QMB
 
 using ..BUG
 # BUG internals the lattice MPO builders share (the automaton blocks and the boundary rule).
-using ..BUG: _site_tag, _mpo_block, _mpo_retag, _side, _apply_site_op
+using ..BUG: _site_tag, _mpo_block, _mpo_retag, _side, _apply_site_op, _sector_block
 using LinearAlgebra, Random
 using LurCGT, Telum
 # Local spaces Telum cannot derive (the Z2 Ising space, `ising_local_space`, and the Liouville

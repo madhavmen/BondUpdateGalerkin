@@ -51,24 +51,24 @@ function bond_frame(psi::SymMPS, bond::Int)
     res_l = svd(left, (1, 2), "bU,L", "bU,R"; cutoff = 0.0)
     res_r = svd(right, (1,), "bV,L", "bV,R"; cutoff = 0.0)
 
-    left_isometry = to_concrete(res_l.U)     # (link_l, site_l, bU,L)   -- the frame's U0
-    right_isometry = to_concrete(res_r.Vd)   # (bV,R, site_r, link_r)   -- the frame's V0
+    left_isometry = TLArray(res_l.U)     # (link_l, site_l, bU,L)   -- the frame's U0
+    right_isometry = TLArray(res_r.Vd)   # (bV,R, site_r, link_r)   -- the frame's V0
 
     s_left = res_l.S * res_l.Vd          # (bU,L, link_mid)
     s_right = res_r.U * res_r.S          # (link_mid, bV,R)
-    centre = to_concrete(s_left * s_right)   # (bU,L, bV,R)  -- the frame's S0
+    centre = TLArray(s_left * s_right)   # (bU,L, bV,R)  -- the frame's S0
 
     return BondFrame(
         left_isometry,
         centre,
         right_isometry,
-        left.inds[1],
-        left.inds[2],
-        left.inds[3],
-        right.inds[2],
-        right.inds[3],
+        Telum.inds(left)[1],
+        Telum.inds(left)[2],
+        Telum.inds(left)[3],
+        Telum.inds(right)[2],
+        Telum.inds(right)[3],
         leg_dim(left_isometry, 3),
-        copy(left.spaces[3]),
+        copy(Telum.spaces(left)[3]),
     )
 end
 
@@ -78,7 +78,7 @@ end
 Reassemble the two-site block `U0 * S0 * V0`, legs
 `(link_l, site_l, site_r, link_r)`.
 """
-frame_theta(frame::BondFrame) = to_concrete((frame.U0 * frame.S0) * frame.V0)
+frame_theta(frame::BondFrame) = TLArray((frame.U0 * frame.S0) * frame.V0)
 
 """
     two_site_block(psi, bond) -> TLArray
@@ -86,4 +86,4 @@ frame_theta(frame::BondFrame) = to_concrete((frame.U0 * frame.S0) * frame.V0)
 The uncontracted two-site block `psi[bond] * psi[bond+1]`, same leg order as
 `frame_theta`. Used to check the snapshot is exact.
 """
-two_site_block(psi::SymMPS, bond::Int) = to_concrete(psi[bond] * psi[bond+1])
+two_site_block(psi::SymMPS, bond::Int) = TLArray(psi[bond] * psi[bond+1])

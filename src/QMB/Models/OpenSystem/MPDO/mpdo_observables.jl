@@ -15,11 +15,11 @@ function _mpdo_walk(rho::SymMPS, ls::LiouvilleSpace, cov::AbstractVector)
     length(cov) == L || throw(DimensionMismatch("need one covector per site"))
     env = nothing                                      # label => row vector over the link
     for i = 1:L
-        A = to_concrete(rho[i])
+        A = TLArray(rho[i])
         new = Dict{Any,Vector{ComplexF64}}()
-        for (k, ql) in pairs(A.qlabels)
+        for (k, ql) in pairs(Telum.logical_qlabels(A))
             cl, s, cr = ql
-            R = _rmt3(A.RMTs[k])
+            R = _rmt3(_sector_block(A, k))
             dl, dp, dr = size(R)
             el = if env === nothing
                 ones(ComplexF64, dl)
@@ -108,11 +108,11 @@ function mpdo_dense(rho::SymMPS, ls::LiouvilleSpace)
     env = nothing                                      # label => (nacc x dlink) amplitudes
     nacc = 1
     for i = 1:L
-        A = to_concrete(rho[i])
+        A = TLArray(rho[i])
         new = Dict{Any,Matrix{ComplexF64}}()
-        for (k, ql) in pairs(A.qlabels)
+        for (k, ql) in pairs(Telum.logical_qlabels(A))
             cl, s, cr = ql
-            R = _rmt3(A.RMTs[k])
+            R = _rmt3(_sector_block(A, k))
             dl, dp, dr = size(R)
             E = env === nothing ? ones(ComplexF64, 1, dl) : (haskey(env, cl) ? env[cl] : continue)
             acc = get!(new, cr, zeros(ComplexF64, nacc * D, dr))
@@ -151,7 +151,7 @@ function mpdo_normalise_trace!(rho::SymMPS, ls::LiouvilleSpace)
     t = mpdo_trace(rho, ls)
     (isfinite(abs(t)) && abs(t) > 0) || throw(ErrorException("MPDO trace is $t"))
     c = (1 <= rho.center <= length(rho)) ? rho.center : 1
-    rho[c] = to_concrete((1 / t) * rho[c])
+    rho[c] = TLArray((1 / t) * rho[c])
     return t
 end
 

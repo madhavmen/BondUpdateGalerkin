@@ -19,7 +19,7 @@ function _largest_rmt_length(q::TLArray)
     lengths = Int[]
     for sector in Telum.sector_slots(q)
         q.iszero[sector] && continue
-        push!(lengths, length(Telum.sector_rmt(q, sector)))
+        push!(lengths, length(_test_sector_rmt(q, sector)))
     end
     return isempty(lengths) ? 0 : maximum(lengths)
 end
@@ -57,7 +57,8 @@ function _test_contract_stress(a::TLArray, legs_a::Tuple, b::TLArray, legs_b::Tu
 end
 
 function _test_two_site_mpo_contract_and_svd(mpo::AbstractVector, bond::Int;
-                                             check_sparse::Bool, check_svd::Bool)
+                                             check_sparse::Bool, check_svd::Bool,
+                                             check_qr::Bool)
     mpo_left = mpo[bond]
     mpo_right = mpo[bond + 1]
     mpo_left_bond_leg = _required_leg(mpo_left; itag="OB,$bond")
@@ -75,11 +76,19 @@ function _test_two_site_mpo_contract_and_svd(mpo::AbstractVector, bond::Int;
             end
         end
     end
+    if check_qr
+        for left_legs in _svd_left_leg_cases(ndims(two_site_mpo))
+            @testset "two-site MPO QR left_legs=$(left_legs)" begin
+                _test_qr_reconstructs(two_site_mpo, left_legs; tol=1e-8)
+            end
+        end
+    end
     return two_site_mpo
 end
 
 function _test_dmrg_fixture_contractions_and_svd(fixture; check_large_rmt::Bool,
-                                                check_sparse::Bool, check_svd::Bool)
+                                                check_sparse::Bool, check_svd::Bool,
+                                                check_qr::Bool)
     mpo = fixture.mpo
     mps = fixture.mps
     bond = fixture.bond
@@ -120,8 +129,13 @@ function _test_dmrg_fixture_contractions_and_svd(fixture; check_large_rmt::Bool,
         test_svdQS(two_site, [1, 2]; cutoff=1e-12, tol=1e-8, verbose=false)
         test_svdQS(three_site, [1, 2, 3]; cutoff=1e-12, tol=1e-8, verbose=false)
     end
+    if check_qr
+        _test_qr_reconstructs(two_site, [1, 2]; tol=1e-8)
+        _test_qr_reconstructs(three_site, [1, 2, 3]; tol=1e-8)
+    end
 
-    two_site_mpo = _test_two_site_mpo_contract_and_svd(mpo, bond; check_sparse, check_svd)
+    two_site_mpo = _test_two_site_mpo_contract_and_svd(
+        mpo, bond; check_sparse, check_svd, check_qr)
 
     mps_mpo_mps_legs = (
         _single_contractable_leg(two_site, two_site_mpo; itag="S,$bond"),
@@ -145,11 +159,11 @@ end
 @testset "DMRG large-RMT contraction and SVD stress" begin
     fixture = _dmrg_stress_fixture()
     _test_dmrg_fixture_contractions_and_svd(
-        fixture; check_large_rmt=true, check_sparse=true, check_svd=true)
+        fixture; check_large_rmt=true, check_sparse=true, check_svd=true, check_qr=true)
 
     option_fixture = _dmrg_stress_fixture(; 
     nsites=4, nkeep=4, nsweep=1, opt=FermionSOptions(2, :U1, :SU2, :SU2))
 
     _test_dmrg_fixture_contractions_and_svd(
-        option_fixture; check_large_rmt=true, check_sparse=true, check_svd=true)
+        option_fixture; check_large_rmt=true, check_sparse=true, check_svd=true, check_qr=true)
 end

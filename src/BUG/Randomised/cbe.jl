@@ -33,7 +33,7 @@ function _sketch_closures(frames::BondFrame, buildHT; share::Bool = true)
         h_theta = _ht()
         frame_coeffs = contract(frames.U0', (1, 2), h_theta, (1, 2))  # (bond, site_r, link_r)
         perp_action =
-            to_concrete(h_theta - to_concrete!(contract(frames.U0, (3,), frame_coeffs, (1,))))
+            TLArray(h_theta - contract(frames.U0, (3,), frame_coeffs, (1,)))
         share && (AL[] = perp_action)
         return perp_action
     end
@@ -43,12 +43,12 @@ function _sketch_closures(frames::BondFrame, buildHT; share::Bool = true)
         h_theta = _ht()
         frame_coeffs = contract(h_theta, (3, 4), frames.V0', (2, 3))  # (link_l, site_l, bond)
         perp_action =
-            to_concrete(h_theta - to_concrete!(contract(frame_coeffs, (3,), frames.V0, (1,))))
+            TLArray(h_theta - contract(frame_coeffs, (3,), frames.V0, (1,)))
         share && (AR[] = perp_action)
         return perp_action
     end
-    skl = Om -> to_concrete!(contract(_al(), (3, 4), Om', (2, 3)))       # (link_l, site_l, g)
-    skr = Om -> to_concrete(permutedims(contract(_ar(), (1, 2), Om', (1, 2)), (3, 1, 2)))
+    skl = Om -> contract(_al(), (3, 4), Om', (2, 3))       # (link_l, site_l, g)
+    skr = Om -> TLArray(permutedims(contract(_ar(), (1, 2), Om', (1, 2)), (3, 1, 2)))
     return skl, skr
 end
 
@@ -110,15 +110,26 @@ ever touched.
 """
 function _randomize_like(fused_basis, rng::AbstractRNG)
     scalar_type = eltype(fused_basis) <: Complex ? eltype(fused_basis) : ComplexF64
-    return TLArray(
+    stored_blocks = fused_basis.RMTs
+    block_rank = isempty(stored_blocks) ? 0 : ndims(eltype(stored_blocks))
+    # Gaussian payloads in the stored layout; a slot without a block (a known-zero sector) stays so
+    blocks = Vector{Array{scalar_type,block_rank}}(undef, length(stored_blocks))
+    for slot in eachindex(stored_blocks)
+        isassigned(stored_blocks, slot) &&
+            (blocks[slot] = randn(rng, scalar_type, size(stored_blocks[slot])))
+    end
+    stored = TLArray(
         symm(fused_basis),
-        copy(fused_basis.qlabels),
+        copy(Telum.stored_qlabels(fused_basis)),
         copy(fused_basis.wmatdata),
         copy(fused_basis.wmatinfo),
-        [randn(rng, scalar_type, size(block)) for block in fused_basis.RMTs],
-        fused_basis.inds,
-        fused_basis.spaces,
+        blocks,
+        Telum.stored_inds(fused_basis),
+        Telum.stored_spaces(fused_basis),
     )
+    # the same deferred leg permutation and conjugation as `fused_basis` (Telum view state)
+    permuted = permutedims(stored, Telum.stored_perm(fused_basis))
+    return Telum.stored_conj(fused_basis) ? conj(permuted) : permuted
 end
 
 """
@@ -171,7 +182,7 @@ function full_local_basis(frame, side::Symbol; tag::AbstractString = "cbeF")
     fused_basis = fusion_basis(frame, first_leg, second_leg; tag = tag)
     # `fusion_basis` returns (first_leg, second_leg, fused); a right frame carries its bond leg
     # first.
-    return side === :left ? fused_basis : to_concrete(permutedims(fused_basis, (3, 1, 2)))
+    return side === :left ? fused_basis : TLArray(permutedims(fused_basis, (3, 1, 2)))
 end
 
 # ── the strategy the Core sweeps call (Core/RankAdaptation/basis_expansion.jl) ──

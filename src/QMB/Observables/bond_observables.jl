@@ -124,7 +124,7 @@ skips those, matching Python's `build_bond_generators`, which leaves untouched
 bonds `None`.
 """
 bond_gates(psi::SymMPS; J::Float64 = 1.0, delta::Float64 = 1.0) = Any[
-    heisenberg_bond_gate(psi[i].inds[2], psi[i+1].inds[2]; J = J, delta = delta) for
+    heisenberg_bond_gate(Telum.inds(psi[i])[2], Telum.inds(psi[i+1])[2]; J = J, delta = delta) for
     i = 1:(length(psi)-1)
 ]
 
@@ -172,10 +172,10 @@ function _dimer_state_projected(L::Int)
         f = bond_frame(psi, i)
         th = frame_theta(f)
         for _ = 1:60
-            th = to_concrete(apply_gate(g[i], th, f.site_l, f.site_r))
+            th = TLArray(apply_gate(g[i], th, f.site_l, f.site_r))
             nn = sqrt(real(tensor_inner(th, th)))
             nn > 0 || error("dimer projection collapsed at bond $i")
-            th = to_concrete((1.0 / nn) * th)
+            th = TLArray((1.0 / nn) * th)
         end
         res = svd(th, (1, 2); cutoff = 1e-14, Nkeep = 4, get_lists = true)
         # Restore the bond tag: svd labels the new bond `svdL`, and `move_right!` then sees that tag
@@ -183,11 +183,11 @@ function _dimer_state_projected(L::Int)
         # `:U1`/`:none`, since `dimer_state` reaches here only outside `:SU2`; every other svd
         # write-back already retags.
         bt = "L,$(i + 1)"
-        psi[i] = to_concrete(setitag(res.U, 3, bt))
-        psi[i+1] = to_concrete(setitag(to_concrete(res.S * res.Vd), 1, bt))
+        psi[i] = TLArray(setitag(res.U, 3, bt))
+        psi[i+1] = TLArray(setitag(TLArray(res.S * res.Vd), 1, bt))
         psi.center = i + 1
     end
     n = norm(psi)
-    n > 0 && (psi[psi.center] = to_concrete((1.0 / n) * psi[psi.center]))
+    n > 0 && (psi[psi.center] = TLArray((1.0 / n) * psi[psi.center]))
     return psi
 end

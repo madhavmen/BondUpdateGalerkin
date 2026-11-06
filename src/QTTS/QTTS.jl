@@ -19,7 +19,7 @@ import ..BUG: frame_state, frame_project, frame_operator_matrix, frame_conj
 import ..BUG: frame_root_envs, root_envs_matrix, root_envs_kron_sum
 import ..BUG: stage_field_ops, stage_field, stage_jacobian, stage_linear_envs
 import ..BUG: flow_op, flow_jac_ops, flow_normalized
-using ..BUG: KLFrames, _replace_state!
+using ..BUG: KLFrames, _replace_state!, _sector_block
 using LinearAlgebra
 using Telum
 

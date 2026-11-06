@@ -122,7 +122,7 @@ function _liouville_tensor(ls::LiouvilleSpace, S::AbstractMatrix{<:Real}, shift)
     if isempty(data)
         # a zero operator: the identity's structure times zero keeps every leg's space
         neutral || throw(ArgumentError("a zero charged superoperator has no op-leg space"))
-        return to_concrete(0.0 * ls.I)
+        return TLArray(0.0 * ls.I)
     end
     f = _localspace_cgt_fields(data, ls.symm, spaces)
     return TLArray(ls.symm, f.qlabels, f.wmatdata, f.wmatinfo, f.RMTs, inds, spaces)
@@ -140,9 +140,9 @@ function liouville_op(ls::LiouvilleSpace, M::AbstractMatrix{<:Number})
     shift = liouville_charge(ls, S)
     re, im_ = real.(S), imag.(S)
     all(iszero, im_) && return _liouville_tensor(ls, re, shift)
-    Ti = to_concrete((1.0im) * _liouville_tensor(ls, im_, shift))
+    Ti = TLArray((1.0im) * _liouville_tensor(ls, im_, shift))
     all(iszero, re) && return Ti
-    return to_concrete(_liouville_tensor(ls, re, shift) + Ti)
+    return TLArray(_liouville_tensor(ls, re, shift) + Ti)
 end
 
 "`kron(A, I)`: `rho -> A rho`."
@@ -160,11 +160,11 @@ NEUTRAL under the grading (a charged one would change the state's sector).
 """
 function mpdo_apply!(rho::SymMPS, j::Int, ls::LiouvilleSpace, M::AbstractMatrix)
     T = liouville_op(ls, M)
-    length(T.inds) == 2 ||
+    length(Telum.inds(T)) == 2 ||
         throw(ArgumentError("mpdo_apply! needs a neutral superoperator; this one shifts the label"))
-    t = rho[j].inds[2].itags
-    op = to_concrete(setitag(setitag(T, 1, t), 2, t))
-    rho[j] = to_concrete(permutedims(contract(op, (1,), rho[j], (2,)), (2, 1, 3)))
+    t = Telum.inds(rho[j])[2].itags
+    op = TLArray(setitag(setitag(T, 1, t), 2, t))
+    rho[j] = TLArray(permutedims(contract(op, (1,), rho[j], (2,)), (2, 1, 3)))
     return rho
 end
 
@@ -200,15 +200,15 @@ function mpdo_product_state(ls::LiouvilleSpace, rhos::AbstractVector)
     tensors = Any[]
     prev = (getvac(ls.I, ("L,0", "L,1")), 2)
     for i = 1:L
-        F = to_concrete(getIdentity(prev, (ls.I, 1); itag = "L,$(i + 1)"))
-        F = to_concrete(setitag(F, 2, "S,$i"))
+        F = TLArray(getIdentity(prev, (ls.I, 1); itag = "L,$(i + 1)"))
+        F = TLArray(setitag(F, 2, "S,$i"))
         # Telum refuses `preserve_space = true` with a slice INSIDE a sector, so the physical leg
         # keeps the whole sector (and its full space) and the OUTGOING link is cut to one
         # component instead -- which leaves exactly one basis state of the sector, amplitude 1.
-        B = to_concrete(getsub(F, 2, s -> s == secs[i] ? Colon() : nothing; preserve_space = true))
-        present = Set(ql[3] for ql in B.qlabels)
-        A = to_concrete(getsub(B, 3, s -> s in present ? (1:1) : nothing))
-        push!(tensors, to_concrete(A * (1.0 + 0.0im)))
+        B = TLArray(getsub(F, 2, s -> s == secs[i] ? Colon() : nothing; preserve_space = true))
+        present = Set(ql[3] for ql in Telum.logical_qlabels(B))
+        A = TLArray(getsub(B, 3, s -> s in present ? (1:1) : nothing))
+        push!(tensors, TLArray(A * (1.0 + 0.0im)))
         prev = (tensors[end], 3)
     end
     rho = SymMPS(tensors, L)
@@ -256,7 +256,7 @@ function mpdo_identity_sector(ls::LiouvilleSpace, L::Int, like::SymMPS)
     )
     all(>=(0), ls.q) || throw(ArgumentError("mpdo_identity_sector needs non-negative charges"))
     length(like) == L || throw(DimensionMismatch("`like` has $(length(like)) sites, not $L"))
-    targets = unique(ql[3] for ql in to_concrete(like[L]).qlabels)
+    targets = unique(ql[3] for ql in Telum.logical_qlabels(TLArray(like[L])))
     length(targets) == 1 || throw(ArgumentError("`like` is not in one (N, N) block"))
     target = targets[1]
     nof(lab) = abs(lab[1][1])                     # the charge of a diagonal label, any sign convention
@@ -267,24 +267,24 @@ function mpdo_identity_sector(ls::LiouvilleSpace, L::Int, like::SymMPS)
     tensors = Any[]
     prev = (getvac(ls.I, ("L,0", "L,1")), 2)
     for i = 1:L
-        F = to_concrete(getIdentity(prev, (ls.I, 1); itag = "L,$(i + 1)"))
-        F = to_concrete(setitag(F, 2, "S,$i"))
-        B = to_concrete(getsub(F, 2, s -> s in diag ? Colon() : nothing; preserve_space = true))
+        F = TLArray(getIdentity(prev, (ls.I, 1); itag = "L,$(i + 1)"))
+        F = TLArray(setitag(F, 2, "S,$i"))
+        B = TLArray(getsub(F, 2, s -> s in diag ? Colon() : nothing; preserve_space = true))
         reach(lab) = i == L ? lab == target : (nof(lab) <= N && N - nof(lab) <= qmax * (L - i))
         data = Vector{Tuple{NTuple{3,NTuple{NS,QT}},Array{Float64,3 + NS}}}()
-        for (k, ql) in pairs(B.qlabels)
+        for (k, ql) in pairs(Telum.logical_qlabels(B))
             reach(ql[3]) || continue
-            v = sum(real, Array(B.RMTs[k]))         # the fusion isometry's one entry on this path
+            v = sum(real, Array(_sector_block(B, k)))         # the fusion isometry's one entry on this path
             iszero(v) && continue
             push!(data, ((ql[1], ql[2], ql[3]), reshape([v], ntuple(_ -> 1, 3 + NS))))
         end
         isempty(data) &&
             throw(ErrorException("mpdo_identity_sector: no reachable sector at site $i"))
         kept = Set(d[1][3] for d in data)
-        spaces = (B.spaces[1], B.spaces[2], [(l, 1) for (l, _) in B.spaces[3] if l in kept])
+        spaces = (Telum.spaces(B)[1], Telum.spaces(B)[2], [(l, 1) for (l, _) in Telum.spaces(B)[3] if l in kept])
         f = _localspace_cgt_fields(data, symm(B), spaces)
-        A = TLArray(symm(B), f.qlabels, f.wmatdata, f.wmatinfo, f.RMTs, B.inds, spaces)
-        push!(tensors, to_concrete(A * (1.0 + 0.0im)))
+        A = TLArray(symm(B), f.qlabels, f.wmatdata, f.wmatinfo, f.RMTs, Telum.inds(B), spaces)
+        push!(tensors, TLArray(A * (1.0 + 0.0im)))
         prev = (tensors[end], 3)
     end
     return SymMPS(tensors, L)

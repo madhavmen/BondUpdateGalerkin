@@ -195,7 +195,7 @@ function _full_tensor(psi::SymMPS)
     for j = 2:length(psi)
         T = T * psi[j]
     end
-    return to_concrete(T)
+    return TLArray(T)
 end
 
 """
@@ -219,7 +219,7 @@ function dense_state(psi::SymMPS)
     for idx = 0:(2^L-1)
         spins = [((idx >> (L - j)) & 1) == 0 ? :up : :down for j = 1:L]
         cfg = product_state(spins)
-        psi[L].spaces[3] == cfg[L].spaces[3] || continue    # charge-forbidden
+        Telum.spaces(psi[L])[3] == Telum.spaces(cfg[L])[3] || continue    # charge-forbidden
         v[idx+1] = tensor_inner(_full_tensor(cfg), P)
     end
     return v

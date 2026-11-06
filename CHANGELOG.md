@@ -42,6 +42,18 @@ minor version may change the public API.
   - Every cut uses BUG's final-compression rule (`_cut_divisor`).
   - `_dense_expv` and `tt_expv` stop the basis at the first depth whose estimate fits `tol`.
 
+- Telum is upstream `dev` (`403cdcf`): randomized SVD, a symmetric QR, opt-in lazy evaluation
+  (`@lazy`), and the TLArray view state. Our fixes are re-applied in `deps/Telum`: the
+  no-symmetry SVD and the `gesdd` -> QR-iteration fallback.
+  - LurCGT moves to its `dev` branch (`1bb74d6`, version 0.1.0, compat `"0.1"`), which Telum
+    `dev` requires.
+  - `to_concrete`/`to_concrete!` are gone. Contractions are concrete. `TLArray(x)` materialises a
+    lazy wrapper and is the identity on a `TLArray`; the fusion cache hands out `copy`.
+  - Permutation, conjugation and scalar factors are deferred view state. The code reads logical
+    data only (`Telum.inds`, `Telum.spaces`, `Telum.logical_qlabels`, `_sector_block`), never the
+    stored fields.
+  - Dropped from our fork: the threaded `contract` (`TELUM_CONTRACT_THREADS`) and `to_concrete!`.
+
 ### Added
 
 - `cbe_bug_step!` keywords:

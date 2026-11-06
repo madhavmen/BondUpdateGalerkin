@@ -27,8 +27,8 @@ Base.getindex(mpo::MPO, site::Int) = mpo.W[site]
 
 "Virtual (MPO bond) dimension on each link `0 … length(mpo)`."
 mpo_virtual_dims(mpo::MPO) = vcat(
-    [sum(block_dim for (_, block_dim) in mpo[1].spaces[1]; init = 0)],
-    [sum(block_dim for (_, block_dim) in mpo[site].spaces[4]; init = 0) for site = 1:length(mpo)],
+    [sum(block_dim for (_, block_dim) in Telum.spaces(mpo[1])[1]; init = 0)],
+    [sum(block_dim for (_, block_dim) in Telum.spaces(mpo[site])[4]; init = 0) for site = 1:length(mpo)],
 )
 
 # Each automaton row is written out literally and `oplus` direct-sums them, inferring the zero
@@ -37,13 +37,13 @@ mpo_virtual_dims(mpo::MPO) = vcat(
 
 "Retag an operator's two site legs onto site `site`, leaving any op-leg alone."
 _mpo_retag(operator, site::Int) =
-    to_concrete(setitag(setitag(operator, 1, "S,$site"), 2, "S,$site"))
+    TLArray(setitag(setitag(operator, 1, "S,$site"), 2, "S,$site"))
 
 "The ket-facing and bra-facing site legs of `operator`, found by ARROW: a plain operator has
 the ket leg at 1, an adjoint (`Sp'`) at 2. Hard-coding leg 1 breaks on the adjoint half of
 every XY term."
 function _op_site_legs(operator)
-    ket = operator.inds[1].dir == '+' ? 1 : 2
+    ket = Telum.inds(operator)[1].dir == '+' ? 1 : 2
     return ket, 3 - ket
 end
 
@@ -61,23 +61,23 @@ whatever `side` says, which is how `Sz Sz` and the whole `:none` symmetry mode w
 function _mpo_block(operator, site::Int, tl::AbstractString, tr::AbstractString, side::Symbol)
     block = _mpo_retag(operator, site)
     ket, bra = _op_site_legs(block)
-    if length(block.inds) == 2 || side === :none
-        length(block.inds) == 2 || throw(
+    if length(Telum.inds(block)) == 2 || side === :none
+        length(Telum.inds(block)) == 2 || throw(
             ArgumentError(
                 "_mpo_block: side=:none needs a rank-2 operator, got rank $(length(block.inds))",
             ),
         )
         # No op-leg: both virtual legs are dim-1 singletons.
-        block = to_concrete(permutedims(block, (ket, bra)))
-        return to_concrete(addSingleton(block, (1, 4); itag = (tl, tr), dir = ('+', '-')))
+        block = TLArray(permutedims(block, (ket, bra)))
+        return TLArray(addSingleton(block, (1, 4); itag = (tl, tr), dir = ('+', '-')))
     elseif side === :left
-        block = to_concrete(permutedims(block, (ket, bra, 3)))       # (s_ket, s_bra, op)
-        block = to_concrete(addSingleton(block, (1,); itag = tl, dir = '+'))
-        return to_concrete(setitag(block, 4, tr))                    # op-leg becomes w_r
+        block = TLArray(permutedims(block, (ket, bra, 3)))       # (s_ket, s_bra, op)
+        block = TLArray(addSingleton(block, (1,); itag = tl, dir = '+'))
+        return TLArray(setitag(block, 4, tr))                    # op-leg becomes w_r
     elseif side === :right
-        block = to_concrete(permutedims(block, (3, ket, bra)))       # (op, s_ket, s_bra)
-        block = to_concrete(addSingleton(block, (4,); itag = tr, dir = '-'))
-        return to_concrete(setitag(block, 1, tl))                    # op-leg becomes w_l
+        block = TLArray(permutedims(block, (3, ket, bra)))       # (op, s_ket, s_bra)
+        block = TLArray(addSingleton(block, (4,); itag = tr, dir = '-'))
+        return TLArray(setitag(block, 1, tl))                    # op-leg becomes w_l
     else
         throw(ArgumentError("_mpo_block: side must be :left, :right or :none, got $side"))
     end
@@ -93,7 +93,7 @@ function onsite_mpo(site_count::Int, ops::AbstractVector; Iloc)
     site_count >= 2 || throw(ArgumentError("onsite_mpo needs at least two sites, got $site_count"))
     length(ops) == site_count ||
         throw(DimensionMismatch("onsite_mpo got $(length(ops)) operators for $site_count sites"))
-    all(length(operator.inds) == 2 for operator in ops) ||
+    all(length(Telum.inds(operator)) == 2 for operator in ops) ||
         throw(ArgumentError("onsite_mpo: every operator must be rank 2 (charge-neutral)"))
     Ws = Any[]
     for site = 1:site_count
@@ -106,7 +106,7 @@ function onsite_mpo(site_count::Int, ops::AbstractVector; Iloc)
         mat[1, 1], mat[1, 2], mat[2, 2] = Iid, operator_block, Iid
         site == 1 && (mat = reshape(mat[1, :], 1, 2))
         site == site_count && (mat = reshape(mat[:, 2], 2, 1))
-        push!(Ws, to_concrete(oplus(mat, (1, 4))))
+        push!(Ws, TLArray(oplus(mat, (1, 4))))
     end
     return MPO(Ws)
 end
@@ -128,37 +128,37 @@ function mpo_product(mpo::MPO, psi::SymMPS)
     fusion = nothing
     for site = 1:site_count
         # (w_l, s, w_r, ℓ_l, ℓ_r)
-        product_tensor = to_concrete!(contract(mpo[site], (2,), psi[site], (2,)))
+        product_tensor = contract(mpo[site], (2,), psi[site], (2,))
         product_tensor = if site == 1
             # the trimmed `w_l` of site 1 is the dim-1 vacuum; the state's own boundary stays
-            to_concrete(permutedims(to_concrete(deleteSingleton(product_tensor, 1)), (3, 1, 4, 2)))
+            TLArray(permutedims(TLArray(deleteSingleton(product_tensor, 1)), (3, 1, 4, 2)))
         else
             # undo the previous site's fusion on (ℓ_l, w_l): F'F is the identity on the pair,
             # with F = fusion
-            to_concrete(
+            TLArray(
                 permutedims(
-                    to_concrete!(contract(fusion', (1, 2), product_tensor, (4, 1))),
+                    contract(fusion', (1, 2), product_tensor, (4, 1)),
                     (1, 2, 4, 3),
                 ),
             )
         end                                                           # (ℓ_l, s, ℓ_r, w_r)
         # Placeholder tag: the fused link must not share `L,i+1` with the leg it replaces.
-        fusion = to_concrete(
+        fusion = TLArray(
             getIdentity((product_tensor, 3), (product_tensor, 4); itag = "Jf,$(site + 1)"),
         )
         # (ℓ_l, s, fused)
-        out[site] = to_concrete!(contract(product_tensor, (3, 4), fusion, (1, 2)))
+        out[site] = contract(product_tensor, (3, 4), fusion, (1, 2))
     end
     # Give the fused links their final "L,i" tags (site 1 keeps its left boundary tag).
     for site = 1:site_count
-        site_tensor = to_concrete(setitag(out[site], 3, "L,$(site + 1)"))
-        out[site] = site == 1 ? site_tensor : to_concrete(setitag(site_tensor, 1, "L,$site"))
+        site_tensor = TLArray(setitag(out[site], 3, "L,$(site + 1)"))
+        out[site] = site == 1 ? site_tensor : TLArray(setitag(site_tensor, 1, "L,$site"))
     end
     return SymMPS(out, site_count)
 end
 
 "`side` for one half of a term: rank-3 operators put their op-leg on the virtual leg."
-_side(operator, half::Symbol) = length(operator.inds) == 3 ? half : :none
+_side(operator, half::Symbol) = length(Telum.inds(operator)) == 3 ? half : :none
 
 """
     mpo_from_terms(hamiltonian::XXZChain; Iloc) -> MPO
@@ -182,7 +182,7 @@ function mpo_from_terms(hamiltonian::XXZChain; Iloc)
         Iid = _mpo_block(Iloc, site, tl, tr, :none)
         # A zero block with the SAME spaces as `Iid`; `empty_tlarray` will not do, it
         # returns EMPTY space lists and the matrix oplus then cannot infer the column.
-        Znil = to_concrete(0.0 * Iid)
+        Znil = TLArray(0.0 * Iid)
         mat = Matrix{Any}(nothing, term_count + 2, term_count + 2)
         site < site_count && (mat[1, 1] = Iid)              # transport the identity
         site > 1 && (mat[term_count+2, term_count+2] = Iid) # ... on the far side of a term
@@ -198,7 +198,7 @@ function mpo_from_terms(hamiltonian::XXZChain; Iloc)
                 )
             )
             site > 1 && (
-                mat[1+term_index, term_count+2] = to_concrete(
+                mat[1+term_index, term_count+2] = TLArray(
                     terms[term_index].coeff * _mpo_block(
                         terms[term_index].right,
                         site,
@@ -216,7 +216,7 @@ function mpo_from_terms(hamiltonian::XXZChain; Iloc)
             mat = reshape(mat[:, term_count+2], term_count + 2, 1)  # the `done` column only
             mat[1, 1] = Znil                                        # ... and nothing may stay `id`
         end
-        push!(Ws, to_concrete(oplus(mat, (1, 4))))
+        push!(Ws, TLArray(oplus(mat, (1, 4))))
     end
     return MPO(Ws)
 end
@@ -236,8 +236,8 @@ function mpo_sum(first_mpo::MPO, second_mpo::MPO; a::Number = 1.0, b::Number = 1
     Ws = Any[]
     for site = 1:site_count
         sa, sb = site == 1 ? (a, b) : (1, 1)
-        Ai = to_concrete(ComplexF64(sa) * first_mpo[site])
-        Bi = to_concrete(ComplexF64(sb) * second_mpo[site])
+        Ai = TLArray(ComplexF64(sa) * first_mpo[site])
+        Bi = TLArray(ComplexF64(sb) * second_mpo[site])
         # End sites: concatenate along the one non-trivial virtual leg; interior sites: block
         # diagonal on both virtual legs.
         summed = if site == 1 || site == site_count
@@ -247,7 +247,7 @@ function mpo_sum(first_mpo::MPO, second_mpo::MPO; a::Number = 1.0, b::Number = 1
             mat[1, 1], mat[2, 2] = Ai, Bi
             oplus(mat, (1, 4))
         end
-        push!(Ws, to_concrete(summed))
+        push!(Ws, TLArray(summed))
     end
     return MPO(Ws)
 end
@@ -320,7 +320,7 @@ function global_krylov_states(
     for _ = 1:krylov_count
         nxt, _ = apply_mpo(mpo, cur; tol_trunc = tol_trunc, maxdim = maxdim)
         canonical!(nxt, 1)
-        nxt[1] = to_concrete(nxt[1] / norm(nxt[1]))
+        nxt[1] = TLArray(nxt[1] / norm(nxt[1]))
         push!(ks, nxt)
         cur = nxt
     end
@@ -355,18 +355,18 @@ of a symmetric tensor and returns a plausible, silently wrong answer.
 """
 function apply_gate(gate, theta, site_l, site_r)
     tl, tr = _site_tag(site_l), _site_tag(site_r)
-    (gate.inds[1].itags == tl && gate.inds[2].itags == tr) || throw(
+    (Telum.inds(gate)[1].itags == tl && Telum.inds(gate)[2].itags == tr) || throw(
         ArgumentError(
             "gate is tagged for ($(gate.inds[1].itags), $(gate.inds[2].itags)), " *
             "asked to act on ($tl, $tr)",
         ),
     )
-    (theta.inds[2].itags == tl && theta.inds[3].itags == tr) || throw(
+    (Telum.inds(theta)[2].itags == tl && Telum.inds(theta)[3].itags == tr) || throw(
         ArgumentError(
             "gate is tagged for ($tl, $tr) but theta carries " *
             "($(theta.inds[2].itags), $(theta.inds[3].itags))",
         ),
     )
     out = contract(gate, (1, 2), theta, (2, 3))   # (bra_l, bra_r, link_l, link_r)
-    return to_concrete(permutedims(out, (3, 1, 2, 4)))
+    return TLArray(permutedims(out, (3, 1, 2, 4)))
 end

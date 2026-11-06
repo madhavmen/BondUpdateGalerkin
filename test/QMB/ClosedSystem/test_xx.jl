@@ -30,7 +30,7 @@ _wall(L, twoS) = [i <= L ÷ 2 ? twoS : -twoS for i = 1:L]
     rng = Random.MersenneTwister(7)
     for twoS in (1, 6)
         q = spin_space(twoS)
-        @test leg_dim(q.I, 1) == twoS + 1 && length(q.I.spaces[1]) == twoS + 1   # d = 2s + 1
+        @test leg_dim(q.I, 1) == twoS + 1 && length(Telum.spaces(q.I)[1]) == twoS + 1   # d = 2s + 1
         L = 5
         mpo = spin_xx_mpo(L, twoS)
         for twoms in (_wall(L, twoS), rand(rng, twoS:-2:-twoS, L), rand(rng, twoS:-2:-twoS, L))

@@ -24,12 +24,12 @@ using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
         q = ising_local_space()
         @test Set(propertynames(q)) == Set((:I, :X, :Z))
         # Two charge sectors, dim 1 each -- the Z2 parity of sigma^x.
-        @test length(q.X.spaces[1]) == 2
+        @test length(Telum.spaces(q.X)[1]) == 2
         # THE FLIP CARRIES AN OP LEG, and that is the whole reason Z2 is representable here:
         # both matrix elements share ONE op-leg charge because 1 = 0+1 and 0 = 1+1 mod 2.
         # Under U(1) this would need charges +1 and -1 and would not be one operator at all.
-        @test length(q.Z.inds) == 3
-        @test length(q.Z.spaces[3]) == 1
+        @test length(Telum.inds(q.Z)) == 3
+        @test length(Telum.spaces(q.Z)[3]) == 1
         # `local_space` is the HEISENBERG space and must refuse :Z2 rather than return something
         # spin-like -- the TFIM has no Sp/Sz/Sm.
         @test_throws ArgumentError local_space(:Z2)
