@@ -129,6 +129,29 @@ function _extend_frame(
 end
 
 """
+    _append_ranked(frame, candidates, side, allowance, workcap) -> (frame, n_added, fits)
+
+The ranked selection of one local Krylov stage (`alloc.krylov_rank > 0`). `candidates` are the
+weighted residuals `weight * (I - QQ') v_k` of every direction the chain found above the allowance,
+all outside the same `frame`. One SVD of their direct sum ranks the local directions by their weight
+in the step, and the fewest top ones whose discarded tail fits `allowance` join the frame. The
+sequential rule instead appends each vector's own directions in chain order, each against its own
+allowance, until the work ceiling stops it; on a nonlocal generator that fills the stage frame to
+the ceiling, far above the rank the step keeps. `fits = false`: the work ceiling cut the selection
+with more than `allowance` left.
+"""
+function _append_ranked(frame, candidates, side::Symbol, allowance::Float64, workcap::Int)
+    isempty(candidates) && return (frame, 0, true)
+    fl = side === :left ? 3 : 1
+    room = workcap > 0 ? workcap - leg_dim(frame, fl) : typemax(Int)
+    # the residuals' own bond leg (to the rest of the chain) is the leg the block is summed over
+    block = length(candidates) == 1 ? candidates[1] : to_concrete(oplus(candidates, (fl,)))
+    room <= 0 && return (frame, 0, norm(block) <= allowance)
+    # the weights are folded into the block, so the tail rule runs at weight 1
+    return _extend_frame(frame, block, block, side, 1.0, allowance; room = room)
+end
+
+"""
     _krylov_enrich(seed, applyH, start_frame, side, tau, alloc; workcap = 0,
                    maxdepth = _KRY_MAXDEPTH, amp = 1.0, state_seed = true, fixed_depth = 0,
                    recycled = ())
@@ -146,6 +169,10 @@ the complement of the previous solve's input is extended ([`_krylov_basis`](@ref
 `fixed_depth = m > 0` is the conventional-control ablation: exactly `m` steps,
 every new local direction appended (numerical floor only), no weight stop; `met` then reports
 whether the weight had fallen to the allowance by depth `m`.
+
+`alloc.krylov_rank > 0` ranks instead of appending in chain order: every direction above the
+allowance is only collected while the chain runs (the closure test is unchanged), and
+[`_append_ranked`](@ref) keeps the top ones within `alloc.krylov_rank` at the end.
 """
 function _krylov_enrich(
     seed,
@@ -167,6 +194,9 @@ function _krylov_enrich(
     fixed = fixed_depth > 0
     fixed && (maxdepth = fixed_depth)
     allow = fixed ? 0.0 : alloc.krylov
+    ranked = !fixed && alloc.krylov_rank > 0
+    # the ranked rule's collected residuals, and how many came from Test D directions
+    candidates, n_test_d_candidates = Any[], 0
     frame = start_frame
     eta_c, eta_d, added, added_d = 0.0, 0.0, 0, 0
     # Tests C/D on one direction, growing `frame` in place; false = capped.
@@ -175,6 +205,12 @@ function _krylov_enrich(
         eta = weight * norm(residual)
         first ? (eta_c = eta) : (eta_d = max(eta_d, eta))
         eta > allow || return true
+        if ranked
+            # `frame` stays `start_frame`: every candidate is measured against the same frame
+            push!(candidates, to_concrete(weight * residual))
+            first || (n_test_d_candidates += 1)
+            return true
+        end
         # The ceiling bounds the frame WIDTH, not the number of extensions: a block may not carry
         # the frame past it either.
         room = workcap > 0 ? workcap - leg_dim(frame, fl) : typemax(Int)
@@ -198,6 +234,13 @@ function _krylov_enrich(
         state_seed = state_seed,
         fixed = fixed,
     )
+    capped = kb.capped
+    if ranked
+        frame, added, fits =
+            _append_ranked(start_frame, candidates, side, alloc.krylov_rank, workcap)
+        added_d = n_test_d_candidates > 0 ? added : 0
+        capped |= !fits
+    end
     return (
         frame,
         (
@@ -206,8 +249,8 @@ function _krylov_enrich(
             added = added,
             n_h1 = kb.n_h1,
             d_after_c = eta_c <= alloc.krylov && added_d > 0,
-            capped = kb.capped,
-            met = kb.closed && !kb.capped,
+            capped = capped,
+            met = kb.closed && !capped,
             basis = kb.basis,
             weights = kb.weights,
             n_recycled = kb.n_recycled,

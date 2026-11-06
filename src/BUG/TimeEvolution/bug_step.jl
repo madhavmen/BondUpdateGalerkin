@@ -51,6 +51,11 @@ function cbe_bug_step!(
     # frontier's Schmidt vectors stay inside the frames, so only directions below the cut go
     # untested.
     frontier_tol::Float64 = 0.0,
+    # `> 0`: each local Krylov stage ranks the directions its chain finds by their weight in the
+    # step and keeps the top ones whose discarded weight fits this share (`tol_krylov`'s units,
+    # `_append_ranked`); `0` appends them in chain order until the work ceiling. A cost setting on
+    # the stage width; the `recycle_mode = :frame` seeding stays sequential.
+    krylov_rank_tol::Float64 = 0.0,
     # Ablation, not a method choice. `true`: every local
     # Krylov stage (half-sweeps and frontier sweeps) grows from the CBE output
     # `[U0 | U_CBE]`, so it never regenerates a CBE direction. `false`: it grows
@@ -189,6 +194,7 @@ function cbe_bug_step!(
         nfront = order,
         rule = :linear,
         krylov = tol_krylov,
+        krylov_rank = krylov_rank_tol,
     )
     ledger = AdaptiveLedger()
     ledger.order = order

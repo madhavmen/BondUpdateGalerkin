@@ -33,6 +33,10 @@ The default `:rss` rule is `per_bond = tol_basis / sqrt(n_bonds * n_frontiers)`,
 / sqrt(4)`: errors over bonds add in quadrature. That assumes independent residuals across bonds; a
 systematic correlation makes it optimistic by up to `sqrt(n_bonds)`. The `:linear` alternative
 ([`basis_allocation`](@ref)) needs no such assumption. `rule` records which one bounded the step.
+
+`krylov_rank` is the discarded weight one local Krylov stage may leave when its directions are
+ranked ([`_append_ranked`](@ref)); `0` is the sequential rule, each direction appended in chain
+order.
 """
 struct BasisAllocation
     per_bond::Float64
@@ -41,13 +45,18 @@ struct BasisAllocation
     krylov::Float64
     scale::Float64
     rule::Symbol
+    krylov_rank::Float64
 end
-# The five-share constructor records the default `:rss` rule.
+# The five-share constructor records the default `:rss` rule; without `krylov_rank` the Krylov
+# stage selects sequentially.
 BasisAllocation(per_bond, sample, tail, krylov, scale) =
     BasisAllocation(per_bond, sample, tail, krylov, scale, :rss)
+BasisAllocation(per_bond, sample, tail, krylov, scale, rule) =
+    BasisAllocation(per_bond, sample, tail, krylov, scale, rule, 0.0)
 
 """
-    basis_allocation(budget, nbonds; tau, nrm, nfront = 1, krylov = nothing) -> BasisAllocation
+    basis_allocation(budget, nbonds; tau, nrm, nfront = 1, krylov = nothing, krylov_rank = 0)
+        -> BasisAllocation
 
 Apportion `budget.basis` over `nbonds` bonds, `nfront` frontiers and the four tests, and fix the
 scale the residuals are measured in. The scale is `|tau| / ||psi||`: the residuals enter the step
@@ -59,6 +68,9 @@ scale 1, a pure closure question.
 the same rule; `nothing` is `budget.basis`. On a nonlocal generator the Krylov stage alone fills the
 trial frame to the work ceiling (dr6ta: ~4000 Krylov vs ~0 DD directions per step), so it is tuned
 on its own.
+
+`krylov_rank` (`tol_krylov`'s units) is apportioned by the same rule into the discarded weight a
+ranked Krylov stage may leave; `0` keeps the sequential selection.
 """
 function basis_allocation(
     budget::AdaptiveBudget,
@@ -68,23 +80,42 @@ function basis_allocation(
     nfront::Int = 1,
     rule::Symbol = :rss,
     krylov::Union{Nothing,Real} = nothing,
+    krylov_rank::Real = 0.0,
 )
     nb = max(nbonds, 1)
     nf = max(nfront, 1)
     rule in (:rss, :linear) || throw(ArgumentError("rule must be :rss or :linear, got $rule"))
     kr = krylov === nothing ? 1.0 : Float64(krylov) / budget.basis
     kr > 0 || throw(ArgumentError("tol_krylov must be positive, got $krylov"))
+    krylov_rank >= 0 || throw(ArgumentError("krylov_rank_tol must be >= 0, got $krylov_rank"))
+    rank_share = Float64(krylov_rank) / budget.basis
     at = abs(tau)
     scale = iszero(at) ? 1.0 : at / max(Float64(nrm), eps(Float64))
     if rule === :linear
         per_test = budget.basis / (2 * (nb + 1) * nf)
-        return BasisAllocation(2 * per_test, per_test, per_test, kr * per_test, scale, :linear)
+        return BasisAllocation(
+            2 * per_test,
+            per_test,
+            per_test,
+            kr * per_test,
+            scale,
+            :linear,
+            rank_share * per_test,
+        )
     end
     per_bond = budget.basis / sqrt(nb * nf)
     # Four tests (A, B-left/right counted as one sampling decision, C/D as one closure
     # decision) -> sqrt(4) = 2. Kept as an explicit `sqrt(4)` so the count is visible.
     per_test = per_bond / sqrt(4)
-    return BasisAllocation(per_bond, per_test, per_test, kr * per_test, scale, :rss)
+    return BasisAllocation(
+        per_bond,
+        per_test,
+        per_test,
+        kr * per_test,
+        scale,
+        :rss,
+        rank_share * per_test,
+    )
 end
 
 """

@@ -206,7 +206,8 @@ remainder: the time-weighted defect `defect = tau Rs phi_1(tau B'HB) e_1` has no
 the production one. While `amp ||defect||` exceeds `alloc.krylov` the recurrence continues along
 `defect` (one new application each). Block vectors are scored by their Galerkin coefficient,
 defect directions by the defect weight, and appended to the frame by the same rule
-(`_extend_frame`).
+(`_extend_frame`), or collected and ranked at the end when `alloc.krylov_rank > 0`
+([`_append_ranked`](@ref)).
 """
 function _krylov_enrich_recycled(
     seed,
@@ -227,6 +228,8 @@ function _krylov_enrich_recycled(
     seed_norm = norm(seed)
     added, nref, nnew, eta_c, eta_d = 0, 0, 0, 0.0, 0.0
     capped, closed = false, false
+    ranked = alloc.krylov_rank > 0
+    candidates = Any[]                                   # the ranked rule's collected residuals
     # the block: the normalised seed, then each recycled vector that survives orthogonalisation
     block_basis, ws = Any[to_concrete((1.0 / seed_norm) * seed)], Float64[amp]
     for recycled_vector in recycled_vectors
@@ -243,6 +246,8 @@ function _krylov_enrich_recycled(
         eta = weight * norm(perp_part)
         first ? (eta_c = max(eta_c, eta)) : (eta_d = max(eta_d, eta))
         eta > alloc.krylov || return true
+        # ranked: collect against the unchanged `frame_start`, select after the recurrence
+        ranked && (push!(candidates, to_concrete(weight * perp_part)); return true)
         room = workcap > 0 ? workcap - leg_dim(frame, fl) : typemax(Int)
         room <= 0 && return false
         frame, nadd, fits =
@@ -321,6 +326,11 @@ function _krylov_enrich_recycled(
         nnew += 1
         basis_count += 1
         score!(bn, weight, basis_count == 2) || (capped = true)
+    end
+    if ranked
+        frame, added, fits =
+            _append_ranked(frame_start, candidates, side, alloc.krylov_rank, workcap)
+        capped |= !fits
     end
     return (
         frame,

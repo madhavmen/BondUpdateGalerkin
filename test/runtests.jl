@@ -38,6 +38,7 @@ end
     run_testfile("BUG/Core/Interfaces/test_state_conformance.jl")
     run_testfile("BUG/Core/LocalSolvers/test_krylov.jl")
     run_testfile("BUG/Core/RankAdaptation/test_basis_budget.jl")
+    run_testfile("BUG/Core/RankAdaptation/test_krylov_ranked.jl")
     # BUG/Randomised, BUG/TimeEvolution and BUG/ITE; the last compares the moved engine against
     # the frozen b155550 runs
     run_testfile("BUG/Randomised/test_expansion.jl")
