@@ -34,6 +34,7 @@ end
     run_testfile("BUG/Core/TensorNetworks/test_fusion_cache.jl")
     run_testfile("BUG/Core/TensorNetworks/test_mpo.jl")
     run_testfile("BUG/Core/Sweeps/test_frames.jl")
+    run_testfile("BUG/Core/Sweeps/test_frontier_compression.jl")
     run_testfile("BUG/Core/Interfaces/test_state_conformance.jl")
     run_testfile("BUG/Core/LocalSolvers/test_krylov.jl")
     run_testfile("BUG/Core/RankAdaptation/test_basis_budget.jl")

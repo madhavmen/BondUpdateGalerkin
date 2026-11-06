@@ -7,6 +7,27 @@ _frame_width(fr::KLFrames, site_count::Int) = max(
     maximum(leg_dim(fr.right_frames[bond], 1) for bond = fr.root_link:(site_count-1)),
 )
 
+# A side cache without its frontier-built environment stack; the frame chain is kept.
+_without_stack(cache) =
+    cache === nothing ? nothing : (gen = cache.gen, chain = cache.chain, stack = nothing)
+
+"""
+The frames `fr` with private side caches holding no stacks: a compressed frontier builds its own
+stacks there, so neither this sweep nor a concurrent one reads another frontier's
+([`_side_cache!`](@ref)). The frame vectors are shared, so a commit to `fr` is unchanged.
+"""
+_frames_with_private_stacks(fr::KLFrames) = KLFrames(
+    fr.left_frames,
+    fr.right_frames,
+    fr.root_link,
+    fr.lenv,
+    fr.renv,
+    fr.gen,
+    _without_stack(fr.lcache),
+    _without_stack(fr.rcache),
+    fr.eshift,
+)
+
 """
     _frontier_sweep!(fr, psi, mpo, frontier, tau, alloc, ckw; enrich, workcap, nrm, parallel,
                      rng, pass, nsample) -> NamedTuple
@@ -78,6 +99,26 @@ function _frontier_sweep!(
     end
     # each half-sweep regauges its own copy of the frontier MPS
     Fm = _frontier_mps(psi, fr, frontier.core)
+    # `frontier_tol > 0`: compress the frontier to its own rank before sweeping it. Written in the
+    # frames, its bonds are as wide as the frames, although a vector of one charge sector has at
+    # most the sector rank there, and sweeping it at frame width compounds from round to round.
+    # Its left and right Schmidt vectors stay inside the frames' span, so the sweep's containment
+    # of the carry still holds. The cached environment stacks are built from ONE frontier's
+    # tensors and are shared by every frontier of a generation only while each is
+    # `(W ⊗ Z) core`, so a compressed frontier sweeps on frames with private caches.
+    frontier_tol = get(ckw, :frontier_tol, 0.0)
+    compressed = frontier_tol > 0
+    if compressed
+        # no rank cap: every bond of `Fm` is a frame bond, so the frame width never binds
+        truncate_recursive!(
+            Fm,
+            root_link;
+            maxdim = _frame_width(fr, site_count),
+            cutoff = 0.0,
+            weight_tol = frontier_tol,
+        )
+    end
+    sweep_frames = compressed ? _frames_with_private_stacks(fr) : fr
     FmR = copy(Fm)
     gen = fr.gen + 1
     amp = nF / max(nrm, eps())
@@ -94,13 +135,13 @@ function _frontier_sweep!(
         bonds = !enrich && _BOND_TASKS[] && _frontier_parallel(parallel),
     )
     rl, rr = if parallel
-        tR = Threads.@spawn _frontier_right(FmR, mpo, fr, tau, alloc, ckw; kw(rngR)...)
-        left_result = _frontier_left(Fm, mpo, fr, tau, alloc, ckw; kw(rng)...)
+        tR = Threads.@spawn _frontier_right(FmR, mpo, sweep_frames, tau, alloc, ckw; kw(rngR)...)
+        left_result = _frontier_left(Fm, mpo, sweep_frames, tau, alloc, ckw; kw(rng)...)
         (left_result, fetch(tR))
     else
         (
-            _frontier_left(Fm, mpo, fr, tau, alloc, ckw; kw(rng)...),
-            _frontier_right(FmR, mpo, fr, tau, alloc, ckw; kw(rngR)...),
+            _frontier_left(Fm, mpo, sweep_frames, tau, alloc, ckw; kw(rng)...),
+            _frontier_right(FmR, mpo, sweep_frames, tau, alloc, ckw; kw(rngR)...),
         )
     end
     lg = AdaptiveLedger()
@@ -132,6 +173,10 @@ function _frontier_sweep!(
         # the channels this sweep carried through the new frames ARE the new generation's chain
         fr.lcache = (gen = gen, chain = rl.chain, stack = nothing)
         fr.rcache = (gen = gen, chain = rr.chain, stack = nothing)
+    elseif compressed
+        # keep the frame chains this sweep built for the generation, never its stacks
+        fr.lcache = _without_stack(sweep_frames.lcache)
+        fr.rcache = _without_stack(sweep_frames.rcache)
     end
     lg.n_closure_sweeps = 1
     lg.n_h2_leak = rl.n_h2 + rr.n_h2

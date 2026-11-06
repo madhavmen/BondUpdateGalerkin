@@ -46,6 +46,11 @@ function cbe_bug_step!(
     # measure every frontier first, loop until a pass adds nothing, measure
     # j = 0 on the final frames (`_krylov_closure!(...; checks)`).
     closure_checks::Bool = false,
+    # `> 0`: each closure frontier is compressed to its own rank, at this relative norm error,
+    # before its sweep (`_frontier_sweep!`); `0` sweeps it at frame width. A cost setting: the
+    # frontier's Schmidt vectors stay inside the frames, so only directions below the cut go
+    # untested.
+    frontier_tol::Float64 = 0.0,
     # Ablation, not a method choice. `true`: every local
     # Krylov stage (half-sweeps and frontier sweeps) grows from the CBE output
     # `[U0 | U_CBE]`, so it never regenerates a CBE direction. `false`: it grows
@@ -164,6 +169,7 @@ function cbe_bug_step!(
         closure_probe = closure_probe,
         outside_residual = outside_residual,
         maxdim = maxdim,
+        frontier_tol = frontier_tol,
     )
     site_count, root_link, budget = options.site_count, options.root_link, options.budget
     parallel_sym, parallel, kls = options.parallel_mode, options.run_parallel, options.kls
@@ -316,6 +322,7 @@ function cbe_bug_step!(
         order = order,
         closure_probe = closure_probe,
         closure_checks = closure_checks,
+        frontier_tol = frontier_tol,
         expansion = expansion,
         krylov_reuse = krylov_reuse,
         recycle = rec,

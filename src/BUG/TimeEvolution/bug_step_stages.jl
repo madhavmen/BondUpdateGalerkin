@@ -28,6 +28,7 @@ function _resolve_step_options(
     closure_probe,
     outside_residual,
     maxdim,
+    frontier_tol,
 )
     site_count = length(psi)
     length(mpo) == site_count ||
@@ -59,6 +60,7 @@ function _resolve_step_options(
                 "predictor",
             ),
         )
+    frontier_tol >= 0 || throw(ArgumentError("frontier_tol must be >= 0, got $frontier_tol"))
     closure_probe >= 0 ||
         throw(ArgumentError("closure_probe must be a non-negative count, got $closure_probe"))
     if kls !== nothing
@@ -126,6 +128,7 @@ function _close_root_frontiers!(
     order,
     closure_probe,
     closure_checks,
+    frontier_tol,
     expansion,
     krylov_reuse,
     recycle,
@@ -146,6 +149,7 @@ function _close_root_frontiers!(
                 krylov_reuse = krylov_reuse,
                 recycle = recycle,
                 krylov_depth = krylov_depth,
+                frontier_tol = frontier_tol,
             ),
         )
         closure = _krylov_closure!(
