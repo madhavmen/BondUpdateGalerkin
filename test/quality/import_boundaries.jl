@@ -1,7 +1,7 @@
 # Module-boundary check. A module may reference only the
 # modules it is allowed to depend on. Inside BUG the layers are include directories, not modules,
 # so the second testset checks names instead: `BUG/Core` never uses a name that only
-# `Randomised`, `TimeEvolution`, `ITE` or `solve.jl` define (the sweeps reach the randomised
+# `Randomised`, `TimeEvolution` or `ITE` define (the sweeps reach the randomised
 # expansion through a `BasisExpansion`).
 
 using Test
@@ -119,7 +119,6 @@ end
         julia_files(joinpath(bug_dir, "Randomised")),
         julia_files(joinpath(bug_dir, "TimeEvolution")),
         julia_files(joinpath(bug_dir, "ITE")),
-        [joinpath(bug_dir, "solve.jl")],
     )
     # A method a higher layer adds to a Core function (`apply_one_site(op::RootOp, ...)`) is Core's name.
     higher_only = setdiff(defined_names_in(higher_files), core_names)

@@ -10,7 +10,7 @@ BUG, QMB, QTTS  <-  Baselines
 
 `BUG` never names `QMB`, `QTTS` or `Baselines`; `QMB` and `QTTS` never name each other or
 `Baselines` (`test/quality/import_boundaries.jl`). Inside `BUG`, `Core` never uses a name that only
-`Randomised`, `TimeEvolution`, `ITE` or `solve.jl` define: the sweeps reach the randomised
+`Randomised`, `TimeEvolution` or `ITE` define: the sweeps reach the randomised
 expansion through `BasisExpansion`.
 
 ## Extension points
