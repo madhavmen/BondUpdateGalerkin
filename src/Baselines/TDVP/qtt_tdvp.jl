@@ -1,4 +1,4 @@
-# Two-site TDVP on dense QTT cores (lagged and stage-consistent nonlinear density), the split-
+# Two-site TDVP on dense QTT cores (lagged nonlinear density), the split-
 # dissipation TDVP control of the damped GP equation, and the Krylov exponentials they use.
 #
 # The flows and the dense contractions come from BUG and QTTS.
@@ -153,21 +153,17 @@ end
 # ── TDVP2 on dense cores ──
 
 """
-    qtt_tdvp2_step!(psi, fl, t, h; density = :lagged, maxdim = 128, tol_trunc = 1e-10,
-                    tol_krylov = 1e-12, tol_sc = 1e-10, maxsc = 12) -> NamedTuple
+    qtt_tdvp2_step!(psi, fl, t, h; maxdim = 128, tol_trunc = 1e-10, tol_krylov = 1e-12)
+        -> NamedTuple
 
 One symmetric two-site projector-splitting TDVP step (left-to-right then right-to-left, each `h/2`)
-of the flow `fl`, with the explicitly BACKWARD one-site centre substeps `exp(-h/2 F_1)`:
-
-- `density = :lagged` (TDVP2_lagged): `H[psi_n, t_n]` held through the step;
-- `density = :consistent` (TDVP2_consistent): every substep re-evaluates `H` (and the paddle at the
-  substep time) from the TRIAL state, by the self-consistent midpoint iteration
-  `x' = exp(dt F[(x + x')/2]) x` to `tol_sc`, environments rebuilt at every iterate.
+of the flow `fl`, with the explicitly BACKWARD one-site centre substeps `exp(-h/2 F_1)`. The
+nonlinear density is lagged (TDVP2_lagged): `H[psi_n, t_n]` is held through the step.
 
 Every two-site cut is allowed what the BUG step's final compression allows each bond
 (`_cut_divisor` at the BUG root). The lagged step caches its environments (its operator is fixed
-for the step). Records `A_back = ||M_after|| / ||M_before||` for every backward substep, the
-self-consistency iterations and the discarded weight. "TDVP2" names the two-site update, not a
+for the step). Records `A_back = ||M_after|| / ||M_before||` for every backward substep and the
+discarded weight. "TDVP2" names the two-site update, not a
 temporal order; the order is measured (V07).
 """
 function qtt_tdvp2_step!(
@@ -175,98 +171,36 @@ function qtt_tdvp2_step!(
     fl::QTTFlow,
     t::Real,
     h::Real;
-    density::Symbol = :lagged,
     maxdim::Int = 128,
     tol_trunc::Real = 1e-10,
     tol_krylov::Real = 1e-12,
-    tol_sc::Real = 1e-10,
-    maxsc::Int = 12,
 )
-    density in (:lagged, :consistent) ||
-        throw(ArgumentError("density must be :lagged or :consistent, got :$density"))
     t0 = time_ns()
     C, _ = tt_compress(qtt_cores(psi); tol = 0.0)          # right-canonical, centre at site 1
     L = length(C)
-    flow = density === :lagged ? frozen_flow(fl, C, t) : fl
-    mu_of(H, X) = flow_normalized(fl) ? real(_op_expect(H, X)) / max(tt_norm(X)^2, eps()) : 0.0
+    flow = frozen_flow(fl, C, t)
     back = Float64[]
-    nsc = Int[]
     disc2 = 0.0
     nap = 0
     half = h / 2
-    # The whole state with the local block `x` at sites `lo..hi` (one or two sites), factorised
-    # EXACTLY (no truncation): what the density of a trial state is built from.
-    function assemble(x, lo, hi)
-        X = copy(C)
-        if lo == hi
-            X[lo] = x
-        else
-            cl, _, _, cr = size(x)
-            X[lo] = reshape(x, cl, 2, 2cr)
-            X[hi] = reshape(Matrix{ComplexF64}(I, 2cr, 2cr), 2cr, 2, cr)
-        end
-        return X
-    end
-    # environments of the sites outside `lo..hi` for the operator H, bra = ket = the state
-    function local_op(H, X, lo, hi)
-        E = _unit_env()
-        for k = 1:(lo-1)
-            E = _env_left(E, X[k], H[k], X[k])
-        end
-        F = _unit_env()
-        for k = L:-1:(hi+1)
-            F = _env_right(F, X[k], H[k], X[k])
-        end
-        return lo == hi ? (z -> _eff1(E, H[lo], F, z)) : (z -> _eff2(E, H[lo], H[hi], F, z))
-    end
-    # TDVP2_lagged: H[psi_n, t_n] is fixed for the whole step, so its environments are the
-    # standard cached ones, each extended by one site after every cut. TDVP2_consistent rebuilds
-    # them at every trial state: its density, refitted from the whole trial state, changes at every
-    # site.
-    lagged = density === :lagged
-    fixed_operator = lagged ? first(flow_op(flow, C, t)) : nothing
+    # `H[psi_n, t_n]` is fixed for the whole step, so its environments are the standard cached ones,
+    # each extended by one site after every cut.
+    fixed_operator = first(flow_op(flow, C, t))
     left_envs, right_envs = Vector{Any}(undef, L), Vector{Any}(undef, L)
-    if lagged
-        left_envs[1], right_envs[L] = _unit_env(), _unit_env()
-        for site = L:-1:2
-            right_envs[site-1] =
-                _env_right(right_envs[site], C[site], fixed_operator[site], C[site])
-        end
+    left_envs[1], right_envs[L] = _unit_env(), _unit_env()
+    for site = L:-1:2
+        right_envs[site-1] = _env_right(right_envs[site], C[site], fixed_operator[site], C[site])
     end
-    # one local substep `exp(dt F_local) x` at time `ts`, generator from the trial state
-    function substep(x, lo, hi, dt, ts)
-        if lagged
-            left_env, right_env = left_envs[lo], right_envs[hi]
-            app =
-                lo == hi ? (z -> _eff1(left_env, fixed_operator[lo], right_env, z)) :
-                (z -> _eff2(left_env, fixed_operator[lo], fixed_operator[hi], right_env, z))
-            # the state is mixed-canonical around `x`: <X|H|X> / <X|X> is local
-            mu = flow_normalized(fl) ? real(dot(x, app(x))) / max(norm(x)^2, eps()) : 0.0
-            y, k = _dense_expv(z -> fl.pref .* (app(z) .- mu .* z), x, dt; tol = tol_krylov)
-            nap += k
-            push!(nsc, 0)
-            return y
-        end
-        X = assemble(x, lo, hi)
-        H, _ = flow_op(flow, X, ts)
-        mu = mu_of(H, X)
-        app = local_op(H, X, lo, hi)
+    # one local substep `exp(dt F_local) x` in the fixed operator's environments
+    function substep(x, lo, hi, dt)
+        left_env, right_env = left_envs[lo], right_envs[hi]
+        app =
+            lo == hi ? (z -> _eff1(left_env, fixed_operator[lo], right_env, z)) :
+            (z -> _eff2(left_env, fixed_operator[lo], fixed_operator[hi], right_env, z))
+        # the state is mixed-canonical around `x`: <X|H|X> / <X|X> is local
+        mu = flow_normalized(fl) ? real(dot(x, app(x))) / max(norm(x)^2, eps()) : 0.0
         y, k = _dense_expv(z -> fl.pref .* (app(z) .- mu .* z), x, dt; tol = tol_krylov)
         nap += k
-        it = 0
-        for _ = 1:maxsc
-            it += 1
-            Xm = assemble((x .+ y) ./ 2, lo, hi)              # the midpoint trial state
-            H, _ = flow_op(flow, Xm, ts)
-            mu = mu_of(H, Xm)
-            app = local_op(H, Xm, lo, hi)
-            y2, k = _dense_expv(z -> fl.pref .* (app(z) .- mu .* z), x, dt; tol = tol_krylov)
-            nap += k
-            done = norm(y2 .- y) <= tol_sc * max(norm(y2), eps())
-            y = y2
-            done && break
-        end
-        push!(nsc, it)
         return y
     end
     # the truncating split of a two-site block (the TDVP2 rank control), every cut allowed what
@@ -289,29 +223,27 @@ function qtt_tdvp2_step!(
         2,
         size(C[i+1], 3),
     )
-    tmid = t + half / 2
     for i = 1:(L-1)                                     # left to right, h/2
-        Th = substep(theta(i), i, i + 1, half, tmid)
+        Th = substep(theta(i), i, i + 1, half)
         C[i], M = cut(Th, true)
-        lagged && (left_envs[i+1] = _env_left(left_envs[i], C[i], fixed_operator[i], C[i]))
+        left_envs[i+1] = _env_left(left_envs[i], C[i], fixed_operator[i], C[i])
         if i < L - 1
             C[i+1] = M                                   # in place for the environments
             n0 = norm(M)
-            M = substep(M, i + 1, i + 1, -half, tmid)      # the BACKWARD centre substep
+            M = substep(M, i + 1, i + 1, -half)      # the BACKWARD centre substep
             push!(back, norm(M) / n0)
         end
         C[i+1] = M
     end
-    tmid = t + 3half / 2
     # right to left: the left environments of the first sweep hold (sites 1..L-1 final, H fixed)
     for i = (L-1):-1:1                                  # right to left, h/2
-        Th = substep(theta(i), i, i + 1, half, tmid)
+        Th = substep(theta(i), i, i + 1, half)
         M, C[i+1] = cut(Th, false)
-        lagged && (right_envs[i] = _env_right(right_envs[i+1], C[i+1], fixed_operator[i+1], C[i+1]))
+        right_envs[i] = _env_right(right_envs[i+1], C[i+1], fixed_operator[i+1], C[i+1])
         if i > 1
             C[i] = M
             n0 = norm(M)
-            M = substep(M, i, i, -half, tmid)
+            M = substep(M, i, i, -half)
             push!(back, norm(M) / n0)
         end
         C[i] = M
@@ -320,10 +252,9 @@ function qtt_tdvp2_step!(
     return (
         A_back = back,
         A_max = maximum(back; init = 1.0),
-        sc_iters = nsc,
         discarded = sqrt(disc2),
         applications = nap,
-        density = density,
+        density = :lagged,
         t_step = (time_ns() - t0) / 1e9,
         chi = maximum(bond_dims(psi); init = 1),
     )
@@ -369,7 +300,6 @@ function qtt_split_tdvp_step!(
         cons,
         t,
         h;
-        density = :lagged,
         maxdim = maxdim,
         tol_trunc = tol_trunc,
         tol_krylov = tol_krylov,

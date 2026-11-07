@@ -24,13 +24,13 @@ using ..BUG:
     _bug_root_link,
     _replace_state!
 # the dense QTT contractions the QTT TDVP baselines build their environments from
-using ..QTTS: _tc, _env_left, _env_right, _unit_env, _op_expect, _qtt_rank
+using ..QTTS: _tc, _env_left, _env_right, _unit_env, _qtt_rank
 
 include("TDVP/tdvp2.jl")
 include("TDVP/qtt_tdvp.jl")
 
 # two-site TDVP and its compositions (TDVP/tdvp2.jl)
-export TDVP2Info, tdvp2_step!, tdvp2_composed_step!
+export TDVP2Info, tdvp2_step!
 # QTT TDVP (TDVP/qtt_tdvp.jl)
 export qtt_tdvp2_step!, qtt_split_tdvp_step!, tt_expv
 

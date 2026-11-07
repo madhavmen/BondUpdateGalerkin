@@ -6,7 +6,7 @@ Regression tests of the new package compare against these with a tolerance per q
 
 | Case | Content | Value at freeze |
 |---|---|---|
-| `xx_u1_bug_order1`, `_order2`, `_midpoint` | XX L=10, Neel, dt 0.05, 20 steps: S^z profile, error vs free fermions, bonds, status | max error 4.9e-5 / 1.4e-6 / 1.2e-6; all steps `met` |
+| `xx_u1_bug_order1`, `_order2` | XX L=10, Neel, dt 0.05, 20 steps: S^z profile, error vs free fermions, bonds, status | max error 4.9e-5 / 1.4e-6; all steps `met` |
 | `xx_none_bug_order2` | the same without symmetry, L=8, 10 steps, final state | error vs dense 1.2e-5 |
 | `heisenberg_ite` | Heisenberg L=10, energy to beta 2 | -4.139 (ground -4.258), monotone |
 | `mpdo_xx_driven` | driven, dephased XX L=6, 10 steps of 0.1 | trace 1 - 1e-4, Hermiticity and positivity defects ~1e-9 |

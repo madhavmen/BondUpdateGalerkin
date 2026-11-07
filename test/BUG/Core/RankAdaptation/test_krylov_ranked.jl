@@ -3,7 +3,7 @@
 # up to the work ceiling. Sized to run in seconds (Heisenberg, L = 8, U(1), exact selection).
 #
 #   - `krylov_rank = 0` (every constructor without it) is the sequential rule;
-#   - order 2 and 3 steps, on the production and the recycled-block Krylov path: a tight rank
+#   - order 2 and 3 steps: a tight rank
 #     tolerance is as accurate as the sequential step, a loose one gives a stage frame no wider and
 #     is still accurate to the looser share;
 #   - a negative tolerance is refused, not read as "off".
@@ -50,17 +50,11 @@ include(joinpath(@__DIR__, "..", "..", "..", "common", "dense_reference.jl"))
         return norm(dense_state(state) - exact_vector) / start_norm, info.record.D_stage
     end
 
-    krylov_paths = (
-        ("production Krylov", (;)),
-        ("recycled Krylov", (krylov_recycle = true, recycle_mode = :images)),
-    )
-    for (path_name, path_settings) in krylov_paths, order in (2, 3)
-        @testset "$path_name, order $order: sequential vs ranked" begin
-            plain_error, plain_stage = step_error_and_stage(; order = order, path_settings...)
-            tight_error, tight_stage =
-                step_error_and_stage(; order = order, path_settings..., krylov_rank_tol = 1e-12)
-            loose_error, loose_stage =
-                step_error_and_stage(; order = order, path_settings..., krylov_rank_tol = 1e-6)
+    for order in (2, 3)
+        @testset "order $order: sequential vs ranked" begin
+            plain_error, plain_stage = step_error_and_stage(; order = order)
+            tight_error, tight_stage = step_error_and_stage(; order = order, krylov_rank_tol = 1e-12)
+            loose_error, loose_stage = step_error_and_stage(; order = order, krylov_rank_tol = 1e-6)
             @test plain_error < 1e-6                     # sanity: the reference arm is accurate
             @test tight_error <= 10 * plain_error + 1e-10
             @test loose_stage <= plain_stage

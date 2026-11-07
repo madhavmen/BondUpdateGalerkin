@@ -87,10 +87,6 @@ function _frontier_left(
     lch = boundary_channels(mpo)
     lenv = lch
     lchs = Vector{Any}(undef, site_count - 1)
-    rec = enrich ? get(ckw, :recycle, nothing) : nothing
-    rcur = _recycle_entries(rec, :left, fr.gen)
-    Eov = rcur === nothing ? nothing : _tail_overlaps(Fm, rcur.tail, :left)
-    _recycle_begin!(rec, :left, Fm, gen)
     # `carry` (new frame bond, frontier link) gauges the frontier into the grown frames,
     # `Pm` (new bond, old bond) carries the old frame into them
     carry, Pm = nothing, nothing
@@ -146,33 +142,19 @@ function _frontier_left(
                 one_site_h(mpo, bond, lch, push_right_channels(rch, mpo, ex.V_ex, bond + 1)),
                 fr.eshift,
             )
-            reuse = get(ckw, :krylov_reuse, true)
-            recycle_entry = rcur === nothing ? nothing : get(rcur.entries, bond, nothing)
-            Pmi = Pm
-            krylov_frame, st = _recycled_or_fresh(
-                rec,
-                :left,
-                bond,
-                recycle_entry,
-                () -> _recycle_transport(recycle_entry, :left, Pmi, ex.V_ex, Eov, bond),
+            krylov_frame, st = _krylov_enrich(
                 Kex,
                 vector -> (nh1[] += 1; apply_one_site(one_site_op, vector)),
-                reuse ? ex.U_ex : old_frame,
+                ex.U_ex,
+                :left,
                 tau,
                 alloc;
-                round = gen + 1,
                 workcap = _cap_at(workcap, bond),
                 amp = amp,
                 state_seed = false,
-                fixed_depth = get(ckw, :krylov_depth, 0),
             )
-            _recycle_store!(rec, :left, bond, st, ex.V_ex, alloc.krylov)
-            nrec = get(st, :n_recycled, 0)
-            rclosed, rov, rdef = get(st, :rec_closed, false),
-            get(st, :rec_overlap, 0.0),
-            get(st, :rec_defect, 0.0)
             _record_krylov!(bl, st, alloc)
-            reuse ? krylov_frame : _merge_frame(krylov_frame, ex.U_ex, :left)
+            krylov_frame
         else
             nskip += 1
             old_frame
@@ -193,10 +175,6 @@ function _frontier_left(
                 added = nadd,
                 new_sectors = nsec,
                 width_before = leg_dim(old_frame, 3),
-                recycled = nrec,
-                rec_closed = rclosed,
-                rec_overlap = rov,
-                rec_defect = rdef,
             ),
         )
         enrich && (Pm = contract(Wn[bond]', (1, 2), old_frame, (1, 2)))  # (new, old)
@@ -265,10 +243,6 @@ function _frontier_right(
     rch = boundary_channels(mpo)
     renv = rch
     rchs = Vector{Any}(undef, site_count - 1)
-    rec = enrich ? get(ckw, :recycle, nothing) : nothing
-    rcur = _recycle_entries(rec, :right, fr.gen)
-    Eov = rcur === nothing ? nothing : _tail_overlaps(Fm, rcur.tail, :right)
-    _recycle_begin!(rec, :right, Fm, gen)
     # `carry` (frontier link, new frame bond) gauges the frontier into the grown frames,
     # `Pm` (old bond, new bond) carries the old frame into them
     carry, Pm = nothing, nothing
@@ -325,33 +299,19 @@ function _frontier_right(
                 one_site_h(mpo, bond + 1, push_left_channels(lch, mpo, ex.U_ex, bond), rch),
                 fr.eshift,
             )
-            reuse = get(ckw, :krylov_reuse, true)
-            recycle_entry = rcur === nothing ? nothing : get(rcur.entries, bond, nothing)
-            Pmj = Pm
-            krylov_frame, st = _recycled_or_fresh(
-                rec,
-                :right,
-                bond,
-                recycle_entry,
-                () -> _recycle_transport(recycle_entry, :right, Pmj, ex.U_ex, Eov, bond),
+            krylov_frame, st = _krylov_enrich(
                 Bex,
                 vector -> (nh1[] += 1; apply_one_site(one_site_op, vector)),
-                reuse ? ex.V_ex : old_frame,
+                ex.V_ex,
+                :right,
                 tau,
                 alloc;
-                round = gen + 1,
                 workcap = _cap_at(workcap, bond),
                 amp = amp,
                 state_seed = false,
-                fixed_depth = get(ckw, :krylov_depth, 0),
             )
-            _recycle_store!(rec, :right, bond, st, ex.U_ex, alloc.krylov)
-            nrec = get(st, :n_recycled, 0)
-            rclosed, rov, rdef = get(st, :rec_closed, false),
-            get(st, :rec_overlap, 0.0),
-            get(st, :rec_defect, 0.0)
             _record_krylov!(bl, st, alloc)
-            reuse ? krylov_frame : _merge_frame(krylov_frame, ex.V_ex, :right)
+            krylov_frame
         else
             nskip += 1
             old_frame
@@ -373,10 +333,6 @@ function _frontier_right(
                 added = nadd,
                 new_sectors = nsec,
                 width_before = leg_dim(old_frame, 1),
-                recycled = nrec,
-                rec_closed = rclosed,
-                rec_overlap = rov,
-                rec_defect = rdef,
             ),
         )
         enrich && (Pm = contract(old_frame, (2, 3), Zn[bond]', (2, 3)))  # (old, new)

@@ -14,7 +14,7 @@
 #
 # ENV: VS_OUT (output directory, required), VS_N (bits per axis, 8 = 256^2), VS_BOX (64), VS_T (12),
 #      VS_HS ("0.005,0.01,0.025,0.05,0.1"), VS_SNAP (1.0), VS_ORDERS ("2,3,4"), VS_MAXDIM (128),
-#      VS_REFDT (1e-3), VS_CONSISTENT (0: also run TDVP2 with the stage-consistent density when 1),
+#      VS_REFDT (1e-3),
 #      VS_RELAX (2.0, imaginary-time relaxation of the start with the paddle in place).
 # Resource needs at the defaults are not yet measured (the dense reference alone is 65536 unknowns).
 #
@@ -156,22 +156,6 @@ for h in STEP_SIZES
             h,
             (psi, t, step) ->
                 qtt_split_tdvp_step!(psi, model, t, step; maxdim = MAXDIM, tol_trunc = 1e-8),
-        ),
-    )
-    env_int("VS_CONSISTENT", 0) == 1 && push!(
-        arms,
-        (
-            :tdvp2_consistent,
-            h,
-            (psi, t, step) -> qtt_tdvp2_step!(
-                psi,
-                GPFlow(model),
-                t,
-                step;
-                density = :consistent,
-                maxdim = MAXDIM,
-                tol_trunc = 1e-8,
-            ),
         ),
     )
 end

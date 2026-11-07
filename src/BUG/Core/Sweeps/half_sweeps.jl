@@ -46,14 +46,13 @@ end
 
 What both half-sweeps of one step READ and never write: the operator, `tau`, the generator shift,
 the root bond `root_link`, the step's allocation, its basis-selection strategy (`expansion`) and that
-strategy's settings (`exkw`), the work ceiling, the `krylov_reuse` and `krylov_depth` ablations,
-the states the trial space must contain (`keep_states`, each admitted at its `keep_tols` entry)
-and the `krylov_recycle` cache (`nothing` when off), which round 1 fills. `cap_keep`
+strategy's settings (`exkw`), the work ceiling and the states the trial space must contain
+(`keep_states`, each admitted at its `keep_tols` entry). `cap_keep`
 (`work_ceiling_rule = :bond`): a tolerance-admitted kept state may only fill the frame up to the
 bond's work ceiling, so no frame exceeds it; exactly kept states (tol 0, e.g. Heston's mass) stay
 a containment guarantee and are never cut.
 """
-struct _HalfSweepCtx{M,E,A,X<:BasisExpansion,K,S,R}
+struct _HalfSweepCtx{M,E,A,X<:BasisExpansion,K,S}
     mpo::M
     tau::ComplexF64
     eshift::E
@@ -62,11 +61,8 @@ struct _HalfSweepCtx{M,E,A,X<:BasisExpansion,K,S,R}
     expansion::X
     exkw::K
     wcap::WorkCeiling
-    krylov_reuse::Bool
-    krylov_depth::Int
     keep_states::S
     keep_tols::Vector{Float64}   # per kept state: 0 = contained exactly, > 0 = `_union_fresh`'s tol
-    recycle::R
     cap_keep::Bool
 end
 
@@ -231,7 +227,6 @@ function _half_left!(
 )
     mpo, root_link = cx.mpo, cx.root_link
     canonical!(psiL, 1)
-    _recycle_begin!(cx.recycle, :left, psiL, 0)
     rstack = _env_timed!(acc, right_env_stack, psiL, mpo; downto = 3)
     lch = boundary_channels(mpo)
     lroot = lch
@@ -273,15 +268,12 @@ function _half_left!(
         Wkry, kst = _krylov_enrich(
             Kex,
             vector -> (acc.nmv += 1; apply_one_site(site_operator, vector)),
-            cx.krylov_reuse ? ex.U_ex : _fr.U0,
+            ex.U_ex,
             :left,
             cx.tau,
             cx.alloc;
             workcap = _cap_at(cx.wcap, bond),
-            fixed_depth = cx.krylov_depth,
         )
-        cx.krylov_reuse || (Wkry = _merge_frame(Wkry, ex.U_ex, :left))
-        _recycle_store!(cx.recycle, :left, bond, kst, ex.V_ex, cx.alloc.krylov)
         acc.tkry += (time_ns() - tk0) / 1e9
         _record_krylov!(bondlg, kst, cx.alloc)
         _peak!(acc, held + _state_stored(psiL), Wkry)
@@ -314,7 +306,6 @@ function _half_left!(
         bond < root_link &&
             (lch = _env_timed!(acc, push_left_channels, lch, mpo, left_frames[bond], bond))
     end
-    _recycle_commit!(cx.recycle, :left, true)
     return lroot
 end
 
@@ -342,8 +333,6 @@ function _half_right!(
     mpo, root_link = cx.mpo, cx.root_link
     site_count = length(psiR)
     canonical!(psiR, site_count)
-    # a shallow copy: the assembly later replaces `psi`'s slots, the cache must keep these
-    _recycle_begin!(cx.recycle, :right, cx.recycle === nothing ? nothing : copy(psiR), 0)
     lstack = _env_timed!(acc, left_env_stack, psiR, mpo; upto = site_count - 2)
     rch = boundary_channels(mpo)
     rroot = rch
@@ -384,15 +373,12 @@ function _half_right!(
         Zkry, kst = _krylov_enrich(
             Bex,
             vector -> (acc.nmv += 1; apply_one_site(site_operator, vector)),
-            cx.krylov_reuse ? ex.V_ex : _fr.V0,
+            ex.V_ex,
             :right,
             cx.tau,
             cx.alloc;
             workcap = _cap_at(cx.wcap, bond),
-            fixed_depth = cx.krylov_depth,
         )
-        cx.krylov_reuse || (Zkry = _merge_frame(Zkry, ex.V_ex, :right))
-        _recycle_store!(cx.recycle, :right, bond, kst, ex.U_ex, cx.alloc.krylov)
         acc.tkry += (time_ns() - tk0) / 1e9
         _record_krylov!(bondlg, kst, cx.alloc)
         _peak!(acc, held + _state_stored(psiR), Zkry)
@@ -421,6 +407,5 @@ function _half_right!(
         bond > root_link &&
             (rch = _env_timed!(acc, push_right_channels, rch, mpo, right_frames[bond], bond + 1))
     end
-    _recycle_commit!(cx.recycle, :right, true)
     return (rroot, carry)               # `carry` is (link_{c+1}, b_R)
 end

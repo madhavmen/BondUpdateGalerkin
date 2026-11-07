@@ -74,9 +74,7 @@ One rank-adaptive BUG step of the full flow `fl` from `t` to `t + h`, in place. 
 `:krylov_rational` is `cbe_bug_step!` with the root method `root` (the trapezoid / Radau IIA
 stability function `R(h A)` on the Arnoldi basis of the Galerkin operator) unshifted
 (`root_shift = false`), so the step is `R(h A_G) S_n` with its decay kept, then compressed: for a
-linear flow that is the implicit RK step in the frames, and `npc` does not apply. `:krylov_root` is
-an ablation: `cbe_bug_step!` on `H[psi_n, t_n]` with its exponential root, which holds the density
-at `t_n` through the step (first order in the nonlinearity).
+linear flow that is the implicit RK step in the frames, and `npc` does not apply.
 
 `stage_basis` is how the correction rounds' `Y_j` and `F_j` enter the basis: `:predictor`
 (default) compresses them at the step's `tol_trunc` and admits them at its `tol_basis` in the
@@ -143,10 +141,9 @@ function qtt_bug_step!(
         throw(ArgumentError("stage_basis must be :predictor or :exact, got :$stage_basis"))
     solver =
         stage_solver !== :auto ? stage_solver : fl isa LinearFlow ? :krylov_rational : :newton_gmres
-    solver in (:newton_gmres, :krylov_rational, :krylov_root) || throw(
+    solver in (:newton_gmres, :krylov_rational) || throw(
         ArgumentError(
-            "stage_solver must be :auto, :newton_gmres, :krylov_rational or :krylov_root, " *
-            "got :$stage_solver",
+            "stage_solver must be :auto, :newton_gmres or :krylov_rational, got :$stage_solver",
         ),
     )
     # R(h A) is the RK step only when the vector field is the fixed linear A
@@ -331,7 +328,7 @@ function qtt_bug_step!(
     if solver !== :newton_gmres
         # the engine's root is the step: the rational root `root` of the linear flow, unshifted,
         # or the exponential root of the frozen generator (the ablation)
-        final_root = solver === :krylov_rational ? root : :exp
+        final_root = root
         frames = build_frames(Any[keep...]; final_root = final_root)
         info, out = engine_info[], engine_state[]
         # the shifted exponential is exp(tau (H - <H>)): restore the scalar exp(tau <H>)
@@ -344,7 +341,7 @@ function qtt_bug_step!(
             newton = 0,
             gmres = 0,
             residual = root_error,
-            converged = solver === :krylov_root || root_error <= tol_step.stage,
+            converged = root_error <= tol_step.stage,
             nfield = 0,
             t_rho = 0.0,
             t_gmres = 0.0,

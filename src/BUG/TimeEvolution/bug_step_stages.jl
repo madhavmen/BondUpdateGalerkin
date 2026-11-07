@@ -25,7 +25,6 @@ function _resolve_step_options(
     order,
     fold_omega,
     exact,
-    frame_state,
     closure_probe,
     outside_residual,
     maxdim,
@@ -60,14 +59,6 @@ function _resolve_step_options(
     )
     order >= 1 || throw(ArgumentError("order must be >= 1, got $order"))
     fold_omega = something(fold_omega, order > 1 && !exact)
-    order == 1 ||
-        frame_state === nothing ||
-        throw(
-            ArgumentError(
-                "order > 1 is a single-step method and does not combine with the midpoint " *
-                "predictor",
-            ),
-        )
     frontier_tol >= 0 || throw(ArgumentError("frontier_tol must be >= 0, got $frontier_tol"))
     work_ceiling_rule in (:maxdim, :bond) ||
         throw(ArgumentError("work_ceiling_rule must be :maxdim or :bond, got $work_ceiling_rule"))
@@ -99,10 +90,9 @@ function _resolve_step_options(
     if kls !== nothing
         kls in KLS_SCHEDULES ||
             throw(ArgumentError("the K/L/S schedule must be one of $(KLS_SCHEDULES), got $kls"))
-        frame_state === nothing && !outside_residual || throw(
+        outside_residual && throw(
             ArgumentError(
-                "the parallel K/L/S step does not combine with the midpoint predictor or the " *
-                "outside-residual re-enrichment",
+                "the parallel K/L/S step does not combine with the outside-residual re-enrichment",
             ),
         )
     end
@@ -172,10 +162,6 @@ function _close_root_frontiers!(
     closure_checks,
     frontier_tol,
     expansion,
-    krylov_reuse,
-    recycle,
-    recycle_report,
-    krylov_depth,
     workcap,
     norm_scale,
     parallel,
@@ -188,9 +174,6 @@ function _close_root_frontiers!(
             expansion_settings,
             (
                 expansion = expansion,
-                krylov_reuse = krylov_reuse,
-                recycle = recycle,
-                krylov_depth = krylov_depth,
                 frontier_tol = frontier_tol,
             ),
         )
@@ -212,7 +195,6 @@ function _close_root_frontiers!(
             checks = closure_checks,
         )
         _refresh_expanded!(expanded, frames.left_frames, frames.right_frames, frames.root_link)
-        recycle_report === nothing || recycle === nothing || (recycle_report[] = recycle.log)
         return (
             lenv = frames.lenv,
             renv = frames.renv,
@@ -270,7 +252,6 @@ function _report_root!(
     alloc,
     expansion_settings,
     expansion,
-    krylov_depth,
     expanded,
     ledger,
     root_seconds,
@@ -339,7 +320,7 @@ function _report_root!(
                 KrylovFrontier(root_result, 0, frames.gen),
                 tau,
                 alloc,
-                merge(expansion_settings, (expansion = expansion, krylov_depth = krylov_depth));
+                merge(expansion_settings, (expansion = expansion,));
                 enrich = true,
                 workcap = workcap,
                 nrm = norm_scale,

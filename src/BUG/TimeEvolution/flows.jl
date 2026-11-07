@@ -57,7 +57,7 @@ flow_jac_ops(fl::LinearFlow, state_cores, field_time; rho = nothing) = (fl.H, no
 "Whether the flow subtracts `mu[psi]` (the normalised gradient flow)."
 flow_normalized(::QTTFlow) = false
 
-"A frozen flow: the linear flow of `H[psi, t]` at `state_cores` (the lagged-density ablation)."
+"A frozen flow: the linear flow of `H[psi, t]` at `state_cores` (the lagged density of the QTT TDVP2 baseline)."
 function frozen_flow(fl::QTTFlow, state_cores, field_time)
     operator_cores, _ = flow_op(fl, state_cores, field_time)
     return LinearFlow(operator_cores, fl.pref)

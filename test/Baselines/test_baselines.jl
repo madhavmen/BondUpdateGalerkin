@@ -46,28 +46,6 @@ sz_profile(psi) = real.(magnetisation(copy(psi))) ./ real(overlap(psi, psi))
             @test maximum(abs.(sz .- Float64.(frozen_row["sz"]))) <= 1e-5
             @test maximum(abs.(sz .- exact_sz)) <= 2 * frozen_row["err_exact"] + 1e-6
         end
-        # the fourth-order composition beats the second-order step at the same coarse dt (two
-        # steps to t = 0.2: each order-4 step is several TDVP2 sweeps, the file's main cost)
-        errors = map((2, 4)) do order
-            state = neel_state(chain_length)
-            for _ = 1:2
-                tdvp2_composed_step!(
-                    state,
-                    hamiltonian,
-                    ComplexF64(-im * 0.1);
-                    order = order,
-                    maxdim = 64,
-                )
-            end
-            maximum(
-                abs.(
-                    sz_profile(state) .-
-                    xx_free_fermion_sz(chain_length, 0.2; J = 1.0, occupied = 1:2:chain_length)
-                ),
-            )
-        end
-        @info "TDVP2 order 2 / order 4 errors at dt 0.1: $errors"
-        @test errors[2] < errors[1]
     end
 
     @testset "QTT TDVP2 at full rank is the exact flow" begin

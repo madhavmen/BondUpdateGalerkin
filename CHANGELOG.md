@@ -10,14 +10,12 @@ minor version may change the public API.
 - Local Krylov stopping weight: the residual integral
   `|tau| beta_k int_0^1 |[exp(s tau H_k)]_{k,1}| ds` replaces Saad's scalar, which can cancel. The
   root's convergence test uses the endpoint tail maximised over the step in real time.
-  `_tridiag_eigen` falls back to `syev` and refuses non-finite input. The recycled Krylov defect is
-  weighed the same way, and recycling is used in every real-time step, damped or not.
+  `_tridiag_eigen` falls back to `syev` and refuses non-finite input.
 - `qtt_bug_step!`:
   - Tolerances scale per step as `tol (|h| / h_ref)^(order+1)` (`tol_scaling = :order`, the
     default; `:fixed` is the former rule; see `qtt_step_tolerance`).
   - Solver routing (`stage_solver = :auto`): a `LinearFlow` takes `cbe_bug_step!`'s unshifted
-    rational root (`:krylov_rational`); nonlinear flows take Newton-GMRES stages; `:krylov_root`
-    is an ablation.
+    rational root (`:krylov_rational`); nonlinear flows take Newton-GMRES stages.
   - Frames are built with `frames_only`. The stage states and fields enter the basis as a
     predictor admitted at `tol_basis` in step-error units (`stage_basis = :predictor`; `:exact` is
     the former rule), compressed at `maxdim` (was `4 maxdim`).
@@ -84,12 +82,25 @@ term list `XXZChain`/`XXZTerm` stays as the input of `mpo_from_terms`, `pair_mpo
   `env_energy`, `env_energy_right`, `bond_gate`, the `XXZChain` methods of `boundary_channels`,
   `push_left_channels`, `push_right_channels`, `left_env_stack`, `right_env_stack` and
   `apply_h_two_site`, and the term-list effective operators `ZeroSiteH` and `OneSiteH`.
-  `tdvp2_step!` and `tdvp2_composed_step!` take an `MPO` only.
+  `tdvp2_step!` takes an `MPO` only.
 - The two-site gates: `apply_gate`, `heisenberg_bond_gate`, `xx_bond_gate`, `magnetisation_gate`,
   `ising_bond_gate`, `ising_bond_gates`, `bond_gates`, and the gate observables `energy` and
   `bond_energies` (use `mpo_energy`), and `parity_bonds`.
 - `dimer_state` outside `:SU2`: it was built by projecting a Neel state with the Heisenberg gate.
   Under `:SU2` it is unchanged; under `:U1` or `:none` start from `neel_state` or `product_state`.
+
+Methods and ablations outside the default path:
+
+- `cbe_bug_midpoint_step!` and the `frame_state` keyword of `cbe_bug_step!` (the midpoint BUG
+  step), with its b155550 fixture `xx_u1_bug_midpoint`.
+- `tdvp2_composed_step!` (the Yoshida and Suzuki fourth-order compositions of TDVP2).
+- `density = :consistent` of `qtt_tdvp2_step!` (the self-consistent trial-state density) with
+  `tol_sc` and `maxsc`; the QTT TDVP2 is the lagged-density step, and `sc_iters` is no longer
+  returned.
+- The local Krylov ablations of `cbe_bug_step!`: `krylov_reuse = false`, `krylov_recycle` with
+  `recycle_mode` and `recycle_report` (the recycled-block Krylov solve, `KrylovRecycle`), and
+  `krylov_depth`.
+- `stage_solver = :krylov_root` of `qtt_bug_step!`.
 
 ### Added
 

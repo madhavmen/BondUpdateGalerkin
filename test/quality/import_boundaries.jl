@@ -137,7 +137,6 @@ end
 # vector field, not how it is integrated.
 const BUG_STEPS = Set([
     :cbe_bug_step!,
-    :cbe_bug_midpoint_step!,
     :parallel_kls_step!,
     :qtt_bug_step!,
     :rk_stage_solve,

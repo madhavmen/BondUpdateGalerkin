@@ -75,12 +75,6 @@ end
                         BUG.mpo_energy(state, hamiltonian)
                         BUG.overlap(state, state)
                     end
-                    BUG.cbe_bug_midpoint_step!(
-                        copy(initial_state),
-                        hamiltonian,
-                        time_step;
-                        maxdim = 8,
-                    )
                     BUG.ite_evolve!(
                         copy(initial_state),
                         hamiltonian,
@@ -92,7 +86,7 @@ end
                     spin = QMB.local_space()
                     total_sz = BUG.onsite_mpo(6, [spin.Sz for _ = 1:6]; Iloc = spin.I)
                     BUG.mpo_product(total_sz, initial_state)
-                    # the baselines: TDVP2 (Lanczos and Arnoldi, composed order 4)
+                    # the baseline: TDVP2 (Lanczos and Arnoldi)
                     for hermitian in (true, false)
                         Baselines.tdvp2_step!(
                             copy(initial_state),
@@ -102,13 +96,6 @@ end
                             hermitian = hermitian,
                         )
                     end
-                    Baselines.tdvp2_composed_step!(
-                        copy(initial_state),
-                        hamiltonian,
-                        time_step;
-                        order = 4,
-                        maxdim = 8,
-                    )
                 end
             end
             # Z2: the transverse-field Ising states and MPO energy

@@ -157,11 +157,6 @@ function _frontier_sweep!(
         all(indicator(alloc, bond_leak) <= alloc.per_bond for bond_leak in vcat(rl.leak, rr.leak))
     added = rl.added + rr.added
     wbefore = _frame_width(fr, site_count)
-    if enrich           # the sweep's recycle entries live in its frames: usable only if committed
-        rec = get(ckw, :recycle, nothing)
-        _recycle_commit!(rec, :left, added > 0)
-        _recycle_commit!(rec, :right, added > 0)
-    end
     if enrich && added > 0
         for bond = 1:root_link
             fr.left_frames[bond] = rl.frames[bond]

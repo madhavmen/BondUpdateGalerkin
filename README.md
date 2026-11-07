@@ -59,7 +59,7 @@ end
 | Lindblad dynamics | `lindblad_mpo` + `cbe_bug_step!(...; hermitian = false)` (MPDO), or `jump_trajectory` (MCWF) |
 | linear PDE on a quantics grid | the model's MPO + `cbe_bug_step!(...; hermitian = false)` |
 | nonlinear PDE | `qtt_bug_step!(psi, GPFlow(model), t, h; order)` |
-| comparison | `Baselines`: `tdvp2_step!`, `tdvp2_composed_step!`, `qtt_tdvp2_step!` |
+| comparison | `Baselines`: `tdvp2_step!`, `qtt_tdvp2_step!`, `qtt_split_tdvp_step!` |
 
 ## Diagnostics
 

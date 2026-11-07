@@ -77,6 +77,3 @@ _xxz_identity() = symmetry_mode() === :SU2 ? local_space(:SU2).I : local_space()
 
 BUG.cbe_bug_step!(psi::SymMPS, h::XXZChain, tau; kwargs...) =
     cbe_bug_step!(psi, mpo_from_terms(h; Iloc = _xxz_identity()), tau; kwargs...)
-
-BUG.cbe_bug_midpoint_step!(psi::SymMPS, h::XXZChain, tau; kwargs...) =
-    cbe_bug_midpoint_step!(psi, mpo_from_terms(h; Iloc = _xxz_identity()), tau; kwargs...)

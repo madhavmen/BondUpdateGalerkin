@@ -25,7 +25,7 @@ function cbe_bug_step!(
     tol_expv::Union{Nothing,Float64} = nothing,
     # Another name for `tol_expv`; naming both is refused.
     tol_root::Union{Nothing,Float64} = nothing,
-    # The share of `tol_basis` the recycled local Krylov stage (Tests C/D, half-
+    # The share of `tol_basis` the local Krylov stage (Tests C/D, half-
     # and frontier sweeps) is held to, set on its own (`basis_allocation`);
     # `nothing` is `tol_basis`, the one-knob default.
     tol_krylov::Union{Nothing,Float64} = nothing,
@@ -54,7 +54,7 @@ function cbe_bug_step!(
     # `> 0`: each local Krylov stage ranks the directions its chain finds by their weight in the
     # step and keeps the top ones whose discarded weight fits this share (`tol_krylov`'s units,
     # `_append_ranked`); `0` appends them in chain order until the work ceiling. A cost setting on
-    # the stage width; the `recycle_mode = :frame` seeding stays sequential.
+    # the stage width.
     krylov_rank_tol::Float64 = 0.0,
     # The working-rank ceiling of every DD-QR CBE and local Krylov stage. `:maxdim`: one ceiling
     # `max(d*maxdim, d*D_max)` for every bond (`work_ceiling`). `:bond`: `min(2*d*D_b, maxdim)` at
@@ -63,29 +63,6 @@ function cbe_bug_step!(
     # ceiling is `f = 1.2`). A bond already at `maxdim` then gets no enrichment room that step.
     work_ceiling_rule::Symbol = :maxdim,
     bond_ceiling_factor::Real = 0.0,
-    # Ablation, not a method choice. `true`: every local
-    # Krylov stage (half-sweeps and frontier sweeps) grows from the CBE output
-    # `[U0 | U_CBE]`, so it never regenerates a CBE direction. `false`: it grows
-    # from `U0` alone and the CBE directions are merged afterwards
-    # (`_merge_frame`) -- the reuse-off ablation.
-    krylov_reuse::Bool = true,
-    # Ablation, not a method choice. `true`: each order-p round's local Krylov stage reuses the
-    # previous round's vectors at that bond, transported into its gauge
-    # (`krylov_recycle.jl`); real-time steps, damped (`tau = (-i - gamma) h`) or not, and
-    # no-jump steps; never imaginary time. Off by default:
-    # neither the XX nor the dissipative study found a gain. A
-    # `Ref` in `recycle_report` receives the per-bond log.
-    krylov_recycle::Bool = false,
-    recycle_report::Union{Nothing,Base.RefValue} = nothing,
-    # `:images` refreshes and continues the cached recurrence; `:frame` only
-    # seeds the next round's frame with the transported vectors (no images);
-    # `:complement` reuses the previous block only where it certifies the old
-    # input's evolution under this round's `H1`, and extends only the complement
-    # of that input (`_rk_complement`).
-    recycle_mode::Symbol = :images,
-    # Ablation, not a method choice (a conventional control). `krylov_depth = m > 0`: every local
-    # Krylov stage runs exactly `m` steps with no weight stop.
-    krylov_depth::Int = 0,
     # ── imaginary time ──
     # The root integrator (`ROOT_METHODS`): `:exp` is the Saad-converged
     # exponential (the reference); `:trapezoid`/`:radau2`/`:radau3` apply that
@@ -135,10 +112,6 @@ function cbe_bug_step!(
     truncate::Bool = true,
     maxdim::Union{Nothing,Int} = nothing,
     reorth::Bool = true,
-    # Build the bases from THIS state instead of from `psi`, while still
-    # evolving `psi` over the full `tau`. `nothing` is the ordinary step.
-    # Exists for [`cbe_bug_midpoint_step!`](@ref); see the comment at `psiL`.
-    frame_state = nothing,
     # `hermitian = false` switches the root solve to Arnoldi. Lanczos on a
     # non-Hermitian generator -- an open system's Lindbladian or a
     # non-Hermitian H_eff -- returns a plausible vector and no error at all.
@@ -179,7 +152,6 @@ function cbe_bug_step!(
         order = order,
         fold_omega = fold_omega,
         exact = exact,
-        frame_state = frame_state,
         closure_probe = closure_probe,
         outside_residual = outside_residual,
         maxdim = maxdim,
@@ -246,7 +218,6 @@ function cbe_bug_step!(
     # folded into the step's after the join.
     ledgerL, ledgerR = AdaptiveLedger(), AdaptiveLedger()
     rngR = parallel ? MersenneTwister(rand(rng, UInt64)) : rng
-    rec = krylov_recycle && order > 1 ? KrylovRecycle(recycle_mode) : nothing
     cx = _HalfSweepCtx(
         mpo,
         tau,
@@ -256,11 +227,8 @@ function cbe_bug_step!(
         expansion,
         exkw,
         wcap_step,
-        krylov_reuse,
-        krylov_depth,
         keep_states,
         options.keep_tols,
-        rec,
         work_ceiling_rule === :bond,
     )
 
@@ -272,13 +240,10 @@ function cbe_bug_step!(
     # augmented RIGHT frames, right_frames[bond] absorbs site bond+1
     right_frames = Vector{Any}(undef, site_count - 1)
 
-    # ── `frame_state`: bases from one state, evolution from another ──
-    # The midpoint BUG integrator (arXiv:2402.08607) takes its bases from `Y_{1/2}` but integrates
-    # the Galerkin ODE over the full step from `Y_0`. The start vector `root_start = <frames|Y_0>`
-    # must not come from the half-step state, or the second half would be integrated twice. `psi`
-    # stays L-canonical so that assembly reads one gauge; with no `frame_state`, `psiR` is `psi`.
-    psiL = copy(frame_state === nothing ? psi : frame_state)
-    psiR = frame_state === nothing ? psi : copy(frame_state)
+    # The left sweep works on a copy, so `psi` stays L-canonical for the assembly; the right sweep
+    # works on `psi` itself.
+    psiL = copy(psi)
+    psiR = psi
 
     # ── RUN THEM ── (`parallel` needs `julia -t 2`; why it is safe: `half_sweeps.jl`)
     # `lenv_root` / `renv_root`: the root environments at links `root_link` / `root_link+2`, in the
@@ -301,16 +266,6 @@ function cbe_bug_step!(
     n_new = vcat(n_newL[1:(root_link-1)], n_newR[root_link:(site_count-1)])
     epre = max(accL.epre, accR.epre)
     efnl = max(accL.efnl, accR.efnl)
-
-    # ── with a separate `frame_state`, the right sweep no longer touches `psi` ──
-    # Gauge: `AL` and `AR` must be contracted in one gauge, since mixing them is silently wrong
-    # rather than an error. `AR` must be `<right_frames|psi>`, not the right carry
-    # `<right_frames|frame_state>`: the midpoint's Galerkin step starts from `Y_0`, and reusing the
-    # carry integrates the first half-step twice, quietly making the method first order.
-    if frame_state !== nothing
-        canonical!(psi, site_count)
-        AR = _overlap_right(psi, right_frames, root_link)  # mirrors `_half_right!`'s `D` recursion
-    end
 
     AL = _overlap_left(psi, left_frames, root_link)          # (b_L, link_{root_link+1})
     root_start = contract(AL, (2,), AR, (1,))  # (b_L, b_R)
@@ -343,10 +298,6 @@ function cbe_bug_step!(
         closure_checks = closure_checks,
         frontier_tol = frontier_tol,
         expansion = expansion,
-        krylov_reuse = krylov_reuse,
-        recycle = rec,
-        recycle_report = recycle_report,
-        krylov_depth = krylov_depth,
         workcap = wcap_step,
         norm_scale = _nrm,
         parallel = parallel,
@@ -357,9 +308,8 @@ function cbe_bug_step!(
         lenv_root, renv_root, root_start = closure.lenv, closure.renv, closure.root_start
         nclose = closure.operator_applications
     end
-    # `state_projection_error`: how much of `psi` the frames miss. On the ordinary step the
-    # frames contain `psi`, so this is roundoff; on the midpoint's second stage it is the genuine
-    # error of projecting `Y_0` onto frames built from `Y_{1/2}`, charged against `tol_basis`. The
+    # `state_projection_error`: how much of `psi` the frames miss. The frames are built from `psi`,
+    # so this is roundoff; anything charged against `tol_basis` here is a defect. The
     # norm is taken from the state, not from `sqrt(||psi||^2 - ||root_start||^2)`, which is pure
     # cancellation at ~1e-8 and would flag steps spuriously.
     npsi = norm(psi[psi.center])
@@ -443,7 +393,6 @@ function cbe_bug_step!(
             alloc = alloc,
             expansion_settings = exkw,
             expansion = expansion,
-            krylov_depth = krylov_depth,
             expanded = expanded,
             ledger = ledger,
             root_seconds = troot,

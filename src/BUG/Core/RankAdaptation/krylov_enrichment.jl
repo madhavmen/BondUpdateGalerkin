@@ -196,8 +196,7 @@ end
 
 """
     _krylov_enrich(seed, applyH, start_frame, side, tau, alloc; workcap = 0,
-                   maxdepth = _KRY_MAXDEPTH, amp = 1.0, state_seed = true, fixed_depth = 0,
-                   recycled = ())
+                   maxdepth = _KRY_MAXDEPTH, amp = 1.0, state_seed = true)
         -> (frame, stats)
 
 Grow the frame `start_frame` by the Krylov directions of `applyH` from `seed` that the step needs.
@@ -206,12 +205,7 @@ Each direction is scored by `weight * ||(I - QQ') v_k||` (`Q` the frame so far):
 (`H e1 = e2`, `H e2 = e1 + e3` with `start_frame = [e1, e2]`). `capped` with `met = false` means
 the work ceiling or depth bound stopped the search with weight left. `amp` is the seed's norm
 relative to the state. `stats.basis` and `stats.weights` are the Arnoldi vectors and their
-weights, the last vector the active frontier: what a later round recycles. With `recycled` only
-the complement of the previous solve's input is extended ([`_krylov_basis`](@ref)).
-
-`fixed_depth = m > 0` is the conventional-control ablation: exactly `m` steps,
-every new local direction appended (numerical floor only), no weight stop; `met` then reports
-whether the weight had fallen to the allowance by depth `m`.
+weights, the last vector the active frontier.
 
 `alloc.krylov_rank > 0` ranks instead of appending in chain order: every direction above the
 allowance is only collected while the chain runs (the closure test is unchanged), and
@@ -228,16 +222,12 @@ function _krylov_enrich(
     maxdepth::Int = _KRY_MAXDEPTH,
     amp::Float64 = 1.0,
     state_seed::Bool = true,
-    fixed_depth::Int = 0,
-    recycled = (),
 )
     side in (:left, :right) || throw(ArgumentError("side must be :left or :right"))
     perp = side === :left ? perp_component : perp_component_right
     fl = side === :left ? 3 : 1
-    fixed = fixed_depth > 0
-    fixed && (maxdepth = fixed_depth)
-    allow = fixed ? 0.0 : alloc.krylov
-    ranked = !fixed && alloc.krylov_rank > 0
+    allow = alloc.krylov
+    ranked = alloc.krylov_rank > 0
     # the ranked rule's collected residuals, and how many came from Test D directions
     candidates, n_test_d_candidates = Any[], 0
     frame = start_frame
@@ -262,8 +252,7 @@ function _krylov_enrich(
             _extend_frame(frame, residual, direction, side, weight, allow; room = room)
         added += nadd
         first || (added_d += nadd)
-        # an allowance of 0 never "fits" (the floor's tail): only the adaptive stop caps here
-        return fits || fixed
+        return fits
     end
     kb = _krylov_basis(
         seed,
@@ -271,11 +260,9 @@ function _krylov_enrich(
         tau,
         alloc.krylov,
         score;
-        recycled = recycled,
         maxdepth = maxdepth,
         amp = amp,
         state_seed = state_seed,
-        fixed = fixed,
     )
     capped = kb.capped
     if ranked
@@ -296,30 +283,8 @@ function _krylov_enrich(
             met = kb.closed && !capped,
             basis = kb.basis,
             weights = kb.weights,
-            n_recycled = kb.n_recycled,
-            rec_closed = kb.rec_closed,
-            rec_overlap = kb.rec_overlap,
-            rec_defect = kb.rec_defect,
         ),
     )
-end
-
-"""
-    _merge_frame(frame, other_frame, side) -> grown frame
-
-`frame` grown by the part of `other_frame` it does not span, cut only at the numerical floor (the
-`krylov_reuse = false` ablation: the CBE directions join after the Krylov stage instead of
-seeding it).
-"""
-function _merge_frame(frame, other_frame, side::Symbol)
-    residual = TLArray(
-        side === :left ? perp_component(frame, other_frame) :
-        perp_component_right(frame, other_frame),
-    )
-    # `other_frame` inside `frame` (no CBE direction this step): Telum drops the cancelled blocks
-    # and its SVD of a blockless tensor throws (hq34b 17436300)
-    norm(residual) == 0 && return frame
-    return first(_extend_frame(frame, residual, other_frame, side, 1.0, 0.0))
 end
 
 "Fold one `_krylov_enrich` verdict into the step ledger's Krylov diagnostics."

@@ -15,13 +15,6 @@ using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
         # The fixed-knob path is removed from the solver: a retired knob is no keyword.
         @test_throws MethodError cbe_bug_step!(psi, mpo, dt; tol_basis = 1e-5, dex = 4)
         @test_throws MethodError cbe_bug_step!(psi, mpo, dt; trunc_thresh = 1e-10)
-        @test_throws MethodError cbe_bug_midpoint_step!(
-            psi,
-            mpo,
-            dt;
-            tol_expv = 1e-10,
-            stol_pre = 1e-10,
-        )
         @test bond_dims(psi) == dims0                    # refused, not half-run
     end
 

@@ -25,11 +25,6 @@ using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
             (state; keywords...) -> cbe_bug_step!(state, hamiltonian, time_step; keywords...),
         ),
         (
-            "midpoint",
-            (state; keywords...) ->
-                cbe_bug_midpoint_step!(state, hamiltonian, time_step; keywords...),
-        ),
-        (
             "order 2",
             (state; keywords...) ->
                 cbe_bug_step!(state, hamiltonian, time_step; order = 2, keywords...),

@@ -28,10 +28,9 @@ sz_profile(psi) = real.(magnetisation(copy(psi))) ./ real(overlap(psi, psi))
 "The budget status of a step's info, as the fixture script records it."
 step_status(info) = hasproperty(info, :ledger) ? String(budget_status(info.ledger)) : nothing
 
-@testset "XX chain under U(1) against b155550: $name" for (name, order, midpoint) in (
-    ("xx_u1_bug_order1", 1, false),
-    ("xx_u1_bug_order2", 2, false),
-    ("xx_u1_bug_midpoint", 1, true),
+@testset "XX chain under U(1) against b155550: $name" for (name, order) in (
+    ("xx_u1_bug_order1", 1),
+    ("xx_u1_bug_order2", 2),
 )
     frozen = read_fixture(name)
     set_symmetry!(:U1)
@@ -41,9 +40,7 @@ step_status(info) = hasproperty(info, :ledger) ? String(budget_status(info.ledge
     hamiltonian = xxz_mpo(chain_length; J = 1.0, delta = 0.0)
     psi = neel_state(chain_length)
     for (step, frozen_row) in enumerate(first(frozen["trajectory"], COMPARED_STEPS))
-        info =
-            midpoint ? cbe_bug_midpoint_step!(psi, hamiltonian, ComplexF64(-im * time_step)) :
-            cbe_bug_step!(psi, hamiltonian, ComplexF64(-im * time_step); order = order)
+        info = cbe_bug_step!(psi, hamiltonian, ComplexF64(-im * time_step); order = order)
         exact_sz =
             xx_free_fermion_sz(chain_length, step * time_step; J = 1.0, occupied = 1:2:chain_length)
         sz = sz_profile(psi)
