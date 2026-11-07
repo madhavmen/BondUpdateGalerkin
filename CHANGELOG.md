@@ -76,8 +76,25 @@ deterministic reference.
 
   `Baselines` keeps two-site TDVP and the QTT TDVP.
 
+The Hamiltonian enters every sweep, TDVP2 and every observable as an MPO in its environments. The
+term list `XXZChain`/`XXZTerm` stays as the input of `mpo_from_terms`, `pair_mpo` and
+`long_range_mpo`.
+
+- The term-list (channel) environments: `ChannelSet`, `LeftEnvStack`, `RightEnvStack`,
+  `env_energy`, `env_energy_right`, `bond_gate`, the `XXZChain` methods of `boundary_channels`,
+  `push_left_channels`, `push_right_channels`, `left_env_stack`, `right_env_stack` and
+  `apply_h_two_site`, and the term-list effective operators `ZeroSiteH` and `OneSiteH`.
+  `tdvp2_step!` and `tdvp2_composed_step!` take an `MPO` only.
+- The two-site gates: `apply_gate`, `heisenberg_bond_gate`, `xx_bond_gate`, `magnetisation_gate`,
+  `ising_bond_gate`, `ising_bond_gates`, `bond_gates`, and the gate observables `energy` and
+  `bond_energies` (use `mpo_energy`), and `parity_bonds`.
+- `dimer_state` outside `:SU2`: it was built by projecting a Neel state with the Heisenberg gate.
+  Under `:SU2` it is unchanged; under `:U1` or `:none` start from `neel_state` or `product_state`.
+
 ### Added
 
+- Manual page `docs/src/mps.md`: the `SymMPS` container, symmetry modes, state builders, canonical
+  form, charge sectors, observables and the state interface.
 - `cbe_bug_step!` keywords:
   - `frontier_tol`: frontier compression.
   - `krylov_rank_tol`: ranked Krylov selection.

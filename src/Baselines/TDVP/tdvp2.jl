@@ -1,6 +1,6 @@
 # Two-site TDVP, the memory and accuracy baseline for CBE-BUG.
 #
-# `OneSiteH`, `one_site_h`, `apply_one_site` and `tensor_elements` live in BUG/Core, which the
+# `MPOOneSiteH`, `one_site_h`, `apply_one_site` and `tensor_elements` live in BUG/Core, which the
 # sweeps share.
 
 """
@@ -34,7 +34,7 @@ through the freshly written tensor, which is the O(1) alternative to rebuilding 
 """
 function _tdvp2_bond!(
     psi::SymMPS,
-    h::Union{XXZChain,MPO},
+    h::MPO,
     i::Int,
     tau::ComplexF64,
     dir::Symbol,
@@ -178,13 +178,12 @@ end
     tdvp2_step!(psi, h, tau; kwargs...) -> TDVP2Info
 
 One symmetric two-site TDVP step of `tau = -im*dt`, in place; second order. The memory and accuracy
-baseline for CBE-BUG. `h` may be an `XXZChain` or an `MPO`; the channel form cannot express
-long-range or site-dependent `H` (`henv.jl`), so the MPO signature lets the baseline run on
-Haldane-Shastry or periodic models.
+baseline for CBE-BUG. `h` is an `MPO`, so the baseline runs every model the BUG runs, long-range
+and site-dependent ones included.
 """
 function tdvp2_step!(
     psi::SymMPS,
-    h::Union{XXZChain,MPO},
+    h::MPO,
     tau::ComplexF64;
     maxdim::Int = 200,
     trunc_thresh::Float64 = 1e-12,
@@ -298,11 +297,8 @@ function tdvp2_step!(
     return TDVP2Info(maximum(bond_dims(psi); init = 0), acc[2], acc[3], acc[4], acc[1], cum)
 end
 
-# The `h` annotation must match the main method's Union. With `XXZChain` here and the widened Union
-# there, the pair is ambiguous for `(XXZChain, ComplexF64)`: neither method dominates in both `h`
-# and `tau`, so Julia refuses the call. The campaigns pass an `MPO`, which is why this stayed
-# hidden.
-tdvp2_step!(psi::SymMPS, h::Union{XXZChain,MPO}, tau::Number; kwargs...) =
+# Any numeric `tau` is promoted to the `ComplexF64` the main method takes.
+tdvp2_step!(psi::SymMPS, h::MPO, tau::Number; kwargs...) =
     tdvp2_step!(psi, h, ComplexF64(tau); kwargs...)
 
 # ── HIGHER ORDER BY COMPOSITION ──
@@ -330,7 +326,7 @@ the summed per-stage `cumulative` discarded norms.
 """
 function tdvp2_composed_step!(
     psi::SymMPS,
-    h::Union{XXZChain,MPO},
+    h::MPO,
     tau::Number;
     order::Int = 4,
     composition::Symbol = :suzuki,

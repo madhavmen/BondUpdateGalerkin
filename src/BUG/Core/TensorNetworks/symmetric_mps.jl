@@ -5,7 +5,7 @@
 # QMB/Tooling.
 
 # ── symmetry mode ──
-# Set once, before building the state and its gates: both go through the local space and must
+# Set once, before building the state and its MPO: both go through the local space and must
 # match. Tensors carry their own symmetry (`symm(t)`), so the kernels need no mode flag; the mode
 # is read only by state constructors and by the fusion memo's key.
 

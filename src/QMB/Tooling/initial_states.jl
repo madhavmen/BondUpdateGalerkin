@@ -1,6 +1,6 @@
 # Product and sector-product initial states.
 #
-# `dimer_state` is in QMB/Tooling/gates.jl, with the Heisenberg gates it is built from.
+# `dimer_state` is the `:SU2` start state, the one a Neel state cannot be under SU(2).
 
 """
     product_state(spins; eltype = ComplexF64) -> SymMPS
@@ -144,3 +144,43 @@ domain_wall_state(L::Int; eltype::Type{<:Number} = ComplexF64) =
 """
 neel_state(L::Int; eltype::Type{<:Number} = ComplexF64) =
     product_state([isodd(i) ? :up : :down for i = 1:L]; eltype = eltype)
+
+"""
+    dimer_state(L) -> SymMPS
+
+The product of nearest-neighbour singlets `(1,2)(3,4)...` under `:SU2`; `L` must be even. It is the
+representable S = 0 starting point that replaces `product_state` (a Neel state has no SU(2) form).
+
+Built by the fusion recursion of `_product_state_u1`, but the selection acts on the outgoing link,
+since the physical leg has a single sector under SU(2). Odd sites keep spin 1/2 and even sites keep
+spin 0, so after each even site the running total is a singlet: a chain of independent dimers.
+Every link carries one multiplet, so `bond_dims` reads all ones, yet the state is entangled.
+"""
+function dimer_state(L::Int)
+    # Outside :SU2 a definite-Sz start (`neel_state`, `product_state`) is representable instead.
+    symmetry_mode() === :SU2 || throw(
+        ArgumentError(
+            "dimer_state is built under :SU2 only; under :U1 or :none start from neel_state " *
+            "or product_state",
+        ),
+    )
+    L >= 2 && iseven(L) ||
+        throw(ArgumentError("dimer_state needs an even number of sites >= 2, got $L"))
+    q = local_space(:SU2)
+
+    tensors = Any[]
+    prev = (getvac(q.I, ("L,0", "L,1")), 2)
+
+    for i = 1:L
+        F = TLArray(getIdentity(prev, (q.I, 1); itag = "L,$(i + 1)"))
+        F = TLArray(setitag(F, 2, "S,$i"))
+        # Select on leg 3, the FUSED total spin, not on the physical leg.
+        target = isodd(i) ? SECTOR_SU2_HALF : SECTOR_SU2_SINGLET
+        A = TLArray(getsub(F, 3, s -> s == target ? Colon() : nothing))
+        A = TLArray(A * (1.0 + 0.0im))
+        push!(tensors, A)
+        prev = (A, 3)
+    end
+
+    return SymMPS(tensors, L)
+end

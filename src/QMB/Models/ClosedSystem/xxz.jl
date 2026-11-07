@@ -1,15 +1,16 @@
-# The XXZ chain: its term list, its two-site gate and its MPO.
+# The XXZ chain: its term list and its MPO.
 #
-# The term-list types `XXZTerm`/`XXZChain` stay in BUG (Core/Environments), whose channel
-# environments are written on them; the model supplies the local identity they do not carry.
+# The term-list types `XXZTerm`/`XXZChain` are in BUG (Core/TensorNetworks/mpo.jl), whose
+# `mpo_from_terms` reads them; the model supplies the local identity they do not carry.
 
 """
     xxz_chain(L; J=1.0, delta=1.0) -> XXZChain
 
-The Hamiltonian of `bond_gates` as a term list instead of a gate per bond. The XY term is
-factorised per mode: under `:U1` it is `pair(Sp,Sp) + pair(Sm,Sm)` (the 1/2 is already in the
-pair); under `:none` the coefficient is -1, since Telum normalises `Sp = -(1/sqrt2) S+_std`.
-Both are measured and pinned by `test_gates.jl`.
+`H = J Σ_i (Sx Sx + Sy Sy + delta Sz Sz)` as a nearest-neighbour term list, the input of
+[`xxz_mpo`](@ref). The XY term is factorised per mode: under `:U1` it is the adjoint pairs
+`(Sp, Sp')` and `(Sm, Sm')` (Telum's normalisation already holds the 1/2); under `:none` the
+coefficient is -1, since Telum normalises `Sp = -(1/sqrt2) S+_std`. `test_fixtures_b155550.jl`
+evolves its MPO against the dense Hamiltonian.
 """
 function xxz_chain(L::Int; J::Float64 = 1.0, delta::Float64 = 1.0)
     L >= 2 || throw(ArgumentError("xxz_chain needs at least two sites, got $L"))
@@ -50,15 +51,6 @@ function heisenberg_su2_chain(L::Int; J::Float64 = 1.0)
     terms = [XXZTerm(q.S, TLArray(q.S'), J)]
     return XXZChain(L, terms, J, 1.0)
 end
-
-"""
-    bond_gate(h, site_l, site_r) -> TLArray
-
-The two-site gate of `h` on one bond -- `heisenberg_bond_gate` with `h`'s couplings, so
-the term list and the gate can never disagree about `J` or `delta`.
-"""
-BUG.bond_gate(h::XXZChain, site_l, site_r) =
-    heisenberg_bond_gate(site_l, site_r; J = h.J, delta = h.delta)
 
 """
     xxz_mpo(L; J=1.0, delta=1.0) -> MPO

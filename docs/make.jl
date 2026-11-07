@@ -21,6 +21,7 @@ makedocs(;
     pages = [
         "Home" => "index.md",
         "Method" => "theory.md",
+        "Matrix product states" => "mps.md",
         "Examples" => "examples.md",
         "API" => [
             "BUG" => "api/bug.md",

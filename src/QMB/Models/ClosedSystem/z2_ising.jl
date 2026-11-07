@@ -1,58 +1,7 @@
 # H = -J Σ Z Z - h Σ X made block-sparse in the sigma^x basis: |+> is Z2 charge 0, |-> charge 1.
 # The Z2 local space (`ising_local_space`) is in QMB/Tooling/local_spaces.jl: Telum cannot derive
-# Z2 operators, so its blocks come from private `Telum._localspace_cgt_fields`.
-
-# ── the Hamiltonian ──────────────────────────────────────────────────────────────────
-
-"""
-    ising_bond_gates(psi; J=1.0, h=1.0) -> Vector
-
-One gate per bond for `H = -J Σ Z_i Z_{i+1} - h Σ X_i`, with the on-site field distributed over the
-bonds touching each site. The split is not uniform: an interior site takes `h/2` from each of its
-two bonds, while the end sites (one bond each) take the full `h`. Halving every site's field would
-silently evolve a chain with weakened boundary fields, a plausible wrong Hamiltonian whose error
-shrinks with L.
-"""
-function ising_bond_gates(psi::SymMPS; J::Float64 = 1.0, h::Float64 = 1.0)
-    L = length(psi)
-    L >= 2 || throw(ArgumentError("ising_bond_gates needs at least two sites, got $L"))
-    return Any[
-        ising_bond_gate(
-            Telum.inds(psi[i])[2],
-            Telum.inds(psi[i+1])[2];
-            J = J,
-            hl = h / (i == 1 ? 1 : 2),
-            hr = h / (i == L - 1 ? 1 : 2),
-        ) for i = 1:(L-1)
-    ]
-end
-
-"""
-    ising_bond_gate(site_l, site_r; J=1.0, hl=0.5, hr=0.5) -> TLArray
-
-`-J Z⊗Z - hl X⊗I - hr I⊗X` on one bond, legs `(ket_l, ket_r, bra_l, bra_r)`.
-
-`hl`/`hr` are this bond's SHARE of the on-site field, not the field itself -- see
-[`ising_bond_gates`](@ref), which computes the shares.
-"""
-function ising_bond_gate(site_l, site_r; J::Float64 = 1.0, hl::Float64 = 0.5, hr::Float64 = 0.5)
-    tl, tr = _site_tag(site_l), _site_tag(site_r)
-    tl == tr && throw(ArgumentError("the two sites of a bond need distinct itags, both are '$tl'"))
-    q = ising_local_space()
-
-    pair(A, B) = TLArray(
-        permutedims(contract(_retag_site(A, tl), (3,), _retag_site(B, tr)', (3,)), (1, 4, 2, 3)),
-    )
-    outer(A, B) = TLArray(
-        permutedims(contract(_retag_site(A, tl), (), _retag_site(B, tr), ()), (1, 3, 2, 4)),
-    )
-
-    # Under :Z2 the flip is rank-3 (its op leg carries the charge), so Z⊗Z is the op-leg
-    # contraction; under :none it is a plain matrix and the same operator is an outer product.
-    zz = length(Telum.inds(q.Z)) == 3 ? pair(q.Z, q.Z) : outer(q.Z, q.Z)
-    G = (-J) * zz + (-hl) * outer(q.X, q.I) + (-hr) * outer(q.I, q.X)
-    return TLArray(G * (1.0 + 0.0im))
-end
+# Z2 operators, so its blocks come from private `Telum._localspace_cgt_fields`. The Hamiltonian is
+# `tfim_mpo` (tfim.jl).
 
 # ── states and observables ───────────────────────────────────────────────────────────
 

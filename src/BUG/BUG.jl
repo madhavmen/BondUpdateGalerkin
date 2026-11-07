@@ -27,7 +27,6 @@ include("Core/TensorNetworks/symmetric_mps.jl")
 include("Core/TensorNetworks/canonical_form.jl")
 include("Core/TensorNetworks/sectors.jl")
 include("Core/Sweeps/frames.jl")
-include("Core/Environments/environment_stacks.jl")
 include("Core/TensorNetworks/mpo.jl")
 include("Core/Environments/mpo_environments.jl")
 include("Core/Environments/effective_operators.jl")
@@ -82,17 +81,17 @@ export perp_component, perp_component_right
 export reachable_sectors, fusion_basis, fuse_spaces, add_charge, dual_charge, sector_dim
 export align_charge, fusion_stats, reset_fusion_stats!, clear_fusion_cache!, set_fusion_budget!
 export state_dim, state_bond_dims, multiplet_ratio, local_dim
-export MPO, mpo_from_terms, mpo_virtual_dims, onsite_mpo, mpo_sum, no_jump_mpo, apply_gate
+export XXZTerm, XXZChain, hamiltonian_terms
+export MPO, mpo_from_terms, mpo_virtual_dims, onsite_mpo, mpo_sum, no_jump_mpo
 export mpo_product, factor_product, apply_factor, apply_mpo, global_krylov_states
 # bond frames and sweeps (Core/Sweeps)
 export BondFrame, bond_frame, frame_theta, two_site_block, parallel_kls_step!
 # environments and effective operators (Core/Environments)
-export XXZTerm, XXZChain, hamiltonian_terms, bond_gate, ChannelSet, boundary_channels
-export left_channels, right_channels, push_left_channels, push_right_channels
-export LeftEnvStack, RightEnvStack, left_env_stack, right_env_stack, env_energy, env_energy_right
+export boundary_channels, left_channels, right_channels, push_left_channels, push_right_channels
+export left_env_stack, right_env_stack
 export apply_h_two_site, mpo_energy, mpo_matrix_element, mpo_variance
 export MPOLink, MPOLeftEnvStack, MPORightEnvStack, MPOZeroSiteH, MPOOneSiteH, shift_h
-export ZeroSiteH, zero_site_h, apply_zero_site, OneSiteH, one_site_h, apply_one_site
+export zero_site_h, apply_zero_site, one_site_h, apply_one_site
 # local solvers (Core/LocalSolvers)
 export expv, lanczos_expv, arnoldi_expv, radau2_gmres_expv, ROOT_METHODS, root_order
 export root_stability, hermitian_tridiagonal_exp_coeffs

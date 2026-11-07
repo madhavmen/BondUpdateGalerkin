@@ -10,8 +10,8 @@
 Explicit MPO for `H = -J Σ Z_i Z_{i+1} - h Σ X_i` on `L` sites, virtual dimension 3.
 
 Valid under `:Z2` (the symmetric form, where the global spin flip is the conserved charge) and
-`:none` (the dense control). Both use `ising_local_space`, so the operators are the same tensors
-`ising_bond_gates` builds its gates from and the two representations describe one Hamiltonian.
+`:none` (the dense control). Both use `ising_local_space`, the space `ising_product_state` builds
+its states in.
 
 The sign convention is the ferromagnetic one: `J > 0` favours aligned neighbours, `h > 0` is a
 field along the axis `X` measures. The critical point of the infinite chain is `h = J`.

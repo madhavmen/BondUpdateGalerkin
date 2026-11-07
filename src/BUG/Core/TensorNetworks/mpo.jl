@@ -1,6 +1,6 @@
 # MPO storage: the operator as one rank-4 tensor per site with fused virtual legs; on-site sums,
 # term-list MPOs and MPO sums; the exact MPO-MPS product, its compressed form and the global Krylov
-# states; and two-site bond gates.
+# states. The nearest-neighbour term list `XXZChain` is defined here as the input of `mpo_from_terms`.
 #
 # `onsite_mpo` takes the local identity `Iloc` as a required keyword, since local spaces belong to
 # the models, which BUG may not reference.
@@ -157,19 +157,57 @@ function mpo_product(mpo::MPO, psi::SymMPS)
     return SymMPS(out, site_count)
 end
 
+# ── the Hamiltonian as a nearest-neighbour term list ─────────────────────────
+
+"""
+    XXZTerm(left, right, coeff)
+
+One nearest-neighbour term `coeff · left_i ⊗ right_{i+1}`, repeated on every bond: one vertex of
+the automaton [`mpo_from_terms`](@ref) builds.
+
+`left` and `right` are bare local operators, with no site tags. Either may be rank-3, carrying an
+`op` leg whose charge is what makes the pair U(1)-allowed; when both are, that leg becomes the
+MPO's virtual leg (this is the XY hop, and it is why the two operators must be an `Sp`/`Sp'`
+adjoint pair rather than `Sp`/`Sm`).
+"""
+struct XXZTerm
+    left::Any
+    right::Any
+    coeff::Float64
+end
+
+"""
+    XXZChain(L, terms, J, delta)
+
+`H = J Σ_i (Sx Sx + Sy Sy + delta Sz Sz)` on `L` sites, as a term list. It is not an operator the
+sweeps apply: it is the input of [`mpo_from_terms`](@ref) and of QMB's pair and long-range MPO
+builders. Built by `xxz_chain`; `delta = 0` is XX.
+"""
+struct XXZChain
+    L::Int
+    terms::Vector{XXZTerm}
+    J::Float64
+    delta::Float64
+end
+
+# The number of sites, so a chain can be checked against the state's length.
+Base.length(chain::XXZChain) = chain.L
+
+"The term list of `chain`, in the order `mpo_from_terms` gives the terms their automaton states."
+hamiltonian_terms(chain::XXZChain) = chain.terms
+
 "`side` for one half of a term: rank-3 operators put their op-leg on the virtual leg."
 _side(operator, half::Symbol) = length(Telum.inds(operator)) == 3 ? half : :none
 
 """
     mpo_from_terms(hamiltonian::XXZChain; Iloc) -> MPO
 
-The MPO of the same Hamiltonian `hamiltonian` represents as a term list, so the two paths cannot
-disagree about `J`, `delta`, a coefficient or Telum's operator normalisation: the blocks
-ARE `hamiltonian.terms`. `Iloc` is the local identity of the site space, as for
-[`onsite_mpo`](@ref) (the model that built `hamiltonian` supplies it).
+The MPO of the nearest-neighbour term list `hamiltonian`. The blocks ARE `hamiltonian.terms`, so
+the MPO cannot disagree with the model about `J`, `delta`, a coefficient or Telum's operator
+normalisation. `Iloc` is the local identity of the site space, as for [`onsite_mpo`](@ref) (the
+model that built `hamiltonian` supplies it).
 
-The coefficient is applied once, on the closing (right) half of each term -- exactly where
-`push_left_channels` applies it.
+The coefficient is applied once, on the closing (right) half of each term.
 """
 function mpo_from_terms(hamiltonian::XXZChain; Iloc)
     site_count, terms = length(hamiltonian), hamiltonian.terms
@@ -325,48 +363,4 @@ function global_krylov_states(
         cur = nxt
     end
     return ks
-end
-
-# Two-site bond gates, mirroring bond.py::kernel_gate. Legs are (ket_l '+', ket_r '+', bra_l '-',
-# bra_r '-'), as in Python's einsum, so the result drops back into the site legs. Telum separates
-# legs by arrow alone. Telum's Sp is normalised so that Sp (x) Sp' = (1/2) S^- (x) S^+: the XY term
-# is a plain sum, with no 0.5 factor.
-
-# Itag of a site leg given as a `TLIndex`, an `Itag`, or a plain string.
-# A plain string has to be normalised rather than compared directly:
-# `Itag` is a SORTED TAG SET, so the leg written as "S,1" reads back as "1,S"
-# and a raw `Itag == String` comparison would reject the very tag that built it.
-# `Itag` applies the normalisation `setitag` uses (the legacy code tagged a local identity, which
-# lives in QMB).
-_site_tag(site_leg::TLIndex) = site_leg.itags
-_site_tag(site_leg::AbstractString) = Itag(site_leg)
-_site_tag(site_leg) = site_leg
-
-"""
-    apply_gate(gate, theta, site_l, site_r) -> TLArray
-
-Act `gate` on the two-site block `theta`, legs `(link_l, site_l, site_r, link_r)`
-in and out. Python's `_apply_gate_named`; the retag Python needs afterwards is
-unnecessary here because the gate's bra legs already carry the site tags.
-
-`site_l` / `site_r` are checked against `theta`, not used to build anything: a
-gate tagged for the wrong bond otherwise contracts happily against the wrong legs
-of a symmetric tensor and returns a plausible, silently wrong answer.
-"""
-function apply_gate(gate, theta, site_l, site_r)
-    tl, tr = _site_tag(site_l), _site_tag(site_r)
-    (Telum.inds(gate)[1].itags == tl && Telum.inds(gate)[2].itags == tr) || throw(
-        ArgumentError(
-            "gate is tagged for ($(gate.inds[1].itags), $(gate.inds[2].itags)), " *
-            "asked to act on ($tl, $tr)",
-        ),
-    )
-    (Telum.inds(theta)[2].itags == tl && Telum.inds(theta)[3].itags == tr) || throw(
-        ArgumentError(
-            "gate is tagged for ($tl, $tr) but theta carries " *
-            "($(theta.inds[2].itags), $(theta.inds[3].itags))",
-        ),
-    )
-    out = contract(gate, (1, 2), theta, (2, 3))   # (bra_l, bra_r, link_l, link_r)
-    return TLArray(permutedims(out, (3, 1, 2, 4)))
 end

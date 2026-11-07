@@ -2,17 +2,51 @@
 # streamed two-site contractions the Core sweeps share. Included right after
 # `Core/TensorNetworks/mpo.jl`, whose `MPO` type the signatures here use.
 
+# ── site operators and bra tensors ──────────────────────────────────────────
+
+"Retag an operator's two site legs onto site `site`, leaving any op-leg alone."
+_retag_sites(operator, site::Int) = TLArray(setitag(setitag(operator, 1, "S,$site"), 2, "S,$site"))
+
+"""
+    _apply_site_op(site_tensor, operator, site) -> TLArray
+
+`operator` acting on `site_tensor` at `site`, returned in `site_tensor`'s own layout with any
+op-leg appended: `(link_l, site, link_r)` or `(link_l, site, link_r, op)`.
+
+The ket-facing leg of `operator` is found by ARROW, not position: a plain operator has it at
+leg 1, an adjoint (`Sp'`) at leg 2, and `contract` asserts opposite arrows, so
+hard-coding leg 1 breaks on exactly the adjoint half of every XY term.
+"""
+function _apply_site_op(site_tensor, operator, site::Int)
+    operator === nothing && return site_tensor
+    Oi = _retag_sites(operator, site)
+    ket_leg = Telum.inds(Oi)[1].dir == '+' ? 1 : 2
+    contracted = contract(Oi, (ket_leg,), site_tensor, (2,))
+    # contracted = (operator's remaining legs..., link_l, link_r). The surviving site leg of a
+    # rank-3 operator is always at index < 3, so its remainder is (site_out, op) in order.
+    return length(Telum.inds(Oi)) == 2 ? TLArray(permutedims(contracted, (2, 1, 3))) :
+           TLArray(permutedims(contracted, (3, 1, 4, 2)))
+end
+
+"Bra tensor for an interior step: both link legs primed, so each pairs with the
+environment's bra leg rather than with the ket."
+_bra_interior(site_tensor) = TLArray(prime(prime(site_tensor, 1), 3)')
+
+"Bra tensor at the left boundary: `link_l` unprimed, because there the bra and ket
+links are the same dim-1 vacuum leg and must contract with each other."
+_bra_left_boundary(site_tensor) = TLArray(prime(site_tensor, 3)')
+
+"Bra tensor closing the right boundary: `link_r` unprimed, for the same reason."
+_bra_right_boundary(site_tensor) = TLArray(prime(site_tensor, 1)')
+
 # ── environments: Eq. (1.8) ──────────────────────────────────────────────────
 
 """
     MPOLink(E)
 
 The MPO environment on ONE link: a rank-3 `(bra, mpo, ket)` tensor, or `nothing` at a
-chain boundary (where it is the identity on a dim-1 vacuum leg).
-
-The counterpart of [`ChannelSet`](@ref), and deliberately the same shape of object: a
-sweep either CARRIES it bond to bond (`push_left_channels`) or reads a link out of a
-prebuilt stack (`left_channels`).
+chain boundary (where it is the identity on a dim-1 vacuum leg). A sweep either CARRIES it bond to
+bond (`push_left_channels`) or reads a link out of a prebuilt stack (`left_channels`).
 """
 struct MPOLink
     E::Any
@@ -90,9 +124,8 @@ push_right_channels(cs::MPOLink, mpo::MPO, site_tensor, site::Int; open_next::Bo
 """
     MPOLeftEnvStack / MPORightEnvStack
 
-Prebuilt environments, indexed by LINK exactly as [`LeftEnvStack`](@ref) /
-[`RightEnvStack`](@ref) are: entry `i` of the left stack is everything at sites `< i`,
-entry `i` of the right stack everything at sites `>= i`. Links outside the sweep's reach
+Prebuilt environments, indexed by LINK: entry `i` of the left stack is everything at sites
+`< i`, entry `i` of the right stack everything at sites `>= i`. Links outside the sweep's reach
 hold `missing`, so reading one by mistake throws instead of being taken for a boundary.
 """
 struct MPOLeftEnvStack
@@ -171,11 +204,9 @@ end
 """
     mpo_energy(psi, mpo) -> ComplexF64
 
-`⟨ψ|H|ψ⟩` from the MPO recursion, closing both boundaries. The independent check on
-[`env_energy`](@ref): the two share no contraction.
+`⟨ψ|H|ψ⟩` from the MPO recursion, closing both boundaries.
 
-Unnormalised, like `env_energy` -- compare against `energy(psi, gates) * norm(psi)^2`
-unless the state is normalised. Exact in any gauge: bra and ket are contracted
+Unnormalised: divide by `norm(psi)^2` unless the state is normalised. Exact in any gauge: bra and ket are contracted
 explicitly and no isometry is assumed anywhere.
 """
 mpo_energy(psi::SymMPS, mpo::MPO) = mpo_matrix_element(psi, mpo, psi)
@@ -326,7 +357,7 @@ apply_h_two_site(Theta, mpo::MPO, bond::Int, lenv::MPOLeftEnvStack, renv::MPORig
     _unprime(tensor, leg) -> TLArray
 
 Drop one prime level from `leg`. An environment's bra leg is primed to keep it distinct
-from the ket while both are open (`environment_stacks.jl`); once it has replaced a link leg it
+from the ket while both are open; once it has replaced a link leg it
 must carry that link's original prime level again.
 """
 #

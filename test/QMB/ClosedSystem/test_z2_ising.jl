@@ -55,8 +55,7 @@ using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
         for sym in (:Z2, :none), L in (4, 8), h in (0.5, 1.0, 2.0)
             set_symmetry!(sym)
             psi = ising_polarised_state(L)
-            g = ising_bond_gates(psi; J = 1.0, h = h)
-            @test energy(psi, g) ≈ -h * L atol = 1e-10
+            @test real(mpo_energy(psi, tfim_mpo(L; J = 1.0, h = h))) ≈ -h * L atol = 1e-10
         end
     end
 end

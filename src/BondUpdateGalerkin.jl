@@ -111,11 +111,11 @@ end
                     )
                 end
             end
-            # Z2: the transverse-field Ising states and gate energy
+            # Z2: the transverse-field Ising states and MPO energy
             _precompile_block("Z2") do
                 BUG.set_symmetry!(:Z2)
                 polarised = QMB.ising_polarised_state(6)
-                QMB.energy(polarised, QMB.ising_bond_gates(polarised; J = 1.0, h = 1.0))
+                BUG.mpo_energy(polarised, QMB.tfim_mpo(6; J = 1.0, h = 1.0))
                 QMB.x_profile(polarised)
             end
             # QTT: the nonlinear GP flow and the linear Heston flow, BUG and TDVP2 steps
