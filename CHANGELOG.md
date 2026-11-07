@@ -54,6 +54,28 @@ minor version may change the public API.
     stored fields.
   - Dropped from our fork: the threaded `contract` (`TELUM_CONTRACT_THREADS`) and `to_concrete!`.
 
+### Removed
+
+One controlled bond expansion remains: the DD-QR CBE (`DDQRExpansion`, `dd_cbe_expand`), with
+the incremental holdout controller and the local Krylov enrichment. `exact = true` stays as its
+deterministic reference.
+
+- The SVD-selection CBE: `cbe_expand` (term-list and MPO forms), `sketch_h_left`,
+  `sketch_h_right`, `full_local_basis`, `expand_bond!`, `BondExpansionInfo` and
+  `lanczos_lowest`.
+- The gate-based CBE bond update: `cbe_bond_update`, `cbe_expand_bond`, `sketch_bond_left`,
+  `sketch_bond_right`, `CBEBugOptions`, `SStepSolver`, `Propagate` and `LowestEigen`.
+- The DD-QR ablations, with their `cbe_bug_step!` keywords:
+  - `dd_policy` (`:hybrid` and `:off`) and `dd_memory` (`DDMemory`).
+  - `dd_width`, the fixed-width probe.
+  - `cap_order = :weight`: at a binding work ceiling, the first sectors in storage order are kept.
+- `dd_reference_sketch`.
+- The baselines built on the SVD-selection CBE:
+  - One-site TDVP-CBE: `tdvp1_cbe_step!`, `tdvp_cbe1s_step!` and their variants.
+  - CBE-DMRG: `dmrg_cbe1s!`, its named arms and `Baselines.GroundState`.
+
+  `Baselines` keeps two-site TDVP and the QTT TDVP.
+
 ### Added
 
 - `cbe_bug_step!` keywords:

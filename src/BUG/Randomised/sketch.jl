@@ -1,5 +1,5 @@
-# sketch.jl: the sector-graded Gaussian sketch, the range-finder pass and the residual tests
-# (Test A, Test B) of controlled bond expansion. The column helpers it calls (`_alloc_columns`,
+# sketch.jl: the sector-graded Gaussian sketch, the range-finder pass and the residual test
+# (Test B) of controlled bond expansion. The column helpers it calls (`_alloc_columns`,
 # `_boost!`, `_randomize_like`) live in `cbe.jl`, included after it; function bodies resolve
 # names at call time, so that order is free.
 
@@ -200,37 +200,6 @@ function _target_sectors!(boost::Dict, per::Dict, Om, wleg::Int, alloc::BasisAll
         targeted_count += 1
     end
     return targeted_count
-end
-
-"""
-    _one_sided_tail(candidate_weights, alloc, kmax, stol, ledger) -> U or nothing
-
-Test A on one side's candidates. `candidate_weights` carries the candidate leg first (the
-conjugate of the side's bond leg) and the opposite local space second; its singular values are
-the candidates' weights. Returns the left singular vectors `U` of the smallest rank the tail test
-allows (the coefficients that rotate the candidates onto their ranked directions), or `nothing`
-if no direction is needed. Weight cut by `kmax` counts toward the tail, as in the joint branch.
-"""
-function _one_sided_tail(
-    candidate_weights,
-    alloc::BasisAllocation,
-    kmax::Int,
-    stol::Float64,
-    ledger::Union{Nothing,AdaptiveLedger},
-)
-    (length(Telum.logical_qlabels(candidate_weights)) == 0 || norm(candidate_weights) == 0) && return nothing
-    res = svd(candidate_weights, (1,); Nkeep = kmax, cutoff = stol, get_lists = true)
-    nk = length(res.kept_list)
-    tail_rank, tail =
-        _tail_rank(res.kept_list, alloc.scale, alloc.tail, nk; base = _sq_weight(res.trunc_list))
-    if ledger !== nothing
-        ledger.max_tail = max(ledger.max_tail, tail)
-        tail <= alloc.tail || _unmet!(ledger, :tail)
-    end
-    tail_rank == 0 && return nothing
-    # Re-cut at the tail rank so the returned vectors are exactly the ranked directions kept.
-    tail_rank < nk && (res = svd(candidate_weights, (1,); Nkeep = tail_rank, cutoff = stol))
-    return TLArray(res.U)
 end
 
 """

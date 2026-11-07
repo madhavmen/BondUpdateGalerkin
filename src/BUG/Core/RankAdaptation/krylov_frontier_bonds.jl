@@ -243,10 +243,6 @@ function _frontier_expand(
         growth = get(ckw, :growth, ADAPTIVE_GROWTH),
         exact = get(ckw, :exact, false),
         version = bond,
-        cap_order = get(ckw, :cap_order, :sector),
-        dd_width = get(ckw, :dd_width, 0),
-        dd_policy = get(ckw, :dd_policy, :adaptive),
-        dd_memory = get(ckw, :dd_memory, nothing),
     )
 end
 

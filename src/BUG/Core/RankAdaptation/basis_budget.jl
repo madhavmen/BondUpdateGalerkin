@@ -494,8 +494,7 @@ _cap_at(workcap::Vector{Int}, bond::Int) = workcap[bond]
 The adaptive search's STARTING width schedule (`budget = ceil(growth*dmax) - r`, probe `1.2x` that).
 1.2, not 2.0: at 2.0 the first probe is ~1.2chi columns against a
 local space of 2chi, so the RSVD starts as wide as the space it sketches. Only a start: Test B
-widens a side that fails (`_certified_range(...; thin = true)`). `cbe_expand`'s own default
-(2.0) is the fixed-count selection of the TDVP-CBE baselines.
+widens a side that fails (`_dd_controller`).
 """
 const ADAPTIVE_GROWTH = 1.2
 

@@ -1,102 +1,147 @@
-# cbe.jl: the shared sketch closures and sector-graded probe helpers of controlled bond
-# expansion, and the `DDQRExpansion` strategy the Core sweeps call. The probe and the residual
-# tests (`sketch.jl`) and the range finder (`range_finder.jl`) are included before it; the
-# selection (`cbe_expand.jl`), the gate-based bond update (`cbe_bond_update.jl`) and the MPO
-# paths (`cbe_mpo.jl`) right after it.
+# cbe.jl: the sketch closures (a built `H Theta`, or the probe folded into the MPO contraction)
+# and the sector-graded probe helpers of controlled bond expansion, and the `DDQRExpansion`
+# strategy the Core sweeps call. The probe and the residual test (`sketch.jl`) and the range
+# finder (`range_finder.jl`) are included before it; the DD-QR kernels, controller and bond
+# expansion (`dd_cbe*.jl`) after it.
 
 # ── project-first sketches: `Y = (P_perp (H Theta)) Om'` ──
 # `P_perp` and `Om` act on disjoint legs, so the order is exact; `_preselect_*` projects again
 # (idempotent) because it also orthonormalises and returns the residual.
 
-# `H*Theta` is built once per `cbe_expand` and shared by its three sketch calls; the arithmetic is
+# `H*Theta` is built once per bond visit and shared by every sketch call on it; the arithmetic is
 # the same as building it per call.
 
 """
     _sketch_closures(frames, buildHT) -> (skl, skr)
 
-The `(skl, skr)` pair [`cbe_expand`](@ref) wants, sharing one lazily built `H*Theta` and one
-projection per side. Lazy because `cbe_expand` often returns before sketching (saturated frames).
+The `(skl, skr)` sketch pair of one bond, sharing one lazily built `H*Theta` and one projection per
+side. Lazy because a saturated frame returns before it sketches.
 """
-function _sketch_closures(frames::BondFrame, buildHT; share::Bool = true)
+function _sketch_closures(frames::BondFrame, buildHT)
     HT = Ref{Any}(nothing)
-    AL = Ref{Any}(nothing)          # P_perp^L (H Theta) -- wanted by BOTH `skl` calls
+    AL = Ref{Any}(nothing)          # P_perp^L (H Theta), shared by every `skl` call
     AR = Ref{Any}(nothing)          # (H Theta) P_perp^R
-    # `share = false` is the old behaviour, kept as an A/B and nothing else. A performance claim
-    # that can only be reproduced by checking out an old commit is not reproducible in practice;
-    # this makes "how much did sharing buy?" a switch that `benchmarks/rsvd_parallel.jl` can flip
-    # inside ONE process -- which matters here, because a cold Julia process spends ~10 minutes
-    # compiling before it can time anything.
-    _ht() = share ? (HT[] === nothing && (HT[] = buildHT()); HT[]) : buildHT()
+    _ht() = (HT[] === nothing && (HT[] = buildHT()); HT[])
     # P_perp^L (H Theta) = H Theta - U0 (U0' H Theta), legs (link_l, site_l, site_r, link_r).
     function _al()
-        share && AL[] !== nothing && return AL[]
+        AL[] !== nothing && return AL[]
         h_theta = _ht()
         frame_coeffs = contract(frames.U0', (1, 2), h_theta, (1, 2))  # (bond, site_r, link_r)
-        perp_action =
-            TLArray(h_theta - contract(frames.U0, (3,), frame_coeffs, (1,)))
-        share && (AL[] = perp_action)
-        return perp_action
+        AL[] = TLArray(h_theta - contract(frames.U0, (3,), frame_coeffs, (1,)))
+        return AL[]
     end
     # (H Theta) P_perp^R = H Theta - (H Theta V0') V0, same leg order.
     function _ar()
-        share && AR[] !== nothing && return AR[]
+        AR[] !== nothing && return AR[]
         h_theta = _ht()
         frame_coeffs = contract(h_theta, (3, 4), frames.V0', (2, 3))  # (link_l, site_l, bond)
-        perp_action =
-            TLArray(h_theta - contract(frame_coeffs, (3,), frames.V0, (1,)))
-        share && (AR[] = perp_action)
-        return perp_action
+        AR[] = TLArray(h_theta - contract(frame_coeffs, (3,), frames.V0, (1,)))
+        return AR[]
     end
     skl = Om -> contract(_al(), (3, 4), Om', (2, 3))       # (link_l, site_l, g)
     skr = Om -> TLArray(permutedims(contract(_ar(), (1, 2), Om', (1, 2)), (3, 1, 2)))
     return skl, skr
 end
 
-"""
-    sketch_h_left(frames, hamiltonian, site, lch, rch, Om) -> TLArray
-
-`Y = (P_perp (H Theta)) Om†`, legs `(link_l, site_l, g)`: the discarded-space component of
-`H Theta` sketched from the right, with `Om` in `V0`'s layout. A standalone call rebuilds
-`H*Theta`; sweeps use the cached closures.
-"""
-sketch_h_left(
-    frames::BondFrame,
-    hamiltonian::XXZChain,
-    site::Int,
-    lch::ChannelSet,
-    rch::ChannelSet,
-    Om,
-) = first(
-    _sketch_closures(
-        frames,
-        () -> apply_h_two_site(frame_theta(frames), hamiltonian, site, lch, rch),
-    ),
-)(
-    Om,
-)
+# ── fold-omega-first: the sketch that never forms H*Theta ──
+# Contracting `Om` in first makes the cost scale with the sketch width g, not d*chi. It is exact,
+# since P_perp and Om act on disjoint legs and commute.
+# Each probe needs its own folded chain, so it wins only for a narrow probe (g < chi).
 
 """
-    sketch_h_right(frames, hamiltonian, site, lch, rch, Om) -> TLArray
+    _fold_sketch_closures(frame, mpo, bond, lenv, renv) -> (skl, skr)
 
-Mirror of [`sketch_h_left`](@ref): the right matricization of `(H Theta) P_perp^R` with
-`P_perp^R = I - V0' V0`, sketched from the left. `Om` carries `U0`'s layout
-`(link_l, site_l, g)` and the result is `(g, site_r, link_r)`.
+The `(skl, skr)` sketch pair of [`_sketch_closures`](@ref), with `Om` folded into the contraction chain
+instead of applied to a finished `H*Theta`.
+
+`skl(Om)` takes `Om` in `V0`'s layout `(g, site_r, link_r)` and returns `(link_l, site_l, g)`;
+`skr(Om)` takes `U0`'s layout `(link_l, site_l, g)` and returns `(g, site_r, link_r)`. Both
+return the DISCARDED-space component, i.e. with `P_perp` already applied -- identical to
+[`_sketch_closures`](@ref)'s output.
 """
-sketch_h_right(
-    frames::BondFrame,
-    hamiltonian::XXZChain,
-    site::Int,
-    lch::ChannelSet,
-    rch::ChannelSet,
-    Om,
-) = last(
-    _sketch_closures(
-        frames,
-        () -> apply_h_two_site(frame_theta(frames), hamiltonian, site, lch, rch),
-    ),
-)(
-    Om,
-)
+function _fold_sketch_closures(frame::BondFrame, mpo::MPO, bond::Int, lenv::MPOLink, renv::MPOLink)
+    left_mpo, right_mpo = mpo[bond], mpo[bond+1]
+    # `Theta` is shared, `H*Theta` is not. `frame_theta` is `U0*S0*V0` -- an `O(chi^2 d^2)`
+    # object the frame already implies, with no `H` in it. Rebuilding it per call would be pure
+    # waste; caching the thing this function exists NOT to build would defeat the purpose.
+    Theta = frame_theta(frame)                       # (ℓ_l, s_l, s_r, ℓ_r)
+
+    # ── LEFT: fold `Om` through renv and right_mpo, then Theta, then left_mpo and lenv ─────
+    function skl(Om)
+        Omd = Om'                                # (g, s_bra_r, bra_r)
+        # 1. the right cap. At the boundary `renv.E` is absent and `right_mpo`'s `w_r` is the
+        #    dim-1 leg left by trimming, dropped rather than contracted -- the same asymmetry
+        #    `apply_h_two_site` handles, and the reason this is not one expression.
+        right_cap = if renv.E === nothing
+            # (g, bra_r, w_mid, s_ket_r, w_r)
+            partial = contract(Omd, (2,), right_mpo, (3,))
+            TLArray(deleteSingleton(partial, 5))         # (g, bra_r, w_mid, s_ket_r)
+        else
+            partial = contract(Omd, (3,), renv.E, (1,))  # (g, s_bra_r, w, ket_r)
+            # right_mpo = (w_mid, s_ket_r, s_bra_r, w_r); close `s_bra_r` and `w_r`.
+            # -> (g, ket_r, w_mid, s_ket_r)
+            contract(partial, (2, 3), right_mpo, (3, 4))
+        end
+        # 2. into Theta: close the ket site and ket link on the right. -> (ℓ_l, s_l, g, w_mid)
+        theta_capped = contract(Theta, (3, 4), right_cap, (4, 2))
+        # 3. left_mpo = (w_l, s_ket_l, s_bra_l, w_mid); close the ket site and the shared MPO leg.
+        #    -> (ℓ_l, g, w_l, s_bra_l)
+        with_mpo = contract(theta_capped, (2, 4), left_mpo, (2, 4))
+        sketch = if lenv.E === nothing
+            partial = TLArray(deleteSingleton(with_mpo, 3))   # (ℓ_l, g, s_bra_l)
+            TLArray(permutedims(partial, (1, 3, 2)))          # (ℓ_l, s_bra_l, g)
+        else
+            # lenv.E = (bra, w, ket); close the ket link and `w_l`. -> (g, s_bra_l, bra)
+            partial = contract(with_mpo, (1, 3), lenv.E, (3, 2))
+            _unprime(TLArray(permutedims(partial, (3, 2, 1))), 1)   # (bra, s_bra_l, g)
+        end
+        return _project_left(frame, sketch)
+    end
+
+    # ── RIGHT: the mirror -- fold `Om` through lenv and left_mpo first ──────────────────
+    function skr(Om)
+        Omd = Om'                                # (bra_l, s_bra_l, g)
+        left_cap = if lenv.E === nothing
+            # (bra_l, g, w_l, s_ket_l, w_mid)
+            partial = contract(Omd, (2,), left_mpo, (3,))
+            TLArray(deleteSingleton(partial, 3))         # (bra_l, g, s_ket_l, w_mid)
+        else
+            partial = contract(Omd, (1,), lenv.E, (1,))  # (s_bra_l, g, w, ket_l)
+            # left_mpo = (w_l, s_ket_l, s_bra_l, w_mid); close `s_bra_l` and `w_l`.
+            # -> (g, ket_l, s_ket_l, w_mid)
+            capped = contract(partial, (1, 3), left_mpo, (3, 1))
+            TLArray(permutedims(capped, (2, 1, 3, 4)))  # (ket_l, g, s_ket_l, w_mid)
+        end
+        # into Theta: close the ket link and ket site on the left. -> (s_r, ℓ_r, g, w_mid)
+        theta_capped = contract(Theta, (1, 2), left_cap, (1, 3))
+        # right_mpo = (w_mid, s_ket_r, s_bra_r, w_r); close the ket site and the shared MPO leg.
+        # -> (ℓ_r, g, s_bra_r, w_r)
+        with_mpo = contract(theta_capped, (1, 4), right_mpo, (2, 1))
+        sketch = if renv.E === nothing
+            partial = TLArray(deleteSingleton(with_mpo, 4))   # (ℓ_r, g, s_bra_r)
+            TLArray(permutedims(partial, (2, 3, 1)))          # (g, s_bra_r, ℓ_r)
+        else
+            # -> (g, s_bra_r, bra_r)
+            partial = contract(with_mpo, (1, 4), renv.E, (3, 2))
+            _unprime(partial, 3)
+        end
+        return _project_right(frame, sketch)
+    end
+
+    return skl, skr
+end
+
+"`P_perp^L sketch` with `P_perp^L = I - U0 U0'`, for `sketch` of layout `(link_l, site_l, g)`."
+function _project_left(frame::BondFrame, sketch)
+    kept_coeffs = contract(frame.U0', (1, 2), sketch, (1, 2))      # (bond, g)
+    return TLArray(sketch - contract(frame.U0, (3,), kept_coeffs, (1,)))
+end
+
+"`sketch P_perp^R` with `P_perp^R = I - V0' V0`, for `sketch` of layout `(g, site_r, link_r)`."
+function _project_right(frame::BondFrame, sketch)
+    kept_coeffs = contract(sketch, (2, 3), frame.V0', (2, 3))      # (g, bond)
+    return TLArray(sketch - contract(kept_coeffs, (2,), frame.V0, (1,)))
+end
 
 # ── the sector-graded Gaussian sketch (`GaussRandMat`, `RSVDpreBE0SiQS.m:557`) ──
 # `CompRatio·Dpre` columns in the frame's complement (per sector, by complement dimension) and the
@@ -170,19 +215,24 @@ function _boost!(cols::Dict, boost, cap::Dict)
     return left
 end
 
-"""
-    full_local_basis(frame, side; tag="cbeF") -> TLArray
-
-The complete local basis for one side of a bond, in the frame's layout, with `g` the full fused
-dimension. Fed to the same sketch closures it turns RSVD-CBE into plain CBE (the A/B reference).
-"""
-function full_local_basis(frame, side::Symbol; tag::AbstractString = "cbeF")
-    side in (:left, :right) || throw(ArgumentError("side must be :left or :right"))
-    first_leg, second_leg = side === :left ? (1, 2) : (2, 3)
-    fused_basis = fusion_basis(frame, first_leg, second_leg; tag = tag)
-    # `fusion_basis` returns (first_leg, second_leg, fused); a right frame carries its bond leg
-    # first.
-    return side === :left ? fused_basis : TLArray(permutedims(fused_basis, (3, 1, 2)))
+"Keep at most `column_count` columns of `basis` on `leg`, walking sectors in Telum's order."
+function _trim_total(basis, leg::Int, column_count::Int)
+    column_count <= 0 && return nothing
+    leg_dim(basis, leg) <= column_count && return basis
+    left = column_count
+    keep = Dict{Any,Int}()
+    for (sector, sector_size) in Telum.spaces(basis)[leg]
+        keep[sector] = min(sector_size, left)
+        left -= keep[sector]
+    end
+    any(kept > 0 for kept in values(keep)) || return nothing
+    return TLArray(
+        getsub(
+            basis,
+            leg,
+            label -> (kept_count = get(keep, label, 0); kept_count == 0 ? nothing : 1:kept_count),
+        ),
+    )
 end
 
 # ── the strategy the Core sweeps call (Core/RankAdaptation/basis_expansion.jl) ──

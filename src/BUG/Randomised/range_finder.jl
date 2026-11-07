@@ -1,6 +1,6 @@
-# range_finder.jl: the certified range finder, the expansion record `CBEExpansion` and the
-# term-list (`XXZChain`) method of `cbe_expand`. Builds on the range-finder pass and Test B of
-# `sketch.jl`, included right before it; the selection itself is in `cbe_expand.jl`.
+# range_finder.jl: the certified range finder (the numerical-rank search of `dd_cbe_expand`
+# without an allocation, and of its exact reference) and the expansion record `CBEExpansion`.
+# Builds on the range-finder pass and Test B of `sketch.jl`, included right before it.
 
 """
     _certified_range(draw, wleg, select, qleg, project, sketch, side,
@@ -12,7 +12,7 @@ sketched spectrum decayed inside the probe, so an under-sampled sector can look 
 checks the rest with an unboosted holdout and widens only the sectors it names
 ([`_target_sectors!`](@ref)).
 
-On the legacy path (`alloc === nothing`) this is exactly `_range_find`. A resource bound (`wcap`,
+Without an allocation (`alloc === nothing`) this is exactly `_range_find`. A resource bound (`wcap`,
 `ncap`) or an exhausted target stops the loop with the test failed, never silently.
 """
 function _certified_range(
@@ -101,7 +101,7 @@ end
 """
     CBEExpansion
 
-What [`cbe_expand`](@ref) produced at one bond.
+What one bond expansion ([`expand_frame`](@ref)) produced.
 
   - `U_ex`, `V_ex`: the expanded frames. They span `[U0 | new]`, rotated within that span, which
     keeps the expansion lossless and `S_0` free of an identically zero block.
@@ -115,46 +115,4 @@ struct CBEExpansion
     n_new_r::Int
     err_pre::Float64
     err_fnl::Float64
-end
-
-"""
-    cbe_expand(frames, hamiltonian, site, lch, rch; kwargs...) -> CBEExpansion
-
-The basis update of CBE-BUG: expands the frames at bond `(site, site+1)` with no K/L ODE.
-Keywords: `dex` is a per-side cap (0 = adaptive, bounded by the local room); `growth` seeds the
-sketch width (default 2.0, not a cap); `dover` sets the oversampling (nothing = adaptive);
-`comp_ratio` is the complement/isometry split, 0.5 for the TDVP callers and 1.0 for the DMRG and
-CBE-BUG callers, as the MATLAB reference rejects a pure complement; `sulz_cap` caps the total at
-2r (off by default); `preselect_only` skips the final selection.
-"""
-function cbe_expand(
-    frames::BondFrame,
-    hamiltonian::XXZChain,
-    site::Int,
-    lch::ChannelSet,
-    rch::ChannelSet;
-    share_ht::Union{Nothing,Bool} = nothing,
-    # Accepted only to refuse it with a sentence that says why. `fold_omega`
-    # is implemented for the MPO path only; without this the term-list caller
-    # gets a `MethodError: no method matching cbe_expand(::BondFrame, ::Function,
-    # ::Function; fold_omega=true)` raised inside the two-argument method, which
-    # names neither the flag's restriction nor the caller that set it.
-    fold_omega::Bool = false,
-    kwargs...,
-)
-    fold_omega && throw(
-        ArgumentError(
-            "fold_omega is implemented for the MPO path only; this is the term-list (XXZChain) " *
-            "expansion. Build the Hamiltonian as an MPO, or leave fold_omega = false.",
-        ),
-    )
-    return cbe_expand(
-        frames,
-        _sketch_closures(
-            frames,
-            () -> apply_h_two_site(frame_theta(frames), hamiltonian, site, lch, rch);
-            share = share_ht === nothing ? true : share_ht,
-        )...;
-        kwargs...,
-    )
 end

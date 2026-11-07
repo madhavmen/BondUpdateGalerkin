@@ -92,8 +92,7 @@ end
                     spin = QMB.local_space()
                     total_sz = BUG.onsite_mpo(6, [spin.Sz for _ = 1:6]; Iloc = spin.I)
                     BUG.mpo_product(total_sz, initial_state)
-                    # the baselines: TDVP2 (Lanczos and Arnoldi, composed order 4), one-site
-                    # TDVP-CBE on an MPO and on a gate chain, CBE-DMRG
+                    # the baselines: TDVP2 (Lanczos and Arnoldi, composed order 4)
                     for hermitian in (true, false)
                         Baselines.tdvp2_step!(
                             copy(initial_state),
@@ -108,24 +107,6 @@ end
                         hamiltonian,
                         time_step;
                         order = 4,
-                        maxdim = 8,
-                    )
-                    Baselines.tdvp_cbe1s_step!(
-                        copy(initial_state),
-                        hamiltonian,
-                        time_step;
-                        maxdim = 8,
-                    )
-                    Baselines.tdvp1_cbe_step!(
-                        copy(initial_state),
-                        QMB.xxz_chain(6; J = 1.0, delta = 1.0),
-                        time_step;
-                        maxdim = 8,
-                    )
-                    Baselines.dmrg_cbe1s!(
-                        copy(initial_state),
-                        hamiltonian;
-                        n_sweeps = 2,
                         maxdim = 8,
                     )
                 end

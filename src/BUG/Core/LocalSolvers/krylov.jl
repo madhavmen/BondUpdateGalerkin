@@ -227,8 +227,7 @@ function lanczos_expv(
                 # One materialisation per pass, not per basis vector. `residual` stays concrete
                 # for the whole pass and only the correction is lazy, so every inner product is
                 # against a fixed `residual`. That makes the pass classical Gram-Schmidt, applied
-                # twice (as stable as MGS). The same fix is in `Randomised/cbe_bond_update.jl`,
-                # which keeps BUG and tdvp2 on equal footing.
+                # twice (as stable as MGS).
                 for _pass = 1:2
                     corr = nothing
                     for previous in basis

@@ -6,7 +6,7 @@ quantics tensor trains of PDE fields, on one shared engine.
 
 **Scope.** Real- and imaginary-time evolution of MPS under MPOs (U(1), Z2, SU(2) or no symmetry),
 Lindblad dynamics (density operators or quantum-jump trajectories), and linear and nonlinear PDEs
-on quantics grids (Heston, Gross-Pitaevskii). TDVP and CBE-DMRG are included as baselines.
+on quantics grids (Heston, Gross-Pitaevskii). Two-site TDVP is included as the baseline.
 
 ## Install
 
@@ -59,7 +59,7 @@ end
 | Lindblad dynamics | `lindblad_mpo` + `cbe_bug_step!(...; hermitian = false)` (MPDO), or `jump_trajectory` (MCWF) |
 | linear PDE on a quantics grid | the model's MPO + `cbe_bug_step!(...; hermitian = false)` |
 | nonlinear PDE | `qtt_bug_step!(psi, GPFlow(model), t, h; order)` |
-| comparison | `Baselines`: `tdvp2_step!`, `tdvp_cbe1s_step!`, `dmrg_cbe1s!`, `qtt_tdvp2_step!` |
+| comparison | `Baselines`: `tdvp2_step!`, `tdvp2_composed_step!`, `qtt_tdvp2_step!` |
 
 ## Diagnostics
 

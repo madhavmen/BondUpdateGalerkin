@@ -225,13 +225,13 @@ struct CBEBugSweepInfo
     # matters because the Galerkin space is `b_L x b_R`: judging completeness from `b_L` alone can
     # call a basis complete when it is not, which is exactly the wrong way for a diagnostic to fail.
     root_right::Int
-    # Seconds inside `cbe_expand`, the only phase the randomised sketch makes cheaper. Without this
+    # Seconds inside the CBE (`dd_cbe_expand`), the only phase the randomised sketch makes cheaper. Without this
     # timer an rSVD study cannot tell a slow sketch from a fast sketch inside a small expansion
     # share, and those call for opposite responses: by Amdahl, the speedup is capped at 1/(1-f) for
     # an expansion share f.
     t_cbe::Float64
     # A phase breakdown of the step, because "the sketch did not help" has two very different
-    # causes and only one is a code problem. The sketch makes `cbe_expand` cheaper and nothing
+    # causes and only one is a code problem. The sketch makes the CBE cheaper and nothing
     # else, so Amdahl caps the whole-step speedup at `1/(1 - t_cbe/t_step)`. If `t_cbe` is a small
     # share, the answer is not a better sketch -- it is whatever these other phases are doing.
     t_kry::Float64      # building the Krylov frames (`_krylov_enrich`)

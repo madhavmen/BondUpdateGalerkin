@@ -134,7 +134,7 @@ apply_zero_site(shifted::ShiftedH, core) =
 
 # CBE-BUG: K and L basis sweeps in CBE frames, then ONE Galerkin step at the centre bond (only the
 # centre tensor is evolved, so nothing is counted twice). The K/L ODEs are never solved:
-# `cbe_expand` supplies the directions. The sweeps must not write back into `psi` (zero padding would
+# the DD-QR CBE (`dd_cbe_expand`) supplies the directions. The sweeps must not write back into `psi` (zero padding would
 # collapse the rank), and no rank-4 tensor is ever allocated.
 
 # ── writing an expansion back into the state ─────────────────────────────────

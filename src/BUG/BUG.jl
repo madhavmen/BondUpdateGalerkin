@@ -47,15 +47,11 @@ include("Core/Sweeps/half_sweeps.jl")
 include("Core/Sweeps/frontier_sweeps.jl")
 include("Core/Sweeps/frontier_closure.jl")
 include("Core/Sweeps/parallel_kls.jl")
-include("solve.jl")
 # The sweeps above call their basis selection only through a `BasisExpansion`; `Randomised/` adds
 # the strategies and their methods.
 include("Randomised/sketch.jl")
 include("Randomised/range_finder.jl")
 include("Randomised/cbe.jl")
-include("Randomised/cbe_expand.jl")
-include("Randomised/cbe_bond_update.jl")
-include("Randomised/cbe_mpo.jl")
 include("Randomised/dd_cbe.jl")
 include("Randomised/dd_cbe_controller.jl")
 include("Randomised/dd_cbe_expand.jl")
@@ -106,15 +102,12 @@ export truncate_sweep!, truncate_recursive!, AdaptiveBudget, BasisAllocation, ba
 export indicator, AdaptiveLedger, merge_ledger!, work_ceiling, bond_work_ceilings
 export budget_status, budget_diagnostic
 export BasisExpansion, expand_frame, sketch_closures, folded_sketch_closures, sampled_leak
-# diagnostics (Core/diagnostics.jl) and solver options (solve.jl)
+# diagnostics (Core/diagnostics.jl)
 export CBEBugRunInfo, CBEBugSweepInfo, KernelCounters, StepRecord, OneSiteOp
-export CBEBugOptions, SStepSolver, Propagate, LowestEigen
-# randomised controlled bond expansion (Randomised)
-export sketch_h_left, sketch_h_right, sector_graded_sketch, full_local_basis, CBEExpansion
-export cbe_expand, sketch_bond_left, sketch_bond_right, cbe_expand_bond, cbe_bond_update
-export DDQRExpansion, dd_cbe_expand, dd_reference_sketch, DDMemory, TwoSiteSketchOp, RootOp
+# randomised controlled bond expansion, DD-QR (Randomised)
+export sector_graded_sketch, CBEExpansion
+export DDQRExpansion, dd_cbe_expand, TwoSiteSketchOp, RootOp
 export apply_two_site_sketch!, apply_one_site!, apply_root!
-export BondExpansionInfo, expand_bond!, lanczos_lowest
 # real and imaginary time (TimeEvolution, ITE)
 export cbe_bug_step!, cbe_bug_midpoint_step!
 export ite_step!, ite_evolve!, log_panel_steps, uniform_beta_steps, beta_grid, uniform_schedule

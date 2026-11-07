@@ -8,7 +8,7 @@ engine for quantum many-body matrix product states and for quantics tensor train
 | `BUG` | the engine: states, MPOs, environments, Krylov solvers, the rank-adaptive BUG step (`cbe_bug_step!`), randomised controlled bond expansion, imaginary time, implicit Runge-Kutta roots for nonlinear flows |
 | `QMB` | spin and fermion models (XX/XXZ, TFIM, OAT, PXP, MBL, Hubbard), Lindblad dynamics as MPDOs or quantum-jump trajectories, observables |
 | `QTTS` | quantics grids and orderings, derivative MPOs with explicit boundary conditions, Heston and Gross-Pitaevskii models, the nonlinear QTT step |
-| `Baselines` | TDVP (one- and two-site, with CBE), CBE-DMRG, QTT TDVP |
+| `Baselines` | two-site TDVP, QTT TDVP |
 
 ## A first run
 

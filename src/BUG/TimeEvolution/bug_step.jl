@@ -83,11 +83,8 @@ function cbe_bug_step!(
     # input's evolution under this round's `H1`, and extends only the complement
     # of that input (`_rk_complement`).
     recycle_mode::Symbol = :images,
-    # Ablation, not a method choice (conventional
-    # controls). `dd_width = l > 0`: every DD-QR CBE takes ONE probe of width
-    # `l` (no holdout, no adaptive growth). `krylov_depth = m > 0`: every local
+    # Ablation, not a method choice (a conventional control). `krylov_depth = m > 0`: every local
     # Krylov stage runs exactly `m` steps with no weight stop.
-    dd_width::Int = 0,
     krylov_depth::Int = 0,
     # ── imaginary time ──
     # The root integrator (`ROOT_METHODS`): `:exp` is the Saad-converged
@@ -163,16 +160,6 @@ function cbe_bug_step!(
     # under `exact`: the folded leak is sampled, and the debug
     # reference draws no random numbers. `false` keeps the exact `H*Theta` leak.
     fold_omega::Union{Nothing,Bool} = nothing,
-    # Which DD-QR CBE directions survive when the work ceiling binds:
-    # `:weight` the heaviest across all sectors, `:sector` the first sectors in
-    # storage order (`dd_cbe_expand`). Below the ceiling both are identical.
-    cap_order::Symbol = :sector,
-    # Ablation, not a method choice (arm D3). `:hybrid`: every
-    # DD-QR CBE takes the predictor + one-shot + independent-holdout controller
-    # (`_dd_hybrid`), its predictor carried across steps in `dd_memory` (a
-    # `DDMemory`, which also traces every call). `:adaptive` is the existing D1.
-    dd_policy::Symbol = :adaptive,
-    dd_memory = nothing,
     # The sweeps' basis-selection strategy (Core/RankAdaptation/basis_expansion.jl).
     expansion::BasisExpansion = DDQRExpansion(),
     rng::AbstractRNG = MersenneTwister(0x5EED),
@@ -250,10 +237,6 @@ function cbe_bug_step!(
         exact = exact,
         alloc = alloc,
         workcap = wcap_step,
-        cap_order = cap_order,
-        dd_width = dd_width,
-        dd_policy = dd_policy,
-        dd_memory = dd_memory,
     )
 
     # The ledger and the RNG are per half-sweep, because under `parallel = true` the two run

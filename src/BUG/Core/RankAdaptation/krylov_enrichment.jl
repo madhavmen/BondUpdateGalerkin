@@ -127,7 +127,7 @@ Append to `frame` the local directions of `residual = (I - QQ') direction` (`Q` 
 the allowance requires: the smallest number whose weighted discarded tail `weight * sqrt(sum s^2)`
 fits (Test A's rule, `_tail_rank`). Orthogonalised within each charge sector by the block SVD,
 cut only at the numerical floor `_rank_cut`, re-orthogonalised against `frame` before the direct
-sum -- the same guard `cbe_expand` applies to its own appended block.
+sum -- the same guard `dd_cbe_expand` applies to its own appended block (`_cap_to_local_room`).
 
 `room` is what the work ceiling still allows on the frame leg: at most that many are
 appended, and `fits = false` reports that the allowance needed more.

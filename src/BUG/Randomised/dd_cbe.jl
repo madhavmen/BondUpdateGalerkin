@@ -116,28 +116,6 @@ end
 apply_root!(result_ref::Base.RefValue, core, op::RootOp) =
     (result_ref[] = apply_zero_site(op, core); result_ref)
 
-"""
-    dd_reference_sketch(frame, mpo, bond, lenv, renv, Om, side) -> TLArray
-
-Test/debug only (the full-DD exact tiny reference): `P_L^D X P_R^D Om` (`side = :left`)
-or `P_R^D X' P_L^D Om` (`:right`) through the MATERIALISED `H Theta` and the project-first
-closures of `_sketch_closures`. Never on the production path.
-"""
-function dd_reference_sketch(
-    frame::BondFrame,
-    mpo::MPO,
-    bond::Int,
-    lenv::MPOLink,
-    renv::MPOLink,
-    Om,
-    side::Symbol,
-)
-    skl, skr =
-        _sketch_closures(frame, () -> apply_h_two_site(frame_theta(frame), mpo, bond, lenv, renv))
-    return side === :left ? skl(perp_component_right(frame.V0, Om)) :
-           skr(perp_component(frame.U0, Om))
-end
-
 # ── probes in the discarded space only ───────────────────────────────────────────────────
 
 """

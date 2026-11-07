@@ -70,60 +70,6 @@ sz_profile(psi) = real.(magnetisation(copy(psi))) ./ real(overlap(psi, psi))
         @test errors[2] < errors[1]
     end
 
-    @testset "one-site TDVP with CBE: unitary, close to free fermions" begin
-        set_symmetry!(:U1)
-        clear_fusion_cache!()
-        chain_length, time_step, steps = 6, 0.05, 3     # maxdim 16 > 8, the largest bond at L = 6
-        exact_sz = xx_free_fermion_sz(
-            chain_length,
-            steps * time_step;
-            J = 1.0,
-            occupied = 1:2:chain_length,
-        )
-        mpo_state = neel_state(chain_length)
-        chain_state = neel_state(chain_length)
-        initial_norm = norm(mpo_state)
-        hamiltonian = xxz_mpo(chain_length; J = 1.0, delta = 0.0)
-        chain = xxz_chain(chain_length; J = 1.0, delta = 0.0)
-        for _ = 1:steps
-            tdvp_cbe1s_step!(
-                mpo_state,
-                hamiltonian,
-                -im * time_step;
-                maxdim = 16,
-                trunc_thresh = 1e-14,
-            )
-            tdvp1_cbe_step!(chain_state, chain, -im * time_step; maxdim = 16, trunc_thresh = 1e-14)
-        end
-        for state in (mpo_state, chain_state)
-            @test norm(state) ≈ initial_norm atol = 1e-9                     # real time is unitary
-            @test maximum(bond_dims(state)) > 1                              # CBE grew the rank
-            @test maximum(abs.(sz_profile(state) .- exact_sz)) < 1e-2
-        end
-    end
-
-    @testset "CBE-DMRG: exact ground energy, variational" begin
-        set_symmetry!(:U1)
-        clear_fusion_cache!()
-        chain_length = 6                                 # maxdim 16 > 8, the largest bond
-        hamiltonian = xxz_mpo(chain_length; J = 1.0, delta = 1.0)
-        exact_energy = eigen(Hermitian(Matrix(dense_heisenberg(chain_length)))).values[1]
-        psi = neel_state(chain_length)
-        dmrg_run = dmrg_cbe1s!(
-            psi,
-            hamiltonian;
-            n_sweeps = 20,
-            etol = 1e-11,
-            tol_basis = 1e-6,
-            tol_trunc = 1e-10,
-            maxdim = 16,
-        )
-        @test dmrg_run.energies[end] ≈ exact_energy atol = 1e-8
-        @test dmrg_run.energies[end] >= exact_energy - 1e-9                     # variational
-        @test maximum(dmrg_run.max_bond_dims) > 1                               # CBE grew the rank from Neel
-        @test length(dmrg_run.ledgers[end].bond_log) == 2 * (chain_length - 1)  # one entry per bond visit
-    end
-
     @testset "QTT TDVP2 at full rank is the exact flow" begin
         set_symmetry!(:none)
         clear_fusion_cache!()
