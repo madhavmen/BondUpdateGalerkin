@@ -177,10 +177,8 @@ end
 
     nonlinear = gp_model(g; gnl = 1.0, gamma = 0.1, mu = 0.0, omega = 1.0, rho_tol = 1e-14)
     # real time, and the normalised imaginary-time flow (whose Jacobian carries D mu)
-    @testset "nonlinear stages: every path solves the same equations" for normalised in (
-        false,
-        true,
-    )
+    @testset "nonlinear stages: every path solves the same equations" for normalised in
+                                                                          (false, true)
         flow = normalised ? GPFlow(nonlinear; imaginary = true) : GPFlow(nonlinear)
         @test flow_normalized(flow) == normalised
         # the full path's Jacobian has no D mu: a Newton-like iteration, given room to converge

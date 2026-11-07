@@ -226,7 +226,13 @@ function tt_hadamard_fit(
     if site_count == 1
         C = [T.(A[1] .* B[1])]
         return C,
-        (chi = 1, err_bound = 0.0, seconds = (time_ns() - start) / 1e9, retried = false, sweeps = 0)
+        (
+            chi = 1,
+            err_bound = 0.0,
+            seconds = (time_ns() - start) / 1e9,
+            retried = false,
+            sweeps = 0,
+        )
     end
     # right-canonical start (site 1 holds the norm): the left-to-right half-sweep needs sites 2..L
     # right-orthonormal, so that each two-site target is an orthogonal projection

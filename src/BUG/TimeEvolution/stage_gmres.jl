@@ -221,8 +221,7 @@ function _gcro_real(
         relres = abs(rhs[used+1]) / target_norm
         (stalled || relres <= tol) && break
     end
-    last_cycle === nothing ||
-        _recycle_update!(recycle, recycled_basis, recycled_images, last_cycle)
+    last_cycle === nothing || _recycle_update!(recycle, recycled_basis, recycled_images, last_cycle)
     return solution, iterations, relres
 end
 
@@ -277,12 +276,10 @@ function _separable_precond(
     nstages = size(butcher, 1)
     # the per-stage Sylvester coefficients: (1/2 - h T_jj pref Tl) X + X (1/2 - h T_jj pref Tr)
     half(triangle) = Matrix{ComplexF64}(I, size(triangle)...) ./ 2
-    left_coefficients = [
-        half(Tl) .- (step_size * stage_triangle[stage, stage] * pref) .* Tl for stage = 1:nstages
-    ]
-    right_coefficients = [
-        half(Tr) .- (step_size * stage_triangle[stage, stage] * pref) .* Tr for stage = 1:nstages
-    ]
+    left_coefficients =
+        [half(Tl) .- (step_size * stage_triangle[stage, stage] * pref) .* Tl for stage = 1:nstages]
+    right_coefficients =
+        [half(Tr) .- (step_size * stage_triangle[stage, stage] * pref) .* Tr for stage = 1:nstages]
     # the separable operator in the Schur bases
     separable(root) = pref .* (Tl * root .+ root * Tr)
     return function (stage_roots)
@@ -311,8 +308,8 @@ function _separable_precond(
             solved[stage] = sylvester_solution ./ scale
         end
         return [
-            Ul * sum(stage_vectors[stage, other] .* solved[other] for other = 1:nstages) * Ur'
-            for stage = 1:nstages
+            Ul * sum(stage_vectors[stage, other] .* solved[other] for other = 1:nstages) * Ur' for
+            stage = 1:nstages
         ]
     end
 end

@@ -10,13 +10,7 @@
 using Test, LinearAlgebra
 import Random
 import BondUpdateGalerkin.BUG:
-    _kry_weight,
-    _block_weight,
-    _arnoldi_chain,
-    _tail,
-    _tail_sup,
-    _tridiag_eigen,
-    _coeffs_from_eigen
+    _kry_weight, _block_weight, _arnoldi_chain, _tail, _tail_sup, _tridiag_eigen, _coeffs_from_eigen
 
 # Plain Arnoldi with two Gram-Schmidt passes, `H basis[:, 1:k] = basis[:, 1:k+1] hessenberg[1:k+1,
 # 1:k]`: the test's own decomposition, so the weights are graded against a recurrence they do not

@@ -307,8 +307,7 @@ function qtt_tdvp2_step!(
     for i = (L-1):-1:1                                  # right to left, h/2
         Th = substep(theta(i), i, i + 1, half, tmid)
         M, C[i+1] = cut(Th, false)
-        lagged &&
-            (right_envs[i] = _env_right(right_envs[i+1], C[i+1], fixed_operator[i+1], C[i+1]))
+        lagged && (right_envs[i] = _env_right(right_envs[i+1], C[i+1], fixed_operator[i+1], C[i+1]))
         if i > 1
             C[i] = M
             n0 = norm(M)

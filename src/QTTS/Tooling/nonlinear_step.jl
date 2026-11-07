@@ -142,8 +142,7 @@ function qtt_bug_step!(
     stage_basis in (:predictor, :exact) ||
         throw(ArgumentError("stage_basis must be :predictor or :exact, got :$stage_basis"))
     solver =
-        stage_solver !== :auto ? stage_solver :
-        fl isa LinearFlow ? :krylov_rational : :newton_gmres
+        stage_solver !== :auto ? stage_solver : fl isa LinearFlow ? :krylov_rational : :newton_gmres
     solver in (:newton_gmres, :krylov_rational, :krylov_root) || throw(
         ArgumentError(
             "stage_solver must be :auto, :newton_gmres, :krylov_rational or :krylov_root, " *

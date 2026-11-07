@@ -72,8 +72,7 @@ using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
     overlap_ratio =
         abs(overlap(frames_state, start_state)) / (norm(frames_state) * norm(start_state))
     @test 1 - overlap_ratio < 1e-12
-    @test [leg_dim(frame, 3) for frame in frames_ref[].left_frames] ==
-          [leg_dim(frame, 3) for frame in full_frames.left_frames]
+    @test [leg_dim(frame, 3) for frame in frames_ref[].left_frames] == [leg_dim(frame, 3) for frame in full_frames.left_frames]
 
     @test_throws ArgumentError keep_step(; keep_states = [kept_state], keep_tols = [1e-6, 1e-6])
     @test_throws ArgumentError cbe_bug_step!(
