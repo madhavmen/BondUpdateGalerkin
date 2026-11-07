@@ -1,5 +1,5 @@
 # The half-sweep Krylov stage: the Krylov weight (a residual integral), the frame extension,
-# `_krylov_enrich`, and the frame merge and ledger fold around it. The local recurrence it
+# `_krylov_enrich`, and the ledger fold after it. The local recurrence it
 # drives (`_krylov_basis`) is in `krylov_recurrence.jl`, included right after this file.
 
 # ── THE HALF-SWEEP KRYLOV STAGE OF `cbe_bug_step!` (Tests C and D) ───────────────────────────
