@@ -285,14 +285,12 @@ function _projection_miss(psi::SymMPS, left_frames, right_frames, root_link::Int
 end
 
 "`S = (W ⊗ Z)' psi`, the root coefficients of `P psi`."
-_project_root(psi::SymMPS, fr::KLFrames) = 
-    contract(
-        _overlap_left(psi, fr.left_frames, fr.root_link),
-        (2,),
-        _overlap_right(psi, fr.right_frames, fr.root_link),
-        (1,),
-    ),
-
+_project_root(psi::SymMPS, fr::KLFrames) = contract(
+    _overlap_left(psi, fr.left_frames, fr.root_link),
+    (2,),
+    _overlap_right(psi, fr.right_frames, fr.root_link),
+    (1,),
+)
 
 "`B = P H P` at the root, from the frames' cached environments."
 _root_generator(mpo, fr::KLFrames) = shift_h(

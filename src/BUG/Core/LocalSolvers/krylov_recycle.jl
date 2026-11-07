@@ -119,9 +119,8 @@ function _tail_overlaps(Anew::SymMPS, Aold::SymMPS, side::Symbol)
                 overlaps[site+1] === nothing ? Aold[site] :
                 contract(Aold[site], (3,), overlaps[site+1], (2,))
             # close the physical and right legs against the conjugated bra site
-            overlaps[site] = 
-                contract(_rb(Anew[site], site, site_count)', (2, 3), ket_with_env, (2, 3)),
-            
+            overlaps[site] =
+                contract(_rb(Anew[site], site, site_count)', (2, 3), ket_with_env, (2, 3))
         end
     else
         for site = 1:(site_count-2)
@@ -130,9 +129,8 @@ function _tail_overlaps(Anew::SymMPS, Aold::SymMPS, side::Symbol)
                 overlaps[site] === nothing ? Aold[site] :
                 contract(overlaps[site], (2,), Aold[site], (1,))
             # close the left and physical legs against the conjugated bra site
-            overlaps[site+1] = 
-                contract(_rb(Anew[site], site, site_count)', (1, 2), ket_with_env, (1, 2)),
-            
+            overlaps[site+1] =
+                contract(_rb(Anew[site], site, site_count)', (1, 2), ket_with_env, (1, 2))
         end
     end
     return overlaps

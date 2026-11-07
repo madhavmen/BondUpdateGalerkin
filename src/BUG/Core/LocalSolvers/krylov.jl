@@ -221,9 +221,8 @@ function lanczos_expv(
             # residual grew by one term per step and made the loop O(k^3 N). Modified Gram-Schmidt
             # is sequential, so this changes only when each subtraction is evaluated, not the
             # arithmetic.
-            residual = TLArray(
-                residual + (-diag_entry) * basis_vector + (-offdiag_entry) * basis[end-1],
-            )
+            residual =
+                TLArray(residual + (-diag_entry) * basis_vector + (-offdiag_entry) * basis[end-1])
             if reorth
                 # One materialisation per pass, not per basis vector. `residual` stays concrete
                 # for the whole pass and only the correction is lazy, so every inner product is

@@ -37,8 +37,7 @@ function _mpo_left_step(environment, site_tensor, mpo_tensor, bra_tensor = site_
         # Boundary: `link_l` is the dim-1 vacuum, contracted bra-to-ket, and the MPO's `w_l`
         # is the dim-1 leg left by trimming, dropped rather than contracted.
         contracted = contract(mpo_tensor, (2,), site_tensor, (2,))  # (w_l, s_bra, w_r, ℓ_l, ℓ_r)
-        contracted =
-            contract(contracted, (2, 4), _bra_left_boundary(bra_tensor), (2, 1))
+        contracted = contract(contracted, (2, 4), _bra_left_boundary(bra_tensor), (2, 1))
         contracted = TLArray(deleteSingleton(contracted, 1))  # (w_r, ℓ_r, ℓ_r')
         return TLArray(permutedims(contracted, (3, 1, 2)))
     end
@@ -66,8 +65,7 @@ function _mpo_right_step(environment, site_tensor, mpo_tensor)
         # Boundary: `link_r` is the dim-1 vacuum, contracted bra-to-ket; the MPO's dim-1 `w_r`
         # is dropped.
         contracted = contract(mpo_tensor, (2,), site_tensor, (2,))  # (w_l, s_bra, w_r, ℓ_l, ℓ_r)
-        contracted =
-            contract(contracted, (2, 5), _bra_right_boundary(site_tensor), (2, 3))
+        contracted = contract(contracted, (2, 5), _bra_right_boundary(site_tensor), (2, 3))
         contracted = TLArray(deleteSingleton(contracted, 2))  # (w_l, ℓ_l, ℓ_l')
         return TLArray(permutedims(contracted, (3, 1, 2)))
     end
@@ -220,8 +218,7 @@ function _mpo2_left_step(environment, site_tensor, mpo_tensor)
         contracted = contract(mpo_tensor, (2,), site_tensor, (2,))  # (wb_l, s1, wb_r, ℓ_l, ℓ_r)
         # (wb_l, wb_r, ℓ_l, ℓ_r, wa_l, s2, wa_r)
         contracted = contract(contracted, (2,), Wa, (2,))
-        contracted =
-            contract(contracted, (6, 3), _bra_left_boundary(site_tensor), (2, 1))
+        contracted = contract(contracted, (6, 3), _bra_left_boundary(site_tensor), (2, 1))
         #                                                   (wb_l, wb_r, ℓ_r, wa_l, wa_r, ℓ_r')
         # (wb_r, ℓ_r, wa_l, wa_r, ℓ_r')
         contracted = TLArray(deleteSingleton(contracted, 1))
@@ -267,9 +264,7 @@ function mpo_variance(psi::SymMPS, mpo::MPO)
     contracted = TLArray(deleteSingleton(contracted, 4))  # (bra, ℓ_r, s2)
     h_squared = real(
         ComplexF64(
-            TLArray(
-                contract(contracted, (1, 3, 2), _bra_right_boundary(last_tensor), (1, 2, 3)),
-            )[],
+            TLArray(contract(contracted, (1, 3, 2), _bra_right_boundary(last_tensor), (1, 2, 3)))[],
         ),
     )
     norm_squared = norm(psi)^2

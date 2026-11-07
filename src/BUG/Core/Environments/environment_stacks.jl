@@ -148,8 +148,7 @@ end
 # ── local pieces ─────────────────────────────────────────────────────────────
 
 "Retag an operator's two site legs onto site `site`, leaving any op-leg alone."
-_retag_sites(operator, site::Int) =
-    TLArray(setitag(setitag(operator, 1, "S,$site"), 2, "S,$site"))
+_retag_sites(operator, site::Int) = TLArray(setitag(setitag(operator, 1, "S,$site"), 2, "S,$site"))
 
 """
     _apply_site_op(site_tensor, operator, site) -> TLArray

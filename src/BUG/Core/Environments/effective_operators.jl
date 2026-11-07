@@ -184,8 +184,7 @@ Lives here beside [`_frame_from`](@ref) because both are shared frame plumbing f
 It previously sat in `jan_bug.jl`, and deleting that file took `cbe_bug_step!` down with it --
 the helper is not specific to any one integrator.
 """
-_relink(tensor, left_tag, right_tag) =
-    TLArray(setitag(setitag(tensor, 1, left_tag), 3, right_tag))
+_relink(tensor, left_tag, right_tag) = TLArray(setitag(setitag(tensor, 1, left_tag), 3, right_tag))
 
 """
     _frame_from(left, right) -> BondFrame
@@ -310,11 +309,7 @@ function apply_zero_site(effective_h::ZeroSiteH, core)
         else
             contract(left, (2,), or, (2,))
         end                                             # (bra_l, bra_r)
-        add!(
-            TLArray(
-                effective_h.coeffs[term_index] * _unprime(_unprime(TLArray(out), 1), 2),
-            ),
-        )
+        add!(TLArray(effective_h.coeffs[term_index] * _unprime(_unprime(TLArray(out), 1), 2)))
     end
     acc === nothing && throw(
         ArgumentError(

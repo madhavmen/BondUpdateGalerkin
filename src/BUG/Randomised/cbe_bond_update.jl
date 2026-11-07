@@ -268,9 +268,8 @@ function _expanding_krylov(
     probe::Symbol = :residual,
 )
     # Project a two-site tensor onto the root space of the given frames: `left' th right'`.
-    project(left_basis, right_basis, th) = 
-        contract(contract(left_basis', (1, 2), th, (1, 2)), (2, 3), right_basis', (2, 3)),
-    
+    project(left_basis, right_basis, th) =
+        contract(contract(left_basis', (1, 2), th, (1, 2)), (2, 3), right_basis', (2, 3))
 
     # Embed a core from the (Uo,Vo) basis into (Un,Vn) by computed overlaps (robust to a rotation by
     # the orthonormality guard); the overlaps are built once per growth pass, not per stored vector.

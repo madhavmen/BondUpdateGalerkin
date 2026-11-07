@@ -161,27 +161,21 @@ function _kls_finish(
         acc = embed(Sh)
         Up === nothing || (
             acc =
-                acc + 
-                    contract(
-                        contract(Wn', (1, 2), perp_component(left_root, Kh), (1, 2)),
-                        (2,),
-                        ER,
-                        (1,),
-                    ),
-                
+                acc + contract(
+                    contract(Wn', (1, 2), perp_component(left_root, Kh), (1, 2)),
+                    (2,),
+                    ER,
+                    (1,),
+                )
         )
         Vp === nothing || (
             acc =
-                acc + 
-                    contract(
-                        EL,
-                        (2,),
-                        
-                            contract(perp_component_right(right_root, Lh), (2, 3), Zn', (2, 3)),
-                        ,
-                        (1,),
-                    ),
-                
+                acc + contract(
+                    EL,
+                    (2,),
+                    contract(perp_component_right(right_root, Lh), (2, 3), Zn', (2, 3)),
+                    (1,),
+                )
         )
         TLArray(acc)
     end
