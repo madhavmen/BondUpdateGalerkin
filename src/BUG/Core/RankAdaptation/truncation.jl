@@ -131,9 +131,8 @@ function truncate_recursive!(
         # `A = U S Vd`: keep `Vd` here and hand `U S` outward, so the child receives the weight
         # and its own SVD is a genuine Schmidt decomposition.
         psi[site] = TLArray(setitag(res.Vd, 1, tag))
-        psi[site-1] = TLArray(
-            setitag(contract(psi[site-1], (3,), TLArray(res.U * res.S), (1,)), 3, tag),
-        )
+        psi[site-1] =
+            TLArray(setitag(contract(psi[site-1], (3,), TLArray(res.U * res.S), (1,)), 3, tag))
         psi.center = site - 1
     end
 
@@ -148,9 +147,8 @@ function truncate_recursive!(
         account!(res, 2, site)                # splits bond (site, site+1)
         tag = Telum.inds(psi[site])[3].itags
         psi[site] = TLArray(setitag(res.U, 3, tag))
-        psi[site+1] = TLArray(
-            setitag(contract(TLArray(res.S * res.Vd), (2,), psi[site+1], (1,)), 1, tag),
-        )
+        psi[site+1] =
+            TLArray(setitag(contract(TLArray(res.S * res.Vd), (2,), psi[site+1], (1,)), 1, tag))
         psi.center = site + 1
     end
 

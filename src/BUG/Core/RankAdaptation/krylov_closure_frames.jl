@@ -265,11 +265,7 @@ function _projection_miss(psi::SymMPS, left_frames, right_frames, root_link::Int
     res = svd(AL, (1,); cutoff = 0.0)
     left_factor[root_link] = TLArray(res.S * res.Vd)
     for bond = (root_link+1):(site_count-1)
-        res = svd(
-            contract(left_factor[bond-1], (2,), psi[bond], (1,)),
-            (1, 2);
-            cutoff = 0.0,
-        )
+        res = svd(contract(left_factor[bond-1], (2,), psi[bond], (1,)), (1, 2); cutoff = 0.0)
         left_factor[bond] = TLArray(res.S * res.Vd)
     end
     # Right side, inside the left frames: each carried site's part outside its right frame.
@@ -336,8 +332,11 @@ function _frontier_mps(psi::SymMPS, fr::KLFrames, core)
     site_count, root_link = length(psi), fr.root_link
     site_tensors = Vector{Any}(undef, site_count)
     for site = 1:(root_link-1)
-        site_tensors[site] =
-            _relink(fr.left_frames[site], Telum.inds(psi[site])[1].itags, Telum.inds(psi[site])[3].itags)
+        site_tensors[site] = _relink(
+            fr.left_frames[site],
+            Telum.inds(psi[site])[1].itags,
+            Telum.inds(psi[site])[3].itags,
+        )
     end
     # The root core sits on the last left frame.
     site_tensors[root_link] = _relink(
@@ -346,8 +345,11 @@ function _frontier_mps(psi::SymMPS, fr::KLFrames, core)
         Telum.inds(psi[root_link])[3].itags,
     )
     for bond = root_link:(site_count-1)
-        site_tensors[bond+1] =
-            _relink(fr.right_frames[bond], Telum.inds(psi[bond+1])[1].itags, Telum.inds(psi[bond+1])[3].itags)
+        site_tensors[bond+1] = _relink(
+            fr.right_frames[bond],
+            Telum.inds(psi[bond+1])[1].itags,
+            Telum.inds(psi[bond+1])[3].itags,
+        )
     end
     return SymMPS(site_tensors, root_link)
 end

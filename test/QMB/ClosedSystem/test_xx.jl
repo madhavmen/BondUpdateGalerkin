@@ -5,7 +5,7 @@
 # compares two operators on one state, so any entangled state does.
 
 using Test, LinearAlgebra
-import Random
+import Random, Telum
 using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
 
 """

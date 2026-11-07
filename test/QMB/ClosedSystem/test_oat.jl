@@ -41,7 +41,7 @@ end
 
     # `S^x`, not `-i S^y`: the sign trap named in `sx_operator`'s docstring, checked on a state
     # that is NOT symmetric under spin flip so the two would actually differ.
-    @test Matrix(BondUpdateGalerkin.BUG._sector_block(sx_operator(), 1)) ≈ [0 0.5; 0.5 0] atol = 1e-12
+    @test Matrix(BUG._sector_block(sx_operator(), 1)) ≈ [0 0.5; 0.5 0] atol = 1e-12
     up = product_state(fill(:up, L))
     @test all(abs.(sx_profile(copy(up))) .< 1e-12)        # ⟨↑|S^x|↑⟩ = 0
 

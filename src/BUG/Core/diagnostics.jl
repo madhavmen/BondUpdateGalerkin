@@ -283,7 +283,11 @@ function _assemble_and_compress!(
     discarded = _trunc_weight(res)
     # Left of the root: the left frames, relinked onto the state's own link tags.
     for site = 1:(root_link-1)
-        psi[site] = _relink(left_frames[site], Telum.inds(psi[site])[1].itags, Telum.inds(psi[site])[3].itags)
+        psi[site] = _relink(
+            left_frames[site],
+            Telum.inds(psi[site])[1].itags,
+            Telum.inds(psi[site])[3].itags,
+        )
     end
     # The root bond: U joins the left frame, S Vd the right frame, so the centre lands on
     # root_link + 1.
@@ -293,8 +297,11 @@ function _assemble_and_compress!(
     psi[root_link+1] = _relink(TLArray((res.S * res.Vd) * right_frames[root_link]), t3c, t3r)
     # Right of the root: right frame `bond` becomes site `bond + 1`.
     for bond = (root_link+1):(site_count-1)
-        psi[bond+1] =
-            _relink(right_frames[bond], Telum.inds(psi[bond+1])[1].itags, Telum.inds(psi[bond+1])[3].itags)
+        psi[bond+1] = _relink(
+            right_frames[bond],
+            Telum.inds(psi[bond+1])[1].itags,
+            Telum.inds(psi[bond+1])[3].itags,
+        )
     end
     psi.center = root_link + 1
     root_rank = leg_dim(psi[root_link], 3)

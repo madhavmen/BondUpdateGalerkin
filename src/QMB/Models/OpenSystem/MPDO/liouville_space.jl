@@ -281,7 +281,11 @@ function mpdo_identity_sector(ls::LiouvilleSpace, L::Int, like::SymMPS)
         isempty(data) &&
             throw(ErrorException("mpdo_identity_sector: no reachable sector at site $i"))
         kept = Set(d[1][3] for d in data)
-        spaces = (Telum.spaces(B)[1], Telum.spaces(B)[2], [(l, 1) for (l, _) in Telum.spaces(B)[3] if l in kept])
+        spaces = (
+            Telum.spaces(B)[1],
+            Telum.spaces(B)[2],
+            [(l, 1) for (l, _) in Telum.spaces(B)[3] if l in kept],
+        )
         f = _localspace_cgt_fields(data, symm(B), spaces)
         A = TLArray(symm(B), f.qlabels, f.wmatdata, f.wmatinfo, f.RMTs, Telum.inds(B), spaces)
         push!(tensors, TLArray(A * (1.0 + 0.0im)))

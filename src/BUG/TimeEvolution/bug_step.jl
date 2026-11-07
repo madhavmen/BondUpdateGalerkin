@@ -204,12 +204,7 @@ function cbe_bug_step!(
     # The work ceiling, an `Int` for every bond or one per bond (`_cap_at`).
     wcap_step = options.workcap
     # The expansion settings every DD-QR CBE of the step takes, half-sweeps and frontier sweeps.
-    exkw = (
-        growth = ADAPTIVE_GROWTH,
-        exact = exact,
-        alloc = alloc,
-        workcap = wcap_step,
-    )
+    exkw = (growth = ADAPTIVE_GROWTH, exact = exact, alloc = alloc, workcap = wcap_step)
 
     # The ledger and the RNG are per half-sweep, because under `parallel = true` the two run
     # concurrently: a shared `AdaptiveLedger` loses `+=` updates, and a shared `MersenneTwister`

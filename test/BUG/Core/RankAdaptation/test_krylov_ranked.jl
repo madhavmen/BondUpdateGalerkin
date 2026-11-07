@@ -53,7 +53,8 @@ include(joinpath(@__DIR__, "..", "..", "..", "common", "dense_reference.jl"))
     for order in (2, 3)
         @testset "order $order: sequential vs ranked" begin
             plain_error, plain_stage = step_error_and_stage(; order = order)
-            tight_error, tight_stage = step_error_and_stage(; order = order, krylov_rank_tol = 1e-12)
+            tight_error, tight_stage =
+                step_error_and_stage(; order = order, krylov_rank_tol = 1e-12)
             loose_error, loose_stage = step_error_and_stage(; order = order, krylov_rank_tol = 1e-6)
             @test plain_error < 1e-6                     # sanity: the reference arm is accurate
             @test tight_error <= 10 * plain_error + 1e-10

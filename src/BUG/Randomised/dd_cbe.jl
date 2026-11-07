@@ -196,7 +196,8 @@ function _thin_qr(sketch, fl::Int, ref::TLIndex, tag::AbstractString, thr::Float
         push!(groups[charge], block)
     end
     # every defined block in logical leg order (Telum keeps permutation/conjugation/scale deferred)
-    blocks = Dict(block => _sector_block(sketch, block) for charge in order for block in groups[charge])
+    blocks =
+        Dict(block => _sector_block(sketch, block) for charge in order for block in groups[charge])
     isempty(blocks) && return nothing
     newq = similar(Telum.logical_qlabels(sketch), 0)
     newR = Array{eltype(first(values(blocks))),ndims(first(values(blocks)))}[]
@@ -249,7 +250,8 @@ function _thin_qr(sketch, fl::Int, ref::TLIndex, tag::AbstractString, thr::Float
     isempty(keep) && return nothing
     wd, wi = Telum._copy_wmat_storage(sketch, keep; deep = true)
     inds = ntuple(
-        leg -> leg == fl ? TLIndex(tag, ref.dir, ref.plev, 0, ref.dual) : Telum.inds(sketch)[leg],
+        leg ->
+            leg == fl ? TLIndex(tag, ref.dir, ref.plev, 0, ref.dual) : Telum.inds(sketch)[leg],
         QD,
     )
     spaces = ntuple(leg -> leg == fl ? space : copy(Telum.spaces(sketch)[leg]), QD)

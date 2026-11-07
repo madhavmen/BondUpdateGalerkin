@@ -173,9 +173,7 @@ function _sample_residual(basis, project, sketch, draw, nh::Int, wleg::Int, side
         # The residual restricted to this one width sector.
         Rq =
             length(Telum.spaces(residual)[rleg]) == 1 ? residual :
-            TLArray(
-                getsub(residual, rleg, label -> label == sector ? (1:sector_size) : nothing),
-            )
+            TLArray(getsub(residual, rleg, label -> label == sector ? (1:sector_size) : nothing))
         per[sector] = norm(Rq)^2 / n_q
     end
     return (sqrt(sum(values(per); init = 0.0)), per, cols)

@@ -28,7 +28,10 @@ Base.getindex(mpo::MPO, site::Int) = mpo.W[site]
 "Virtual (MPO bond) dimension on each link `0 … length(mpo)`."
 mpo_virtual_dims(mpo::MPO) = vcat(
     [sum(block_dim for (_, block_dim) in Telum.spaces(mpo[1])[1]; init = 0)],
-    [sum(block_dim for (_, block_dim) in Telum.spaces(mpo[site])[4]; init = 0) for site = 1:length(mpo)],
+    [
+        sum(block_dim for (_, block_dim) in Telum.spaces(mpo[site])[4]; init = 0) for
+        site = 1:length(mpo)
+    ],
 )
 
 # Each automaton row is written out literally and `oplus` direct-sums them, inferring the zero
@@ -36,8 +39,7 @@ mpo_virtual_dims(mpo::MPO) = vcat(
 # its channel's sector; under `:SU2` the S=1 irrep), so nothing here is symmetry-specific.
 
 "Retag an operator's two site legs onto site `site`, leaving any op-leg alone."
-_mpo_retag(operator, site::Int) =
-    TLArray(setitag(setitag(operator, 1, "S,$site"), 2, "S,$site"))
+_mpo_retag(operator, site::Int) = TLArray(setitag(setitag(operator, 1, "S,$site"), 2, "S,$site"))
 
 "The ket-facing and bra-facing site legs of `operator`, found by ARROW: a plain operator has
 the ket leg at 1, an adjoint (`Sp'`) at 2. Hard-coding leg 1 breaks on the adjoint half of
@@ -135,17 +137,11 @@ function mpo_product(mpo::MPO, psi::SymMPS)
         else
             # undo the previous site's fusion on (ℓ_l, w_l): F'F is the identity on the pair,
             # with F = fusion
-            TLArray(
-                permutedims(
-                    contract(fusion', (1, 2), product_tensor, (4, 1)),
-                    (1, 2, 4, 3),
-                ),
-            )
+            TLArray(permutedims(contract(fusion', (1, 2), product_tensor, (4, 1)), (1, 2, 4, 3)))
         end                                                           # (ℓ_l, s, ℓ_r, w_r)
         # Placeholder tag: the fused link must not share `L,i+1` with the leg it replaces.
-        fusion = TLArray(
-            getIdentity((product_tensor, 3), (product_tensor, 4); itag = "Jf,$(site + 1)"),
-        )
+        fusion =
+            TLArray(getIdentity((product_tensor, 3), (product_tensor, 4); itag = "Jf,$(site + 1)"))
         # (ℓ_l, s, fused)
         out[site] = contract(product_tensor, (3, 4), fusion, (1, 2))
     end

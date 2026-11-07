@@ -98,15 +98,13 @@ function _frontier_left(
     for bond = 1:root_link
         enrich || (lch = chain[bond])
         old_frame = _check_frame(
-            Pm === nothing ? fr.left_frames[bond] :
-            contract(Pm, (2,), fr.left_frames[bond], (1,)),
+            Pm === nothing ? fr.left_frames[bond] : contract(Pm, (2,), fr.left_frames[bond], (1,)),
             :left,
             "frontier U0 = Pm W[$bond] (gen $(fr.gen))",
         )
         if pre === nothing
             # the frontier's site tensor in the grown left gauge, then its two-site action
-            site_core =
-                carry === nothing ? Fm[bond] : contract(carry, (2,), Fm[bond], (1,))
+            site_core = carry === nothing ? Fm[bond] : contract(carry, (2,), Fm[bond], (1,))
             two_site_frame = _frame_onto_left(old_frame, site_core, Fm[bond+1])
             rch = right_channels(rstack, bond + 2)
             skl, skr, leak[bond], two_site_calls = _bond_action(
@@ -261,9 +259,7 @@ function _frontier_right(
         )
         if pre === nothing
             # the frontier's site tensor in the grown right gauge, then its two-site action
-            site_core =
-                carry === nothing ? Fm[bond+1] :
-                contract(Fm[bond+1], (3,), carry, (1,))
+            site_core = carry === nothing ? Fm[bond+1] : contract(Fm[bond+1], (3,), carry, (1,))
             two_site_frame = _frame_onto_right(Fm[bond], site_core, old_frame)
             lch = left_channels(lstack, bond)
             skl, skr, leak[bond], two_site_calls = _bond_action(
@@ -317,8 +313,7 @@ function _frontier_right(
             old_frame
         end
         Zn[bond] =
-            enrich ? _polar_frame(TLArray(setitag(Zj, 1, _tagZg(bond, gen))), :right) :
-            old_frame
+            enrich ? _polar_frame(TLArray(setitag(Zj, 1, _tagZg(bond, gen))), :right) : old_frame
         _check_frame(Zn[bond], :right, "frontier Zn[$bond] (gen $gen)")
         nadd = leg_dim(Zn[bond], 1) - leg_dim(old_frame, 1)
         nsec = _new_sectors(old_frame, Zn[bond], 1)

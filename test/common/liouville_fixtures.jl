@@ -62,7 +62,7 @@ function _lv_mpo_dense(W, ls, L)
         new = Dict{Any,Array{ComplexF64,3}}()
         for (k, ql) in pairs(Telum.logical_qlabels(T))
             wl, sk, sb, wr = ql
-            X = Array(BondUpdateGalerkin.BUG._sector_block(T, k))
+            X = Array(BUG._sector_block(T, k))
             R = reshape(X, size(X, 1), size(X, 2), size(X, 3), size(X, 4))
             E =
                 env === nothing ? ones(ComplexF64, 1, 1, size(R, 1)) :

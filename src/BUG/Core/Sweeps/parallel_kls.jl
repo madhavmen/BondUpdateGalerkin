@@ -39,8 +39,7 @@ function _kls_start(
     CL = root_link == 1 ? nothing : _overlap_left(psi, left_frames, root_link - 1)                     # (b_{c-1}, link_c)
     DR = root_link == site_count - 1 ? nothing : _overlap_right(psi, right_frames, root_link + 1)                   # (link_{c+2}, b_{c+1})
     Kc = CL === nothing ? psi[root_link] : contract(CL, (2,), psi[root_link], (1,))
-    Lc =
-        DR === nothing ? psi[root_link+1] : contract(psi[root_link+1], (3,), DR, (1,))
+    Lc = DR === nothing ? psi[root_link+1] : contract(psi[root_link+1], (3,), DR, (1,))
     AR = contract(Lc, (2, 3), right_frames[root_link]', (2, 3))  # (link_{c+1}, b_R)
     AL = contract(left_frames[root_link]', (1, 2), Kc, (1, 2))   # (b_L, link_{c+1})
     k_start = contract(Kc, (3,), AR, (1,))                   # (b_{c-1}, s_c, b_R)
@@ -129,8 +128,7 @@ function _kls_finish(
     EL = contract(Wn', (1, 2), left_root, (1, 2))            # (b_L', b_L)
     ER = contract(right_root, (2, 3), Zn', (2, 3))           # (b_R, b_R')
     # a core in the old root frames, rewritten in the enlarged ones: EL core ER
-    embed(core) =
-        contract(contract(EL, (2,), core, (1,)), (2,), ER, (1,))
+    embed(core) = contract(contract(EL, (2,), core, (1,)), (2,), ER, (1,))
     kc = merge_counters!(merge_counters!(KernelCounters(), st.kK), st.kL)
     omitted_block, missing = nothing, 0.0
     if Up !== nothing && Vp !== nothing                    # one side alone leaves no omitted block

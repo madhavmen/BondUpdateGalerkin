@@ -165,9 +165,8 @@ function _extend_frame(
     new_block === nothing && return (frame, 0, fits)
     fl = side === :left ? 3 : 1
     # Direct sum on the frame leg, the new block relabelled with the frame's own bond tag.
-    grown_frame = TLArray(
-        oplus([frame, TLArray(setitag(new_block, fl, Telum.inds(frame)[fl].itags))], (fl,)),
-    )
+    grown_frame =
+        TLArray(oplus([frame, TLArray(setitag(new_block, fl, Telum.inds(frame)[fl].itags))], (fl,)))
     return (_check_frame(grown_frame, side, "_extend_frame"), leg_dim(new_block, fl), fits)
 end
 

@@ -61,8 +61,7 @@ function _tdvp2_bond!(
     # `acc[1]` is the operator-application counter -- see `TDVP2Info.krylov_dims`. It was an
     # unused slot before, so nothing else reads it. The generator is `H - eshift` (see
     # `tdvp2_step!`); `eshift = 0` skips the subtraction, so the unshifted step is bit-identical.
-    h2(x) =
-        (y = apply_h_two_site(x, h, i, lch, rch); iszero(eshift) ? y : TLArray(y - eshift * x))
+    h2(x) = (y = apply_h_two_site(x, h, i, lch, rch); iszero(eshift) ? y : TLArray(y - eshift * x))
     Theta = expv(
         x -> (acc[1] += 1; h2(x)),
         tau,

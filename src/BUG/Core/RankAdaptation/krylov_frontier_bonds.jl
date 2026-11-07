@@ -13,10 +13,8 @@ function _frame_onto_left(left_isometry, carry, right)
     res_r = svd(right, (1,), "bV,L", "bV,R"; cutoff = 0.0)
     right_isometry = TLArray(res_r.Vd)
     # The carry seen through the prescribed left isometry, times the right site's `U S`.
-    bond_matrix = TLArray(
-        contract(left_isometry', (1, 2), carry, (1, 2)) *
-        TLArray(res_r.U * res_r.S),
-    )
+    bond_matrix =
+        TLArray(contract(left_isometry', (1, 2), carry, (1, 2)) * TLArray(res_r.U * res_r.S))
     return BondFrame(
         left_isometry,
         bond_matrix,
@@ -35,10 +33,8 @@ end
 function _frame_onto_right(left, carry, right_isometry)
     res_l = svd(left, (1, 2), "bU,L", "bU,R"; cutoff = 0.0)
     left_isometry = TLArray(res_l.U)
-    bond_matrix = TLArray(
-        TLArray(res_l.S * res_l.Vd) *
-        contract(carry, (2, 3), right_isometry', (2, 3)),
-    )
+    bond_matrix =
+        TLArray(TLArray(res_l.S * res_l.Vd) * contract(carry, (2, 3), right_isometry', (2, 3)))
     return BondFrame(
         left_isometry,
         bond_matrix,
@@ -139,13 +135,11 @@ function _bond_measurements(
     for bond in bonds
         if side === :left
             carry[bond] =
-                projected === nothing ? Fm[bond] :
-                contract(projected, (2,), Fm[bond], (1,))
+                projected === nothing ? Fm[bond] : contract(projected, (2,), Fm[bond], (1,))
             projected = contract(fr.left_frames[bond]', (1, 2), carry[bond], (1, 2))
         else
             carry[bond] =
-                projected === nothing ? Fm[bond+1] :
-                contract(Fm[bond+1], (3,), projected, (1,))
+                projected === nothing ? Fm[bond+1] : contract(Fm[bond+1], (3,), projected, (1,))
             projected = contract(carry[bond], (2, 3), fr.right_frames[bond]', (2, 3))
         end
     end

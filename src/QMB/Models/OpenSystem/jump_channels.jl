@@ -307,9 +307,7 @@ function site_op_product(f, psi::SymMPS)
     for i = j:L
         if i > j
             # undo the previous fusion on ℓ_l; the op leg comes along and rides on to ℓ_r
-            T = TLArray(
-                permutedims(contract(F', (1,), psi[i], (1,)), (2, 3, 4, 1)),
-            )
+            T = TLArray(permutedims(contract(F', (1,), psi[i], (1,)), (2, 3, 4, 1)))
         end
         F = TLArray(getIdentity((T, 3), (T, 4); itag = "Jf,$(i + 1)"))
         out[i] = contract(T, (3, 4), F, (1, 2))        # (ℓ_l, s, fused)

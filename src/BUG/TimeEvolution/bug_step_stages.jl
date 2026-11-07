@@ -170,13 +170,8 @@ function _close_root_frontiers!(
 )
     if order > 1
         # The frontier sweeps expand by the same DD-QR CBE as the half-sweeps.
-        closure_settings = merge(
-            expansion_settings,
-            (
-                expansion = expansion,
-                frontier_tol = frontier_tol,
-            ),
-        )
+        closure_settings =
+            merge(expansion_settings, (expansion = expansion, frontier_tol = frontier_tol))
         closure = _krylov_closure!(
             frames,
             psi,

@@ -41,9 +41,7 @@ to roundoff. The overlap form `||a||^2 + ||b||^2 - 2 Re<a,b>` cancels to `~eps`:
 function _mps_distance(a::SymMPS, b::SymMPS)
     L = length(a)
     length(b) == L || throw(DimensionMismatch("_mps_distance: $L sites against $(length(b))"))
-    L == 1 && return norm(
-        TLArray(TLArray(ComplexF64(1) * a[1]) + TLArray(ComplexF64(-1) * b[1])),
-    )
+    L == 1 && return norm(TLArray(TLArray(ComplexF64(1) * a[1]) + TLArray(ComplexF64(-1) * b[1])))
     Ts = Any[]
     for i = 1:L
         Ai = TLArray(ComplexF64(1) * a[i])

@@ -52,8 +52,7 @@ function _dd_controller(
         new_basis, _ = _dd_select(aug, sketched, side, kc)
         new_basis === nothing && return 0
         new_basis = TLArray(setitag(new_basis, fl, tags))
-        dd_basis =
-            dd_basis === nothing ? new_basis : TLArray(oplus([dd_basis, new_basis], (fl,)))
+        dd_basis = dd_basis === nothing ? new_basis : TLArray(oplus([dd_basis, new_basis], (fl,)))
         aug = TLArray(oplus([aug, new_basis], (fl,)))
         return leg_dim(new_basis, fl)
     end

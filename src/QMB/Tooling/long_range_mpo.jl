@@ -69,8 +69,7 @@ function long_range_mpo(L::Int, nn::XXZChain, lr::Vector{LongRangeTerm})
             # only in the interior -- at `i = 1` nothing has opened yet and at `i = L`
             # nothing may still be open, which the boundary trimming below enforces anyway.
             1 < i < L && lr[k].decay != 0.0 && (mat[c, c] = TLArray(lr[k].decay * Iid))
-            i > 1 &&
-                (mat[c, W] = TLArray(lr[k].coeff * _mpo_block(lr[k].right, i, tl, tr, :none)))
+            i > 1 && (mat[c, W] = TLArray(lr[k].coeff * _mpo_block(lr[k].right, i, tl, tr, :none)))
         end
         if i == 1
             mat = reshape(mat[1, :], 1, W)

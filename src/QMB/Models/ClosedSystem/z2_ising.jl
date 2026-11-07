@@ -32,9 +32,7 @@ function ising_product_state(dirs::Vector{Symbol})
         F = TLArray(setitag(F, 2, "S,$i"))
         A = if z2
             target = dirs[i] === :plus ? _Z2_Q0 : _Z2_Q1
-            B = TLArray(
-                getsub(F, 2, s -> s == target ? Colon() : nothing; preserve_space = true),
-            )
+            B = TLArray(getsub(F, 2, s -> s == target ? Colon() : nothing; preserve_space = true))
             present = Set(ql[3] for ql in Telum.logical_qlabels(B))
             TLArray(getsub(B, 3, s -> s in present ? Colon() : nothing))
         else

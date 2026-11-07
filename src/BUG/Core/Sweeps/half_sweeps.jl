@@ -235,8 +235,7 @@ function _half_left!(
     held = 0                          # frames this sweep has accumulated, running total
     for bond = 1:root_link
         # The bond's left site with everything to its left already in the new frames.
-        carried_site =
-            carry === nothing ? psiL[bond] : contract(carry, (2,), psiL[bond], (1,))
+        carried_site = carry === nothing ? psiL[bond] : contract(carry, (2,), psiL[bond], (1,))
         _fr = (frame_start = time_ns();
         built_frame = _frame_from(carried_site, psiL[bond+1]);
         acc.tframe += (time_ns() - frame_start) / 1e9;
@@ -341,9 +340,7 @@ function _half_right!(
     held = 0
     for bond = (site_count-1):-1:root_link
         # The bond's right site with everything to its right already in the new frames.
-        carried_site =
-            carry === nothing ? psiR[bond+1] :
-            contract(psiR[bond+1], (3,), carry, (1,))
+        carried_site = carry === nothing ? psiR[bond+1] : contract(psiR[bond+1], (3,), carry, (1,))
         _fr = (frame_start = time_ns();
         built_frame = _frame_from(psiR[bond], carried_site);
         acc.tframe += (time_ns() - frame_start) / 1e9;

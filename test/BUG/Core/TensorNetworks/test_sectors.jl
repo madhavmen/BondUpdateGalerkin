@@ -43,7 +43,13 @@ end
                 f = bond_frame(psi, i)
                 t = f.U0
                 viaTelum = reachable_sectors(t, 1, 2)
-                mine = fuse_spaces(symm(t), Telum.spaces(t)[1], Telum.inds(t)[1].dir, Telum.spaces(t)[2], Telum.inds(t)[2].dir)
+                mine = fuse_spaces(
+                    symm(t),
+                    Telum.spaces(t)[1],
+                    Telum.inds(t)[1].dir,
+                    Telum.spaces(t)[2],
+                    Telum.inds(t)[2].dir,
+                )
                 any(q != dual_charge(symm(t), q) for (q, _) in Telum.spaces(t)[1]) &&
                     (saw_charged_link[] = true)
                 @test sort(collect(viaTelum), by = string) == sort(collect(mine), by = string)
