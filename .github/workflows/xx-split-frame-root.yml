@@ -1,0 +1,54 @@
+name: BUG2 2Db frame and 1.2Db root numerical validation
+on:
+  pull_request:
+    paths:
+      - 'src/BUG/Core/RankAdaptation/basis_budget.jl'
+      - 'src/BUG/TimeEvolution/bug_step.jl'
+      - 'src/BUG/TimeEvolution/bug_step_stages.jl'
+      - 'src/BUG/TimeEvolution/coupled_dd_krylov.jl'
+      - 'src/BUG/BUG.jl'
+      - 'benchmarks/XXT5/xx_split_frame_root_caps.jl'
+      - '.github/workflows/xx-split-frame-root.yml'
+  workflow_dispatch:
+jobs:
+  exact-xx:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.11'
+      - uses: julia-actions/cache@v2
+      - run: julia --project -e 'using Pkg; Pkg.instantiate()'
+      - name: Verify cap algebra and root exception
+        run: |
+          julia --project -e '
+            using BondUpdateGalerkin.BUG
+            @assert bond_frame_root_ceilings([1,5,10,64],128,2)==[2,6,20,128]
+            @assert bond_frame_root_ceilings([1,5,10,64],128,3)==[2,10,12,128]
+            @assert bond_frame_root_ceilings([1,5,10,64],16,3)==[2,10,12,16]
+            @assert bond_frame_root_ceilings([1,2,3],64,2)==[2,3,6]
+            @assert bond_work_ceilings_strict([1,2,3],64;factor=1.2)==[2,3,4]
+          '
+      - name: Short cross-d U1 XX, split-frame-root vs strict cap and TDVP2
+        env:
+          BUG_SPLIT_STEPS: '2'
+          BUG_SPLIT_SEEDS: '1'
+          BUG_SPLIT_TOLS: '1e-2'
+        run: julia --project benchmarks/XXT5/xx_split_frame_root_caps.jl results/split-smoke
+      - name: Multi-step cross-d U1 XX mixed frame/root limits
+        env:
+          BUG_SPLIT_STEPS: '6'
+          BUG_SPLIT_SEEDS: '2'
+          BUG_SPLIT_TOLS: '1e-2,1e-3'
+          BUG_SPLIT_DT: '0.05'
+        run: julia --project benchmarks/XXT5/xx_split_frame_root_caps.jl results/split-sixstep
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: split-frames-2Db-root-1p2Db
+          path: |
+            results/split-smoke/
+            results/split-sixstep/
+          if-no-files-found: warn
