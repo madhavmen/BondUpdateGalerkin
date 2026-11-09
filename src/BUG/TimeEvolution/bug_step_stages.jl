@@ -61,10 +61,10 @@ function _resolve_step_options(
     order >= 1 || throw(ArgumentError("order must be >= 1, got $order"))
     fold_omega = something(fold_omega, order > 1 && !exact)
     frontier_tol >= 0 || throw(ArgumentError("frontier_tol must be >= 0, got $frontier_tol"))
-    work_ceiling_rule in (:maxdim, :bond, :bond_strict, :frame_root) ||
-        throw(ArgumentError("work_ceiling_rule must be :maxdim, :bond, :bond_strict or :frame_root, got $work_ceiling_rule"))
+    work_ceiling_rule in (:maxdim, :bond, :bond_strict, :frame_root, :half_root) ||
+        throw(ArgumentError("work_ceiling_rule must be :maxdim, :bond, :bond_strict, :frame_root or :half_root, got $work_ceiling_rule"))
     bond_ceiling_factor == 0 ||
-        (bond_ceiling_factor > 1 && work_ceiling_rule in (:bond, :bond_strict, :frame_root)) ||
+        (bond_ceiling_factor > 1 && work_ceiling_rule in (:bond, :bond_strict, :frame_root, :half_root)) ||
         throw(
             ArgumentError(
                 "bond_ceiling_factor must be 0, or > 1 with work_ceiling_rule = :bond, got " *
@@ -76,6 +76,10 @@ function _resolve_step_options(
     work_ceiling_rule === :frame_root &&
         root_ceiling_factor > (bond_ceiling_factor == 0 ? 2.0 : bond_ceiling_factor) &&
         throw(ArgumentError("root_ceiling_factor must not exceed frame factor"))
+    work_ceiling_rule === :half_root && bond_ceiling_factor == 0 &&
+        throw(ArgumentError(":half_root requires bond_ceiling_factor, e.g. 1.2"))
+    work_ceiling_rule === :half_root && root_ceiling_factor < bond_ceiling_factor &&
+        throw(ArgumentError(":half_root requires root_ceiling_factor >= bond_ceiling_factor"))
     closure_probe >= 0 ||
         throw(ArgumentError("closure_probe must be a non-negative count, got $closure_probe"))
     isempty(keep_tols) ||
@@ -107,7 +111,12 @@ function _resolve_step_options(
     # The work ceiling shared by the CBE sketch and the Krylov enrichment, from the bonds as they
     # stand before the step.
     bond_ranks = bond_dims(psi)
+    two_stage = work_ceiling_rule === :half_root ?
+        bond_half_root_ceilings(bond_ranks, maxdim, root_link;
+            half_factor = bond_ceiling_factor,
+            root_factor = root_ceiling_factor) : nothing
     workcap =
+        two_stage !== nothing ? two_stage.root :
         work_ceiling_rule === :bond ?
         bond_work_ceilings(bond_ranks, local_dim(psi), maxdim; factor = bond_ceiling_factor) :
         work_ceiling_rule === :bond_strict ?
@@ -127,6 +136,7 @@ function _resolve_step_options(
         fold_omega = fold_omega,
         maxdim = maxdim,
         workcap = workcap,
+        half_workcap = two_stage === nothing ? workcap : two_stage.half,
         keep_tols = isempty(keep_tols) ? zeros(length(keep_states)) : Float64.(keep_tols),
     )
 end
