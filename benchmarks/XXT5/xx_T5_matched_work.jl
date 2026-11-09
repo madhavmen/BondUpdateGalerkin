@@ -202,6 +202,20 @@ function policy_specs(basis_tol)
         ("T5_uncapped",DDQRExpansion(holdout_width=2,acceptance_factor=0.6,
                     batch_blocks=2,cap_selection=:svd,krylov_mode=:lanczos),
                     NamedTuple()),
+        # New genuine rank adaptation: thin block SVD ranks the DD candidates,
+        # a holdout selects the MINIMUM accepted k, and a second holdout confirms.
+        ("T5_rank_adaptK",DDQRExpansion(mode=:rank_adaptive,
+                    rank_initial_width=4,holdout_width=4,
+                    acceptance_factor=0.7,krylov_mode=:lanczos),
+                    (work_ceiling_rule=:bond,bond_ceiling_factor=1.2,)),
+        ("T5_rank_fixedK8",DDQRExpansion(mode=:rank_adaptive,
+                    rank_initial_width=4,holdout_width=4,
+                    acceptance_factor=0.7,krylov_mode=:lanczos,krylov_fixed_depth=8),
+                    (work_ceiling_rule=:bond,bond_ceiling_factor=1.2,)),
+        ("T5_rank_arnoldi",DDQRExpansion(mode=:rank_adaptive,
+                    rank_initial_width=4,holdout_width=4,
+                    acceptance_factor=0.7,krylov_mode=:arnoldi),
+                    (work_ceiling_rule=:bond,bond_ceiling_factor=1.2,)),
     ]
 end
 
