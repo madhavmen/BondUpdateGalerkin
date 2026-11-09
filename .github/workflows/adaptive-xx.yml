@@ -1,0 +1,31 @@
+name: Adaptive XX benchmark smoke
+on:
+  pull_request:
+    paths:
+      - 'src/BUG/Randomised/**'
+      - 'benchmarks/QMB/ClosedSystem/xx_adaptive_stopping.jl'
+      - '.github/workflows/adaptive-xx.yml'
+  workflow_dispatch:
+
+jobs:
+  numerical-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.11'
+      - uses: julia-actions/cache@v2
+      - name: Instantiate Julia dependencies
+        run: julia --project -e 'using Pkg; Pkg.instantiate()'
+      - name: Run nearest-neighbor and long-range XX smoke
+        env:
+          BUG_XX_STEPS: '2'
+          BUG_XX_SEEDS: '1'
+        run: julia --project benchmarks/QMB/ClosedSystem/xx_adaptive_stopping.jl results/xx-adaptive
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: xx-adaptive-smoke-results
+          path: results/xx-adaptive/
