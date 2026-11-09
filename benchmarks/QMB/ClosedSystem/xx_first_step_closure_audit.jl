@@ -10,7 +10,7 @@ mkpath(outdir)
 set_symmetry!(:U1)
 L, dt = 8, 0.05
 Jmat(kind) = [j > i ? ((kind == :short && j-i==1) ? 1.0 :
-     kind == :long ? (j-i)^-3 : 0.0) : 0.0 for i=1:L,j=1:L]
+     kind == :long ? Float64(j-i)^(-3.0) : 0.0) : 0.0 for i=1:L,j=1:L]
 function h_exact(J)
     H=zeros(ComplexF64,2^L,2^L)
     for k in 0:(2^L-1),i in 1:(L-1),j in (i+1):L
