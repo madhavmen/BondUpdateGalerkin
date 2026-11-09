@@ -1,7 +1,7 @@
 # `cbe_bug_step!`'s `work_ceiling_rule = :bond`: every bond's DD-QR CBE and local Krylov stage is
 # capped at `min(2*d*D_b, maxdim)` of that bond, its dimension at the start of the step, instead of
 # one `max(d*maxdim, d*D_max)` for every bond; `bond_ceiling_factor = f` replaces `2*d*D_b` by
-# `ceil(f*D_b)`. Sized to run in seconds (Heisenberg, L = 8, U(1), exact selection).
+# `ceil(f*d*D_b)`. Sized to run in seconds (Heisenberg, L = 8, U(1), exact selection).
 #
 #   - `bond_work_ceilings` values, never 0; `_cap_at` reads one bond's ceiling from either form;
 #   - from a product state the frames and bonds stay within 2d, and D_work is the largest ceiling;
@@ -21,8 +21,10 @@ include(joinpath(@__DIR__, "..", "..", "..", "common", "dense_reference.jl"))
         @test bond_work_ceilings([1, 3, 8], 2, 1024) == [4, 12, 32]
         @test bond_work_ceilings([0, 5], 4, 1024) == [1, 40]    # never 0, which admits nothing
         @test bond_work_ceilings([1, 3, 8, 40], 2, 16) == [4, 12, 16, 16]
-        # ceil(f*D_b): at least D_b + 1, and no column from representation noise (1.2 * 5)
-        @test bond_work_ceilings([1, 5, 10, 65], 2, 1024; factor = 1.2) == [2, 6, 12, 78]
+        # ceil(f*d*D_b) scales with physical site dimension and avoids rounding artifacts.
+        @test bond_work_ceilings([1, 5, 10, 65], 2, 1024; factor = 1.2) == [3, 12, 24, 156]
+        @test bond_work_ceilings([1, 5, 10], 3, 1024; factor = 1.2) == [4, 18, 36]
+        @test bond_work_ceilings([1, 5, 10], 4, 1024; factor = 1.2) == [5, 24, 48]
         @test bond_work_ceilings([0, 65], 2, 70; factor = 1.2) == [1, 70]
         @test _cap_at(1024, 3) == 1024
         @test _cap_at([2, 6, 16], 2) == 6
@@ -91,7 +93,7 @@ include(joinpath(@__DIR__, "..", "..", "..", "common", "dense_reference.jl"))
         @test all(bond_dims(capped.state) .<= small_maxdim)
     end
 
-    @testset "bond_ceiling_factor = 1.2: every frame within ceil(1.2 D_b)" begin
+    @testset "bond_ceiling_factor = 1.2: every frame within ceil(1.2*d*D_b)" begin
         tight_ceilings = bond_work_ceilings(start_bonds, site_dim, 64; factor = 1.2)
         @test all(tight_ceilings .< ceilings)                 # fixture guard: tighter everywhere
         for order in (2, 3)
