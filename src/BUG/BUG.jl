@@ -98,7 +98,7 @@ export enable_krylov_log, disable_krylov_log, get_krylov_log, KRYLOV_LOG
 # rank adaptation (Core/RankAdaptation)
 export truncate_sweep!, truncate_recursive!, AdaptiveBudget, BasisAllocation, basis_allocation
 export indicator, AdaptiveLedger, merge_ledger!, work_ceiling, bond_work_ceilings
-export bond_work_ceilings_strict
+export bond_work_ceilings_strict, bond_frame_root_ceilings
 export budget_status, budget_diagnostic
 export BasisExpansion, expand_frame, sketch_closures, folded_sketch_closures, sampled_leak
 # diagnostics (Core/diagnostics.jl)
