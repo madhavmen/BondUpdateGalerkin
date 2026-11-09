@@ -485,6 +485,27 @@ function bond_work_ceilings(
     return [max(min(ceiling_of(bond_rank), maxdim), 1) for bond_rank in bond_ranks]
 end
 
+"""
+    bond_work_ceilings_strict(bond_ranks, maxdim; factor=1.2)
+
+Use EXACTLY `ceil(1.2*D_b)` per bond at the START of the timestep. No extra local
+Hilbert-space factor. The cap applies to all DD/K/L/closure working frames and
+their root Galerkin product. This is deliberately much stricter than `:bond`,
+which scales its factor by the physical dimension. A rank-one cut may grow to
+two directions on the first step, independently of whether d=2,3,4.
+"""
+function bond_work_ceilings_strict(
+    bond_ranks::AbstractVector{<:Integer},
+    maxdim::Int;
+    factor::Real = 1.2,
+)
+    factor > 1 || throw(ArgumentError("strict bond factor must exceed 1"))
+    return [
+        max(1, min(maxdim, ceil(Int, round(factor * r; digits=9))))
+        for r in bond_ranks
+    ]
+end
+
 "A work ceiling: one for every bond (`work_ceiling`), or one per bond (`bond_work_ceilings`)."
 const WorkCeiling = Union{Int,Vector{Int}}
 
