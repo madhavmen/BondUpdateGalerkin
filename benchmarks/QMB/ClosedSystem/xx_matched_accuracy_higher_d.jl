@@ -140,6 +140,30 @@ function policy_specs(basis_tol)
                     krylov_mode=:lanczos),(krylov_rank_tol=basis_tol,)),
         ("adaptive_unchecked",DDQRExpansion(holdout_width=2,acceptance_factor=0.6,
                     krylov_mode=:lanczos),(closure_checks=false,)),
+        # Per-bond ceil(1.2*current_rank), applied to BOTH DD and K/L and root
+        # closure frames. The cap is a resource restriction, not a tolerance.
+        ("fixed4_cap12",DDQRExpansion(mode=:fixed,fixed_width=8,fixed_rank=4,
+                    krylov_mode=:lanczos),
+                    (work_ceiling_rule=:bond,bond_ceiling_factor=1.2,)),
+        ("sequential_cap12",DDQRExpansion(holdout_width=2,acceptance_factor=0.6,
+                    batch_blocks=1,krylov_mode=:lanczos),
+                    (work_ceiling_rule=:bond,bond_ceiling_factor=1.2,)),
+        ("batch2_cap12",DDQRExpansion(holdout_width=2,acceptance_factor=0.6,
+                    batch_blocks=2,krylov_mode=:lanczos),
+                    (work_ceiling_rule=:bond,bond_ceiling_factor=1.2,)),
+        ("batch3_cap12",DDQRExpansion(holdout_width=2,acceptance_factor=0.6,
+                    batch_blocks=3,krylov_mode=:lanczos),
+                    (work_ceiling_rule=:bond,bond_ceiling_factor=1.2,)),
+        ("batch2_uncapped",DDQRExpansion(holdout_width=2,acceptance_factor=0.6,
+                    batch_blocks=2,krylov_mode=:lanczos),NamedTuple()),
+        ("batch3_uncapped",DDQRExpansion(holdout_width=2,acceptance_factor=0.6,
+                    batch_blocks=3,krylov_mode=:lanczos),NamedTuple()),
+        ("fixed4_cap15",DDQRExpansion(mode=:fixed,fixed_width=8,fixed_rank=4,
+                    krylov_mode=:lanczos),
+                    (work_ceiling_rule=:bond,bond_ceiling_factor=1.5,)),
+        ("batch2_cap15",DDQRExpansion(holdout_width=2,acceptance_factor=0.6,
+                    batch_blocks=2,krylov_mode=:lanczos),
+                    (work_ceiling_rule=:bond,bond_ceiling_factor=1.5,)),
     ]
 end
 
