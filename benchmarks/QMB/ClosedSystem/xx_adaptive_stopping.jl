@@ -76,6 +76,8 @@ const configs = (
     ("adaptive2conservative", DDQRExpansion(holdout_width=2,acceptance_factor=0.6)),
 )
 rows = Any[]
+frames_rows = Any[]
+profile_rows = Any[]
 for L in (8,), interaction in (:short,:long)
     longrange = interaction == :long
     W = couplings(L,longrange)
@@ -92,6 +94,15 @@ for L in (8,), interaction in (:short,:long)
                 maxdim=cap,tol_basis=basis,tol_trunc=trunc,
                 tol_root=root_tol,expansion=policy,rng=rng)
             err = maximum(abs.(profile(psi).-exact_at[step]))
+            for (bond, d) in enumerate(bond_dims(psi))
+                frame = bond <= length(info.expanded) ? info.expanded[bond] : 0
+                bond == info.root && (frame = max(frame, info.root_right))
+                push!(frames_rows,(interaction,L,method,seed,step,step*dt,bond,frame,d))
+            end
+            for (site, sz) in enumerate(profile(psi))
+                push!(profile_rows,(interaction,L,method,seed,step,step*dt,site,sz,
+                                    exact_at[step][site]))
+            end
             Lg = info.ledger
             push!(rows,(interaction,L,method,seed,step,step*dt,
                 err,maximum(bond_dims(psi)),info.record.D_stage,
@@ -104,6 +115,13 @@ for L in (8,), interaction in (:short,:long)
     for step in 1:nsteps
         info = tdvp2_step!(psi,mpo,-im*dt;maxdim=cap,weight_tol=trunc)
         err = maximum(abs.(profile(psi).-exact_at[step]))
+        for (bond, d) in enumerate(bond_dims(psi))
+            push!(frames_rows,(interaction,L,"tdvp2",0,step,step*dt,bond,0,d))
+        end
+        for (site, sz) in enumerate(profile(psi))
+            push!(profile_rows,(interaction,L,"tdvp2",0,step,step*dt,site,sz,
+                                exact_at[step][site]))
+        end
         push!(rows,(interaction,L,"tdvp2",0,step,step*dt,
             err,maximum(bond_dims(psi)),0,0,0,0,0,0,0,0,0,0,0,"reference"))
     end
@@ -112,6 +130,12 @@ write_rows("trajectories.csv",
     ("interaction","L","method","seed","step","t","max_sz_error",
      "D_final","D_stage","n_probes","n_holdout","n_dd","n_krylov",
      "n_h1","root_iters","t_cbe","t_kry","t_root","t_step","budget_status"),rows)
+write_rows("frame_ranks.csv",
+    ("interaction","L","method","seed","step","t","bond","D_frame","D_final"),
+    frames_rows)
+write_rows("profiles.csv",
+    ("interaction","L","method","seed","step","t","site","sz","sz_exact"),
+    profile_rows)
 println("Wrote ",joinpath(outdir,"trajectories.csv"))
 
 # Independently compare existing Lanczos and Arnoldi local exponential solvers,
