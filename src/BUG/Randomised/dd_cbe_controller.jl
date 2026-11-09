@@ -36,6 +36,7 @@ function _dd_controller(
     ledger::Union{Nothing,AdaptiveLedger};
     kc::KernelCounters = KernelCounters(),
     holdout_width::Int = _DD_HOLDOUT,
+    batch_blocks::Int = 1,
     audit::Bool = false,
     holdout = width -> draw(width, nothing),
     trace::Union{Nothing,Vector} = nothing,
@@ -43,6 +44,8 @@ function _dd_controller(
 )
     0 < acceptance_factor <= 1 ||
         throw(ArgumentError("acceptance_factor must lie in (0,1]"))
+    1 <= batch_blocks <= 8 ||
+        throw(ArgumentError("batch_blocks must lie in 1:8"))
     left = side === :left
     # `fl` is the frame's new (growing) leg, `wleg` the probe-width leg of a sketch block.
     fl, wleg = left ? (3, 1) : (1, 3)
@@ -54,6 +57,17 @@ function _dd_controller(
     function absorb!(sketched)
         new_basis, _ = _dd_select(aug, sketched, side, kc)
         new_basis === nothing && return 0
+        # The held-out error MUST be tested on the same basis that can actually
+        # enter the CBE frame. Previously a probe could exceed ncap, pass Test B,
+        # then be trimmed afterwards, thereby falsely certifying an untested
+        # smaller basis under a tight 1.2*chi_b cap.
+        current = dd_basis === nothing ? 0 : leg_dim(dd_basis, fl)
+        room = ncap - current
+        room <= 0 && return 0
+        if leg_dim(new_basis, fl) > room
+            new_basis = _trim_total(new_basis, fl, room)
+            new_basis === nothing && return 0
+        end
         new_basis = TLArray(setitag(new_basis, fl, tags))
         dd_basis = dd_basis === nothing ? new_basis : TLArray(oplus([dd_basis, new_basis], (fl,)))
         aug = TLArray(oplus([aug, new_basis], (fl,)))
@@ -81,7 +95,7 @@ function _dd_controller(
         dd_basis !== nothing &&
         any(((charge, _),) -> sector_dim(frame, fl, charge) == 0, Telum.spaces(dd_basis)[fl])
 
-    width = clamp(initial_width, 1, max(wcap, 1))
+    width = clamp(initial_width, 1, max(min(wcap, ncap), 1))
     last = draw(width, nothing)
     last === nothing && return (nothing, :empty)
     direction_count += absorb!(stream(last, :n_probes))
@@ -115,13 +129,40 @@ function _dd_controller(
         end
         nt = _target_sectors!(boost, per, check[1], wleg, alloc)
         ledger === nothing || (ledger.n_targeted += nt)
-        next_check = fresh(holdout_width)                  # new validation BEFORE the old one is promoted
-        added = absorb!(check[2])
-        nt == 0 && (width = min(2 * width, wcap))
-        blk = draw(width, isempty(boost) ? nothing : boost)
-        if blk !== nothing
-            last = blk
-            added += absorb!(stream(blk, :n_probes))
+        if batch_blocks == 1
+            # Keep the legacy sequential stream ordering as an A/B control.
+            next_check = fresh(holdout_width)
+            added = absorb!(check[2])
+            nt == 0 && (width = min(2 * width, wcap))
+            # Once ncap is reached there is no reason to stream another block.
+            remaining = ncap - (dd_basis === nothing ? 0 : leg_dim(dd_basis, fl))
+            if remaining > 0
+                blk = draw(min(width, max(remaining + 2, 1)),
+                    isempty(boost) ? nothing : boost)
+                if blk !== nothing
+                    last = blk
+                    added += absorb!(stream(blk, :n_probes))
+                end
+            end
+            check = next_check
+        else
+            # Batched block discovery: reuse the failed holdout as a discovery
+            # sketch, then grow charge-targeted QR directions for <=batch_blocks
+            # independent blocks before paying for the NEXT holdout.
+            # The validation probes are NEVER used for the candidate basis
+            # they validate: a new holdout is drawn only after the batch ends.
+            added = absorb!(check[2])
+            for _ in 1:batch_blocks
+                remaining = ncap - (dd_basis === nothing ? 0 : leg_dim(dd_basis, fl))
+                remaining <= 0 && break
+                nt == 0 && (width = min(2 * width, wcap))
+                blk = draw(min(width, max(remaining + 2, 1)),
+                    isempty(boost) ? nothing : boost)
+                blk === nothing && break
+                last = blk
+                added += absorb!(stream(blk, :n_probes))
+            end
+            check = fresh(holdout_width)
         end
         direction_count += added
         if added == 0
@@ -130,6 +171,5 @@ function _dd_controller(
                 _unmet!(ledger, :sample))
             return (dd_basis, :basis_limited)
         end
-        check = next_check
     end
 end
