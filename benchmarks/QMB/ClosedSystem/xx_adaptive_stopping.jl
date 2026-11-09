@@ -80,6 +80,12 @@ const configs = (
     # This is a resource-cap ablation, not an accuracy stopping criterion.
     ("adaptive_bondcap", DDQRExpansion(holdout_width=2,acceptance_factor=0.6),
         (work_ceiling_rule=:bond,bond_ceiling_factor=1.2,)),
+    ("adaptive_lanczos", DDQRExpansion(holdout_width=2,acceptance_factor=0.6,
+        krylov_mode=:lanczos), NamedTuple()),
+    ("fixed4_lanczos8", DDQRExpansion(mode=:fixed,fixed_width=8,fixed_rank=4,
+        krylov_mode=:lanczos,krylov_fixed_depth=8), NamedTuple()),
+    ("fixed4_lanczos12", DDQRExpansion(mode=:fixed,fixed_width=8,fixed_rank=4,
+        krylov_mode=:lanczos,krylov_fixed_depth=12), NamedTuple()),
 )
 rows = Any[]
 frames_rows = Any[]
