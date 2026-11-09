@@ -184,7 +184,7 @@ write_rows("bond_stages.csv",
     bond_stage_rows)
 write_rows("root_ranks.csv",
     ("interaction","L","method","seed","step","t",
-     "D_root_left","D_root_right","root_core_elements","D_root_after_compression",
+     "D_root_left","D_root_right","root_core_elements","D_root_svd_before_global_trunc",
      "D_final_max"),root_rows)
 println("Wrote ",joinpath(outdir,"trajectories.csv"))
 
