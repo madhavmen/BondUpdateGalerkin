@@ -250,7 +250,9 @@ Base.@kwdef struct DDQRExpansion <: BasisExpansion
     mode::Symbol = :adaptive
     fixed_width::Int = 0
     fixed_rank::Int = 0
-    # Only :rank_adaptive: initial rank-selection sketch width (grown as needed).
+    # For :rank_adaptive or :rank_fast: initial rank-selection pilot width.
+    # :rank_fast uses a minimal pilot + same-width independent confirmation,
+    # reducing MPO actions when the local DD residual is easily compressed.
     rank_initial_width::Int = 4
     # Force a minimum number of DD directions on a trial after the combined
     # K/L + global closure failed (the independent DD residual alone can pass).
