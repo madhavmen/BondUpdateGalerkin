@@ -251,6 +251,9 @@ Base.@kwdef struct DDQRExpansion <: BasisExpansion
     fixed_width::Int = 0
     fixed_rank::Int = 0
     holdout_width::Int = 4
+    # 1 = existing sequential controller; >1 adds multiple charge-targeted
+    # discovery blocks per independent holdout checkpoint.
+    batch_blocks::Int = 1
     acceptance_factor::Float64 = 1.0
     # The K/L one-site generator must be Hermitian to use :lanczos.
     krylov_mode::Symbol = :arnoldi
@@ -278,6 +281,7 @@ expand_frame(
     fixed_width = strategy.fixed_width,
     fixed_rank = strategy.fixed_rank,
     holdout_width = strategy.holdout_width,
+    batch_blocks = strategy.batch_blocks,
     acceptance_factor = strategy.acceptance_factor,
 )
 
