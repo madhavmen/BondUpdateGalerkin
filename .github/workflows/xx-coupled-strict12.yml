@@ -1,0 +1,36 @@
+name: Coupled DD-Krylov closure strict 1.2 bond numerical validation
+on:
+  pull_request:
+    paths:
+      - 'src/BUG/TimeEvolution/coupled_dd_krylov.jl'
+      - 'src/BUG/TimeEvolution/bug_step_stages.jl'
+      - 'src/BUG/TimeEvolution/bug_step.jl'
+      - 'src/BUG/Randomised/dd_cbe_expand.jl'
+      - 'src/BUG/Randomised/cbe.jl'
+      - 'src/BUG/Core/RankAdaptation/basis_budget.jl'
+      - 'benchmarks/XXT5/xx_coupled_closure_strict.jl'
+      - '.github/workflows/xx-coupled-strict12.yml'
+  workflow_dispatch:
+
+jobs:
+  coupled-physical:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.11'
+      - uses: julia-actions/cache@v2
+      - name: Instantiate pinned Julia environment
+        run: julia --project -e 'using Pkg; Pkg.instantiate()'
+      - name: Check strict bond ceiling algebra d2 d3 d4
+        run: julia --project -e 'using BondUpdateGalerkin.BUG; @assert bond_work_ceilings_strict([1,5,10],512;factor=1.2)==[2,6,12]; @assert bond_work_ceilings_strict([1,5,10],8;factor=1.2)==[2,6,8]'
+      - name: Exact ED numerical validation of coupled DD and enriched Krylov
+        run: julia --project benchmarks/XXT5/xx_coupled_closure_strict.jl results/coupled-strict
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coupled-strict-dd-krylov-exactXX
+          path: results/coupled-strict/
+          if-no-files-found: warn
