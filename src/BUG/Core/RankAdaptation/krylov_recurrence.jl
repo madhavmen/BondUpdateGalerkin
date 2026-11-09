@@ -151,6 +151,19 @@ function _lanczos_chain(
             throw(ArgumentError("Lanczos needs a Hermitian one-site generator (imag alpha=$alpha_c)"))
         Hm[j,j] = real(alpha_c)
         image = _kconc(image - real(alpha_c) * vs[j])
+        # Very long Hermitian recurrences lose orthogonality to converged Ritz
+        # directions ("ghost" Lanczos vectors). Periodic selective correction after
+        # depth 20 avoids that failure without CGS2's O(m^2) cost at small depths.
+        # Correcting every other deep column is a numerical safeguard, not a change
+        # in the physical tolerance or an unconditional projection of applyH.
+        if j >= 20 && iseven(j)
+            corr = nothing
+            for q in vs
+                coeff = _kinner(q, image)
+                corr = corr === nothing ? coeff*q : corr + coeff*q
+            end
+            corr === nothing || (image = _kconc(image - corr))
+        end
         beta = norm(image)
         if beta <= _KRY_BREAKDOWN
             closed = true
