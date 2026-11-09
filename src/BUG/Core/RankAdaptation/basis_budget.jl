@@ -466,11 +466,13 @@ step, which at `d = 2` is TDVP2's `d^2`. The ceiling bounds the whole frame, so 
 `maxdim/2` cannot take its full rank-`2r` augmentation, and a bond at `maxdim` takes none
 (`workcap_reached` reports it).
 
-`factor > 0` (`cbe_bug_step!`'s `bond_ceiling_factor`) replaces `2*d` by a fraction of the bond
-itself, `ceil(factor*D_b)`: at `factor = 1.2` a bond's stage may widen by 20% of its own dimension
-per step (at least one direction, since `ceil(1.2 D) >= D + 1`), not to the `2D` one-site space
-every DD and Krylov stage was measured filling (XX L = 16: 65 -> 131). The product is rounded to 9
-digits first, so representation noise (`1.2 * 5 = 6.000...1`) cannot add a column.
+`factor > 0` (`cbe_bug_step!`'s `bond_ceiling_factor`) replaces `2*d` by
+`factor*d`: the entire DD + local Krylov + closure working frame at bond `b` is limited
+to `min(ceil(factor*site_dim*D_b), maxdim)`. For `factor = 1.2`, initially rank-one
+bonds can grow working frames up to 3, 4, 5 at physical dimensions d = 2, 3, 4.
+This is a per-step resource limit, not a guarantee of the requested accuracy. The
+floating-point product is rounded to nine decimal digits before applying `ceil`,
+to avoid spurious extra columns from representation noise.
 """
 function bond_work_ceilings(
     bond_ranks::AbstractVector{<:Integer},
@@ -479,7 +481,7 @@ function bond_work_ceilings(
     factor::Real = 0.0,
 )
     ceiling_of(bond_rank) =
-        factor > 0 ? ceil(Int, round(factor * bond_rank; digits = 9)) : 2 * site_dim * bond_rank
+        factor > 0 ? ceil(Int, round(factor * site_dim * bond_rank; digits = 9)) : 2 * site_dim * bond_rank
     return [max(min(ceiling_of(bond_rank), maxdim), 1) for bond_rank in bond_ranks]
 end
 
