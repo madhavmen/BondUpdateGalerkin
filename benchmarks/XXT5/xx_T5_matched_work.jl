@@ -235,6 +235,30 @@ function policy_specs(basis_tol)
                     cap_selection=:svd,acceptance_factor=0.6,krylov_mode=:lanczos),
                     (work_ceiling_rule=:frame_root,bond_ceiling_factor=2.0,
                      root_ceiling_factor=1.2,)),
+        # New PHASE-SPLIT policy: HALF SWEEP frames <= 1.2*old rank at
+        # every bond; checked closure and root solve may expand ONLY the
+        # root input W/Z frames to <= 2*old root rank. These are maxima.
+        ("T5_half12_root2_fixed8",DDQRExpansion(mode=:fixed,fixed_width=8,
+                    fixed_rank=4,krylov_mode=:lanczos,krylov_fixed_depth=8),
+                    (work_ceiling_rule=:half_root,bond_ceiling_factor=1.2,
+                     root_ceiling_factor=2.0,)),
+        ("T5_half12_root2_fixed12",DDQRExpansion(mode=:fixed,fixed_width=8,
+                    fixed_rank=4,krylov_mode=:lanczos,krylov_fixed_depth=12),
+                    (work_ceiling_rule=:half_root,bond_ceiling_factor=1.2,
+                     root_ceiling_factor=2.0,)),
+        ("T5_half12_root2_adaptK",DDQRExpansion(mode=:fixed,fixed_width=8,
+                    fixed_rank=4,krylov_mode=:lanczos),
+                    (work_ceiling_rule=:half_root,bond_ceiling_factor=1.2,
+                     root_ceiling_factor=2.0,)),
+        ("T5_half12_root2_RSVDCBE",DDQRExpansion(mode=:rank_adaptive,
+                    rank_initial_width=4,holdout_width=4,
+                    acceptance_factor=0.7,krylov_mode=:lanczos),
+                    (work_ceiling_rule=:half_root,bond_ceiling_factor=1.2,
+                     root_ceiling_factor=2.0,)),
+        ("T5_half12_root2_batched",DDQRExpansion(holdout_width=2,batch_blocks=2,
+                    cap_selection=:svd,acceptance_factor=0.6,krylov_mode=:lanczos),
+                    (work_ceiling_rule=:half_root,bond_ceiling_factor=1.2,
+                     root_ceiling_factor=2.0,)),
     ]
 end
 
@@ -306,7 +330,12 @@ for (twoS,L) in cases
                         elapsed=(time_ns()-start_ns)/1e9
                         ledger=info.ledger
                         if haskey(kw,:bond_ceiling_factor)
-                            ceilings=kw.work_ceiling_rule===:frame_root ?
+                            cap_pair=kw.work_ceiling_rule===:half_root ?
+                                bond_half_root_ceilings(start_bonds,maxdim,info.root;
+                                    half_factor=kw.bond_ceiling_factor,
+                                    root_factor=kw.root_ceiling_factor) : nothing
+                            ceilings=cap_pair !== nothing ? cap_pair.root :
+                                kw.work_ceiling_rule===:frame_root ?
                                 bond_frame_root_ceilings(start_bonds,maxdim,info.root;
                                     frame_factor=kw.bond_ceiling_factor,
                                     root_factor=kw.root_ceiling_factor) :
@@ -320,8 +349,10 @@ for (twoS,L) in cases
                             all(bond_dims(psi) .<= ceilings) ||
                                 error("Final bond exceeded per-bond working cap for d=$d")
                             for bondentry in ledger.bond_log
-                                bondentry.width <= ceilings[bondentry.bond] ||
-                                    error("Augmented K/L frame exceeded cap, d=$d, bond=$(bondentry.bond)")
+                                phase_caps=cap_pair !== nothing && !haskey(bondentry,:pass) ?
+                                    cap_pair.half : ceilings
+                                bondentry.width <= phase_caps[bondentry.bond] ||
+                                    error("Augmented K/L frame exceeded PHASE cap, d=$d, bond=$(bondentry.bond)")
                             end
                             info.root_right <= ceilings[info.root] ||
                                 error("Right root frame exceeded cap")
