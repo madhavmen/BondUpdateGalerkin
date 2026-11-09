@@ -241,10 +241,62 @@ function dd_cbe_expand(
         return (best, best === nothing ? 0 : leg_dim(best, fl))
     end
 
+    # Zero extra MPO passes: choose minimum retained rank from a SINGLE
+    # thin sampled U(1)-resolved DD sketch. The training-sketch tail is NOT an
+    # independent residual certificate. In BUG order2 its physical viability
+    # must be evaluated by the checked global closure and exact-state tests.
+    function tail_dd()
+        Om = draw(min(fixed_width, full_opp), nothing)
+        Om === nothing && return (nothing, 0)
+        ledger === nothing || (ledger.n_probes += leg_dim(Om, wleg))
+        Y = TLArray(project(sketch(Om)))
+        norm(Y) <= _CBE_EPS && return (nothing, 0)
+        legs = left ? (1, 2) : (2, 3)
+        rmax = min(cap, leg_dim(Om, wleg))
+        cache = Dict{Int,Any}()
+        function candidate(k)
+            k <= 0 && return nothing
+            haskey(cache, k) && return cache[k]
+            fac = svd(Y, legs, _TAG_K, _TAG_KR;
+                Nkeep = k,
+                cutoff = _rank_cut(0.0, Y, norm(Y)),
+                get_lists = true)
+            B = isempty(fac.kept_list) ? nothing :
+                left ? _reortho_left(frame, TLArray(fac.U)) :
+                       _reortho_right(frame, TLArray(permutedims(fac.U, (3, 1, 2))))
+            cache[k] = B
+            return B
+        end
+        # The local DD allocation already divides tol_basis over bonds and
+        # sides. Do not replace it with an arbitrary relative threshold.
+        limit = tail_factor * alloc.sample
+        metric(k) = begin
+            est, _, _ = _sample_residual(candidate(k), project,
+                _ -> Y, _ -> Om, 1, wleg, side)
+            indicator(alloc, est)
+        end
+        metric(0) <= limit && return (nothing, 0)
+        hi = rmax
+        metric(hi) > limit && return (candidate(hi), hi)
+        lo = 0
+        while hi - lo > 1
+            k = (hi+lo) ÷ 2
+            if metric(k) <= limit
+                hi = k
+            else
+                lo = k
+            end
+        end
+        B = candidate(hi)
+        return (B, B === nothing ? 0 : leg_dim(B, fl))
+    end
+
     # With an allocation the incremental controller decides the width (it is always
     # thin); without one, or for the exact reference, the numerical-rank stop of `_range_find`
     # alone.
-    directions, direction_count = if mode in (:rank_adaptive, :rank_fast) && alloc !== nothing && !exact
+    directions, direction_count = if mode === :rank_tail && alloc !== nothing && !exact
+        tail_dd()
+    elseif mode in (:rank_adaptive, :rank_fast) && alloc !== nothing && !exact
         ranked_dd()
     elseif mode === :fixed && !exact
         probe = draw(min(fixed_width, full_opp), nothing)
