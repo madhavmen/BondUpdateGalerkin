@@ -39,9 +39,12 @@ function dd_cbe_expand(
     fixed_width::Int = 0,
     fixed_rank::Int = 0,
     acceptance_factor::Float64 = 1.0,
+    rank_initial_width::Int = 4,
 )
     side in (:left, :right) || throw(ArgumentError("side must be :left or :right"))
-    mode in (:adaptive, :fixed) || throw(ArgumentError("unknown DD mode: $mode"))
+    mode in (:adaptive, :fixed, :rank_adaptive) ||
+        throw(ArgumentError("unknown DD mode: $mode"))
+    rank_initial_width >= 1 || throw(ArgumentError("rank_initial_width must be positive"))
     1 <= batch_blocks <= 8 || throw(ArgumentError("batch_blocks must be in 1:8"))
     cap_selection in (:storage, :svd) ||
         throw(ArgumentError("cap_selection must be :storage or :svd"))
@@ -102,10 +105,111 @@ function dd_cbe_expand(
         (block -> perp_component_right(right_basis, block))
     select(Om) = (first(_dd_select(frame, sketch(Om), side, kc)), 0.0)
 
+    # A separate rank-adaptive controller ranks the small U(1)-resolved DD sketch
+    # by its singular vectors and uses *held-out MPO actions* to choose the MINIMUM
+    # retained rank. The original QR controller only adapts discovery width; it
+    # usually keeps every QR direction in the initial block.
+    #
+    # Candidate and validation sketches never share Gaussian draws. The first
+    # validation can be used to choose k, so a second independent confirmation is
+    # mandatory (otherwise rank search exploits holdout noise). This is an empirical
+    # error monitor, NOT a rigorous confidence bound under repeated optional stops.
+    function ranked_dd()
+        maxprobe = min(full_opp, max(wcap, cap + 4))
+        width = min(maxprobe, rank_initial_width)
+        width <= 0 && return (nothing, 0)
+        best = nothing
+        for _attempt in 1:12
+            Om = draw(width, nothing)
+            Om === nothing && return (best, best === nothing ? 0 : leg_dim(best, fl))
+            ledger === nothing || (ledger.n_probes += leg_dim(Om, wleg))
+            Y = TLArray(project(sketch(Om)))
+            norm(Y) <= _CBE_EPS &&
+                return (nothing, 0)
+            # The only costly factorization is on the thin (d*chi)-by-width
+            # *sketch*, with U(1) block structure; no full DD matrix is built.
+            legs = left ? (1, 2) : (2, 3)
+            rmax = min(cap, width)
+            function selected(k)
+                k == 0 && return nothing
+                fac = svd(Y, legs, _TAG_K, _TAG_KR;
+                    Nkeep = k,
+                    cutoff = _rank_cut(0.0, Y, norm(Y)),
+                    get_lists = true)
+                isempty(fac.kept_list) && return nothing
+                return left ? _reortho_left(frame, TLArray(fac.U)) :
+                              _reortho_right(frame, TLArray(permutedims(fac.U, (3, 1, 2))))
+            end
+            # Cache one independent holdout for ALL rank candidates. A minimal
+            # satisfactory k is found by logarithmically many small block SVDs.
+            Ho = draw(holdout_width, nothing)
+            Ho === nothing && return (selected(rmax), rmax)
+            ledger === nothing || (ledger.n_holdout += leg_dim(Ho, wleg))
+            HY = sketch(Ho)
+            test_on = function (candidate, X, OM)
+                est, _, _ = _sample_residual(candidate, project,
+                    _ -> X, _ -> OM, 1, wleg, side)
+                return indicator(alloc, est)
+            end
+            threshold = acceptance_factor * alloc.sample
+            if test_on(nothing, HY, Ho) <= threshold
+                pick, chosen_k = nothing, 0
+            else
+                best = selected(rmax)
+                if test_on(best, HY, Ho) > threshold
+                    if width < maxprobe
+                        width = min(maxprobe, 2 * width)
+                        continue
+                    end
+                    ledger === nothing || begin
+                        _unmet!(ledger, :sample)
+                        ledger.workcap_reached = true
+                    end
+                    return (best, best === nothing ? 0 : leg_dim(best, fl))
+                end
+                low, high = 0, rmax
+                while high - low > 1
+                    mid = (low + high) ÷ 2
+                    trial = selected(mid)
+                    if test_on(trial, HY, Ho) <= threshold
+                        high = mid
+                    else
+                        low = mid
+                    end
+                end
+                chosen_k = high
+                pick = selected(high)
+            end
+            # Fresh independent holdout: rank selection never sees this action.
+            Ho2 = draw(2 * holdout_width, nothing)
+            if Ho2 !== nothing
+                ledger === nothing || (ledger.n_holdout += leg_dim(Ho2, wleg))
+                Y2 = sketch(Ho2)
+                if test_on(pick, Y2, Ho2) > threshold
+                    if width < maxprobe
+                        width = min(maxprobe, 2 * width)
+                        continue
+                    end
+                    ledger === nothing || begin
+                        _unmet!(ledger, :sample)
+                        ledger.workcap_reached = true
+                    end
+                    best = selected(rmax)
+                    return (best, best === nothing ? 0 : leg_dim(best, fl))
+                end
+            end
+            return (pick, chosen_k)
+        end
+        ledger === nothing || _unmet!(ledger, :sample)
+        return (best, best === nothing ? 0 : leg_dim(best, fl))
+    end
+
     # With an allocation the incremental controller decides the width (it is always
     # thin); without one, or for the exact reference, the numerical-rank stop of `_range_find`
     # alone.
-    directions, direction_count = if mode === :fixed && !exact
+    directions, direction_count = if mode === :rank_adaptive && alloc !== nothing && !exact
+        ranked_dd()
+    elseif mode === :fixed && !exact
         probe = draw(min(fixed_width, full_opp), nothing)
         if probe !== nothing && ledger !== nothing
             # The fixed-knob comparison is not validated, but its sketch work is real.
