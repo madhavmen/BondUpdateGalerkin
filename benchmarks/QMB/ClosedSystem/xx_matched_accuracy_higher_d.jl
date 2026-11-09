@@ -233,6 +233,7 @@ for (twoS,L) in cases
                     psi=spin_domain_wall_state(L,twoS)
                     rng=MersenneTwister(seed+71)
                     for k in 1:nsteps
+                        start_bonds=bond_dims(psi)
                         start_ns=time_ns()
                         kw=merge((order=2,closure_checks=true),extra)
                         info=cbe_bug_step!(psi,mpo,ComplexF64(-im*dt);
@@ -240,6 +241,20 @@ for (twoS,L) in cases
                            tol_root=1e-10,expansion=policy,rng=rng,kw...)
                         elapsed=(time_ns()-start_ns)/1e9
                         ledger=info.ledger
+                        if haskey(kw,:bond_ceiling_factor)
+                            ceilings=bond_work_ceilings(start_bonds,d,maxdim;
+                                                     factor=kw.bond_ceiling_factor)
+                            all(info.expanded .<= ceilings) ||
+                                error("Left frame exceeded 1.2*d*old_chi for d=$d, method=$method")
+                            all(bond_dims(psi) .<= ceilings) ||
+                                error("Final bond exceeded per-bond working cap for d=$d")
+                            for bondentry in ledger.bond_log
+                                bondentry.width <= ceilings[bondentry.bond] ||
+                                    error("Augmented K/L frame exceeded cap, d=$d, bond=$(bondentry.bond)")
+                            end
+                            info.root_right <= ceilings[info.root] ||
+                                error("Right root frame exceeded 1.2*d*old_chi cap")
+                        end
                         cnt=info.record.counters
                         D=maximum(bond_dims(psi))
                         Dstage=info.record.D_stage
