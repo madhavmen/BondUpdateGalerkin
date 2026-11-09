@@ -250,11 +250,18 @@ Base.@kwdef struct DDQRExpansion <: BasisExpansion
     mode::Symbol = :adaptive
     fixed_width::Int = 0
     fixed_rank::Int = 0
-    # Only :rank_adaptive: initial rank-selection sketch width (grown as needed).
+    # For :rank_adaptive or :rank_fast: initial rank-selection pilot width.
+    # :rank_fast uses a minimal pilot + same-width independent confirmation,
+    # reducing MPO actions when the local DD residual is easily compressed.
     rank_initial_width::Int = 4
     # Force a minimum number of DD directions on a trial after the combined
     # K/L + global closure failed (the independent DD residual alone can pass).
     rank_floor::Int = 0
+    # Single-pass tail-selection :rank_tail uses NO independent holdout.
+    # This is an explicitly UNcertified sketch heuristic, whose physical
+    # state accuracy must be checked by the existing global Krylov closure.
+    # It uses the same 12-column sketch as the fixed-width control.
+    tail_factor::Float64 = 0.10
     holdout_width::Int = 4
     # 1 = existing sequential controller; >1 adds multiple charge-targeted
     # discovery blocks per independent holdout checkpoint.
@@ -290,6 +297,7 @@ expand_frame(
     fixed_rank = strategy.fixed_rank,
     rank_initial_width = strategy.rank_initial_width,
     rank_floor = strategy.rank_floor,
+    tail_factor = strategy.tail_factor,
     holdout_width = strategy.holdout_width,
     batch_blocks = strategy.batch_blocks,
     cap_selection = strategy.cap_selection,

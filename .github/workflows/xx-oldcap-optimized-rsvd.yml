@@ -1,0 +1,90 @@
+name: Optimized RSVD+adaptive Lanczos under original 1.2d bond cap
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'src/BUG/Randomised/dd_cbe_expand.jl'
+      - 'src/BUG/Randomised/cbe.jl'
+      - 'benchmarks/XXT5/xx_T5_matched_work.jl'
+      - '.github/workflows/xx-oldcap-optimized-rsvd.yml'
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.11'
+      - uses: julia-actions/cache@v2
+      - name: Install pinned dependencies
+        run: julia --project -e 'using Pkg; Pkg.instantiate()'
+      - name: U1 XX all d pilot/fixed/adaptive smoke
+        env:
+          BUG_T5_SMOKE: '1'
+          BUG_HIGHER_CASES: '1:4,2:4,3:4'
+          BUG_HIGHER_STEPS: '2'
+          BUG_HIGHER_DT: '0.04'
+          BUG_HIGHER_SAMPLE_EVERY: '1'
+          BUG_HIGHER_SEEDS: '1'
+          BUG_HIGHER_TOLS: '1e-2'
+          BUG_HIGHER_POLICIES: 'RSVD_pilot2_Kadapt,RSVD_pilot3_Kadapt,RSVD_pilot4_Kadapt,RSVD_tail12_factor01,RSVD_tail8_factor01,RSVD_fixed8rank4_Kadapt,RSVD_fixed12rank8_Kadapt,RSVD_rank_standard_Kadapt,tdvp2'
+        run: julia --project benchmarks/XXT5/xx_T5_matched_work.jl results/rsvd-pilot-smoke
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rsvd-pilot-smoke
+          path: results/rsvd-pilot-smoke/
+          if-no-files-found: warn
+  physical-T5:
+    needs: smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: d2-short
+            case: '1:10'
+            interaction: short
+          - label: d2-long
+            case: '1:10'
+            interaction: long
+          - label: d3-short
+            case: '2:6'
+            interaction: short
+          - label: d3-long
+            case: '2:6'
+            interaction: long
+          - label: d4-short
+            case: '3:6'
+            interaction: short
+          - label: d4-long
+            case: '3:6'
+            interaction: long
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.11'
+      - uses: julia-actions/cache@v2
+      - run: julia --project -e 'using Pkg; Pkg.instantiate()'
+      - name: T=5 ${{ matrix.label }} DD/RSVD matched-error, old bond cap, adaptive K
+        env:
+          BUG_HIGHER_CASES: '${{ matrix.case }}'
+          BUG_HIGHER_INTERACTIONS: '${{ matrix.interaction }}'
+          BUG_HIGHER_STEPS: '50'
+          BUG_HIGHER_DT: '0.1'
+          BUG_HIGHER_SEEDS: '2'
+          BUG_HIGHER_TOLS: '1e-2,1e-3'
+          BUG_HIGHER_SAMPLE_EVERY: '5'
+          BUG_HIGHER_MAXDIM: '128'
+          BUG_HIGHER_POLICIES: 'RSVD_pilot2_Kadapt,RSVD_pilot3_Kadapt,RSVD_pilot4_Kadapt,RSVD_tail12_factor01,RSVD_tail12_factor005,RSVD_tail8_factor01,RSVD_rank_standard_Kadapt,RSVD_fixed8rank4_Kadapt,RSVD_fixed12rank8_Kadapt,RSVD_sequential_Kadapt,RSVD_batched_Kadapt,tdvp2'
+        run: julia --project benchmarks/XXT5/xx_T5_matched_work.jl results/T5-RSVD-${{ matrix.label }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T5-RSVD-${{ matrix.label }}
+          path: results/T5-RSVD-${{ matrix.label }}/
+          if-no-files-found: warn

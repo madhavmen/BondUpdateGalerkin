@@ -41,12 +41,16 @@ function dd_cbe_expand(
     acceptance_factor::Float64 = 1.0,
     rank_initial_width::Int = 4,
     rank_floor::Int = 0,
+    tail_factor::Float64 = 0.10,
 )
     side in (:left, :right) || throw(ArgumentError("side must be :left or :right"))
-    mode in (:adaptive, :fixed, :rank_adaptive) ||
+    mode in (:adaptive, :fixed, :rank_adaptive, :rank_fast, :rank_tail) ||
         throw(ArgumentError("unknown DD mode: $mode"))
     rank_initial_width >= 1 || throw(ArgumentError("rank_initial_width must be positive"))
     rank_floor >= 0 || throw(ArgumentError("rank_floor must be nonnegative"))
+    0 < tail_factor <= 1 || throw(ArgumentError("tail_factor must lie in (0,1]"))
+    mode === :rank_tail && fixed_width < 1 &&
+        throw(ArgumentError("rank_tail requires positive fixed_width"))
     1 <= batch_blocks <= 8 || throw(ArgumentError("batch_blocks must be in 1:8"))
     cap_selection in (:storage, :svd) ||
         throw(ArgumentError("cap_selection must be :storage or :svd"))
@@ -117,7 +121,13 @@ function dd_cbe_expand(
     # mandatory (otherwise rank search exploits holdout noise). This is an empirical
     # error monitor, NOT a rigorous confidence bound under repeated optional stops.
     function ranked_dd()
-        maxprobe = min(full_opp, max(wcap, cap + 4))
+        # Explicit MPO-probe ceiling for the fast policy. At large chi (500+)
+        # we never expand a single U(1) DD discovery sketch without limit.
+        # A failed independently checked residual is reported as UNMET rather
+        # than allowing validation cost to scale with the entire bond space.
+        maxprobe = mode === :rank_fast ?
+            min(full_opp, wcap, max(rank_initial_width, 64)) :
+            min(full_opp, max(wcap, cap + 4))
         width = min(maxprobe, max(rank_initial_width, rank_floor + 2))
         width <= 0 && return (nothing, 0)
         best = nothing
@@ -201,7 +211,10 @@ function dd_cbe_expand(
                 pick = selected(chosen_k)
             end
             # Fresh independent holdout: rank selection never sees this action.
-            Ho2 = draw(2 * holdout_width, nothing)
+            # Optimized pilot: keep the independent confirmation, but use
+            # the same 2-column holdout width rather than the older 2s.
+            # Charge-resolved sectors are still sampled independently.
+            Ho2 = draw(mode === :rank_fast ? holdout_width : 2 * holdout_width, nothing)
             if Ho2 !== nothing
                 ledger === nothing || (ledger.n_holdout += leg_dim(Ho2, wleg))
                 Y2 = sketch(Ho2)
@@ -228,10 +241,62 @@ function dd_cbe_expand(
         return (best, best === nothing ? 0 : leg_dim(best, fl))
     end
 
+    # Zero extra MPO passes: choose minimum retained rank from a SINGLE
+    # thin sampled U(1)-resolved DD sketch. The training-sketch tail is NOT an
+    # independent residual certificate. In BUG order2 its physical viability
+    # must be evaluated by the checked global closure and exact-state tests.
+    function tail_dd()
+        Om = draw(min(fixed_width, full_opp), nothing)
+        Om === nothing && return (nothing, 0)
+        ledger === nothing || (ledger.n_probes += leg_dim(Om, wleg))
+        Y = TLArray(project(sketch(Om)))
+        norm(Y) <= _CBE_EPS && return (nothing, 0)
+        legs = left ? (1, 2) : (2, 3)
+        rmax = min(cap, leg_dim(Om, wleg))
+        cache = Dict{Int,Any}()
+        function candidate(k)
+            k <= 0 && return nothing
+            haskey(cache, k) && return cache[k]
+            fac = svd(Y, legs, _TAG_K, _TAG_KR;
+                Nkeep = k,
+                cutoff = _rank_cut(0.0, Y, norm(Y)),
+                get_lists = true)
+            B = isempty(fac.kept_list) ? nothing :
+                left ? _reortho_left(frame, TLArray(fac.U)) :
+                       _reortho_right(frame, TLArray(permutedims(fac.U, (3, 1, 2))))
+            cache[k] = B
+            return B
+        end
+        # The local DD allocation already divides tol_basis over bonds and
+        # sides. Do not replace it with an arbitrary relative threshold.
+        limit = tail_factor * alloc.sample
+        metric(k) = begin
+            est, _, _ = _sample_residual(candidate(k), project,
+                _ -> Y, _ -> Om, 1, wleg, side)
+            indicator(alloc, est)
+        end
+        metric(0) <= limit && return (nothing, 0)
+        hi = rmax
+        metric(hi) > limit && return (candidate(hi), hi)
+        lo = 0
+        while hi - lo > 1
+            k = (hi+lo) ÷ 2
+            if metric(k) <= limit
+                hi = k
+            else
+                lo = k
+            end
+        end
+        B = candidate(hi)
+        return (B, B === nothing ? 0 : leg_dim(B, fl))
+    end
+
     # With an allocation the incremental controller decides the width (it is always
     # thin); without one, or for the exact reference, the numerical-rank stop of `_range_find`
     # alone.
-    directions, direction_count = if mode === :rank_adaptive && alloc !== nothing && !exact
+    directions, direction_count = if mode === :rank_tail && alloc !== nothing && !exact
+        tail_dd()
+    elseif mode in (:rank_adaptive, :rank_fast) && alloc !== nothing && !exact
         ranked_dd()
     elseif mode === :fixed && !exact
         probe = draw(min(fixed_width, full_opp), nothing)

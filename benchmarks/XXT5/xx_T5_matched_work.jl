@@ -235,6 +235,56 @@ function policy_specs(basis_tol)
                     cap_selection=:svd,acceptance_factor=0.6,krylov_mode=:lanczos),
                     (work_ceiling_rule=:frame_root,bond_ceiling_factor=2.0,
                      root_ceiling_factor=1.2,)),
+        # Same old 1.2*d*Db cap and adaptive enriched Lanczos for ALL.
+        # Fast pilot uses two independent 2-column holdouts, maximizing
+        # scalability at chi >=500 (max 64 trial columns).
+        ("RSVD_pilot2_Kadapt",DDQRExpansion(mode=:rank_fast,
+                    rank_initial_width=2,holdout_width=2,
+                    acceptance_factor=0.6,krylov_mode=:lanczos),
+                    (work_ceiling_rule=:bond,bond_ceiling_factor=1.2,)),
+        ("RSVD_pilot3_Kadapt",DDQRExpansion(mode=:rank_fast,
+                    rank_initial_width=3,holdout_width=2,
+                    acceptance_factor=0.6,krylov_mode=:lanczos),
+                    (work_ceiling_rule=:bond,bond_ceiling_factor=1.2,)),
+        ("RSVD_pilot4_Kadapt",DDQRExpansion(mode=:rank_fast,
+                    rank_initial_width=4,holdout_width=2,
+                    acceptance_factor=0.6,krylov_mode=:lanczos),
+                    (work_ceiling_rule=:bond,bond_ceiling_factor=1.2,)),
+        ("RSVD_pilot3_margin8",DDQRExpansion(mode=:rank_fast,
+                    rank_initial_width=3,holdout_width=2,
+                    acceptance_factor=0.8,krylov_mode=:lanczos),
+                    (work_ceiling_rule=:bond,bond_ceiling_factor=1.2,)),
+        ("RSVD_rank_standard_Kadapt",DDQRExpansion(mode=:rank_adaptive,
+                    rank_initial_width=4,holdout_width=4,
+                    acceptance_factor=0.7,krylov_mode=:lanczos),
+                    (work_ceiling_rule=:bond,bond_ceiling_factor=1.2,)),
+        ("RSVD_fixed8rank4_Kadapt",DDQRExpansion(mode=:fixed,
+                    fixed_width=8,fixed_rank=4,krylov_mode=:lanczos),
+                    (work_ceiling_rule=:bond,bond_ceiling_factor=1.2,)),
+        ("RSVD_fixed12rank8_Kadapt",DDQRExpansion(mode=:fixed,
+                    fixed_width=12,fixed_rank=8,krylov_mode=:lanczos),
+                    (work_ceiling_rule=:bond,bond_ceiling_factor=1.2,)),
+        ("RSVD_sequential_Kadapt",DDQRExpansion(mode=:adaptive,
+                    holdout_width=2,acceptance_factor=0.6,
+                    batch_blocks=1,krylov_mode=:lanczos),
+                    (work_ceiling_rule=:bond,bond_ceiling_factor=1.2,)),
+        ("RSVD_batched_Kadapt",DDQRExpansion(mode=:adaptive,
+                    holdout_width=2,acceptance_factor=0.6,
+                    batch_blocks=2,cap_selection=:svd,krylov_mode=:lanczos),
+                    (work_ceiling_rule=:bond,bond_ceiling_factor=1.2,)),
+        # One-pass tail rank selection: same MPO sketch as fixed width 8/12.
+        # Crucially, this is NOT an independently validated DD residual.
+        # The checked order2 global Krylov closure and ED state error decide
+        # whether this cheaper selection is physically acceptable.
+        ("RSVD_tail12_factor01",DDQRExpansion(mode=:rank_tail,
+                    fixed_width=12,tail_factor=0.10,krylov_mode=:lanczos),
+                    (work_ceiling_rule=:bond,bond_ceiling_factor=1.2,)),
+        ("RSVD_tail12_factor005",DDQRExpansion(mode=:rank_tail,
+                    fixed_width=12,tail_factor=0.05,krylov_mode=:lanczos),
+                    (work_ceiling_rule=:bond,bond_ceiling_factor=1.2,)),
+        ("RSVD_tail8_factor01",DDQRExpansion(mode=:rank_tail,
+                    fixed_width=8,tail_factor=0.10,krylov_mode=:lanczos),
+                    (work_ceiling_rule=:bond,bond_ceiling_factor=1.2,)),
     ]
 end
 
