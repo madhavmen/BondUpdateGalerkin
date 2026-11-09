@@ -151,6 +151,14 @@ function dd_cbe_expand(
                     _ -> X, _ -> OM, 1, wleg, side)
                 return indicator(alloc, est)
             end
+            record_test = function (candidate, X, OM)
+                ledger === nothing && return nothing
+                est, per, hc = _sample_residual(candidate, project,
+                    _ -> X, _ -> OM, 1, wleg, side)
+                _record_sample!(ledger, side, indicator(alloc, est),
+                    per, hc, OM, wleg, alloc)
+                return nothing
+            end
             threshold = acceptance_factor * alloc.sample
             if test_on(nothing, HY, Ho) <= threshold
                 pick, chosen_k = nothing, 0
@@ -161,6 +169,7 @@ function dd_cbe_expand(
                         width = min(maxprobe, 2 * width)
                         continue
                     end
+                    record_test(best, HY, Ho)
                     ledger === nothing || begin
                         _unmet!(ledger, :sample)
                         ledger.workcap_reached = true
@@ -190,13 +199,17 @@ function dd_cbe_expand(
                         width = min(maxprobe, 2 * width)
                         continue
                     end
+                    best = selected(rmax)
+                    record_test(best, Y2, Ho2)
                     ledger === nothing || begin
                         _unmet!(ledger, :sample)
                         ledger.workcap_reached = true
                     end
-                    best = selected(rmax)
                     return (best, best === nothing ? 0 : leg_dim(best, fl))
                 end
+                record_test(pick, Y2, Ho2)
+            else
+                record_test(pick, HY, Ho)
             end
             return (pick, chosen_k)
         end
