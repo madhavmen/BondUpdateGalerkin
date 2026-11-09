@@ -106,9 +106,30 @@ function dd_cbe_expand(
             # The fixed-knob comparison is not validated, but its sketch work is real.
             ledger.n_probes += leg_dim(probe, wleg)
         end
-        selected = probe === nothing ? nothing : first(_dd_select(frame, sketch(probe), side, kc))
-        # Fixed-rank is a cap, deliberately without a residual certification.
-        fixed_basis = selected === nothing ? nothing : _trim_total(selected, fl, fixed_rank)
+        # A fair fixed-rank RSVD baseline: SVD of the *projected sketch*.
+        # Unlike taking the first QR columns (sector/storage order), this keeps
+        # the most significant sampled singular directions across charge sectors.
+        fixed_basis = if probe === nothing
+            nothing
+        else
+            Y = TLArray(project(sketch(probe)))
+            if norm(Y) <= _CBE_EPS
+                nothing
+            else
+                legs = left ? (1, 2) : (2, 3)
+                out = svd(Y, legs, _TAG_K, _TAG_KR;
+                    Nkeep = min(fixed_rank, cap),
+                    cutoff = _rank_cut(0.0, Y, norm(Y)),
+                    get_lists = true)
+                if isempty(out.kept_list)
+                    nothing
+                elseif left
+                    _reortho_left(frame, TLArray(out.U))
+                else
+                    _reortho_right(frame, TLArray(permutedims(out.U, (3, 1, 2))))
+                end
+            end
+        end
         (fixed_basis, fixed_basis === nothing ? 0 : leg_dim(fixed_basis, fl))
     elseif alloc === nothing || exact
         Qr, _, nr = _certified_range(
