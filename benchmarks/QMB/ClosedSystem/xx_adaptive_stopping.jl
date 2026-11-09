@@ -70,10 +70,16 @@ const trunc = parse(Float64, get(ENV, "BUG_XX_TRUNC", "1e-8"))
 const root_tol = parse(Float64, get(ENV, "BUG_XX_ROOT", "1e-10"))
 const cap = parse(Int, get(ENV, "BUG_XX_MAXDIM", "64"))
 const configs = (
-    ("fixed2", DDQRExpansion(mode=:fixed,fixed_width=4,fixed_rank=2)),
-    ("fixed4", DDQRExpansion(mode=:fixed,fixed_width=8,fixed_rank=4)),
-    ("adaptive4", DDQRExpansion(holdout_width=4)),
-    ("adaptive2conservative", DDQRExpansion(holdout_width=2,acceptance_factor=0.6)),
+    ("fixed2", DDQRExpansion(mode=:fixed,fixed_width=4,fixed_rank=2), NamedTuple()),
+    ("fixed4", DDQRExpansion(mode=:fixed,fixed_width=8,fixed_rank=4), NamedTuple()),
+    ("adaptive4", DDQRExpansion(holdout_width=4), NamedTuple()),
+    ("adaptive2conservative", DDQRExpansion(holdout_width=2,acceptance_factor=0.6), NamedTuple()),
+    # Rank control is an existing BUG feature; compare its extra small-core SVD cost.
+    ("adaptive_ranked_krylov", DDQRExpansion(holdout_width=2,acceptance_factor=0.6),
+        (krylov_rank_tol=basis,)),
+    # This is a resource-cap ablation, not an accuracy stopping criterion.
+    ("adaptive_bondcap", DDQRExpansion(holdout_width=2,acceptance_factor=0.6),
+        (work_ceiling_rule=:bond,bond_ceiling_factor=1.2,)),
 )
 rows = Any[]
 frames_rows = Any[]
@@ -104,13 +110,13 @@ for L in (8,), interaction in (:short,:long)
     c0 = eig.vectors' * u0
     exact_vec = [eig.vectors * (exp.(-im*dt*k .* eig.values) .* c0) for k in 1:nsteps]
     exact_at = [dense_profile(v,L) for v in exact_vec]
-    for (method,policy) in configs, seed in 0:(nseeds-1)
+    for (method,policy,stepkw) in configs, seed in 0:(nseeds-1)
         psi = spin_domain_wall_state(L,1)
         rng = MersenneTwister(seed)
         for step in 1:nsteps
             info = cbe_bug_step!(psi,mpo,-im*dt;order=2,
                 maxdim=cap,tol_basis=basis,tol_trunc=trunc,
-                tol_root=root_tol,expansion=policy,rng=rng)
+                tol_root=root_tol,expansion=policy,rng=rng,stepkw...)
             err = maximum(abs.(profile(psi).-exact_at[step]))
             state_err, norm_err = vector_errors(psi,exact_vec[step])
             d_final = bond_dims(psi)
