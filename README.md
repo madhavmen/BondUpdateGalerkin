@@ -4,10 +4,6 @@ Rank-adaptive basis-update-and-Galerkin (BUG) time integration of tensor trains,
 controlled bond expansion and order-p integration, for quantum many-body matrix product states and
 quantics tensor trains of PDE fields, on one shared engine.
 
-**Scope.** Real- and imaginary-time evolution of MPS under MPOs (U(1), Z2, SU(2) or no symmetry),
-Lindblad dynamics (density operators or quantum-jump trajectories), and linear and nonlinear PDEs
-on quantics grids (Heston, Gross-Pitaevskii). Two-site TDVP is included as the baseline.
-
 ## Install
 
 Internal: access to this repository is required. Julia 1.11 or later.
@@ -86,13 +82,3 @@ julia --project -e 'using Pkg; Pkg.test()'
 The randomised expansion draws from a seeded stream owned by the step (`rng` keyword); the same
 inputs give the same result on the same machine. The frozen regression fixtures are in
 `test/fixtures/b155550`, with the versions they were made with.
-
-## Contributing
-
-Contributor and coding-agent rules are in [AGENTS.md](AGENTS.md) and [agents/](agents/).
-
-## Limitations
-
-- QTT states carry no symmetry.
-- The Gross-Pitaevskii vortex-shedding study is a research benchmark, not a validated example.
-- Run times of the examples and benchmarks are not yet recorded.
