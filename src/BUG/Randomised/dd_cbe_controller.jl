@@ -47,7 +47,7 @@ function _dd_controller(
     # `fl` is the frame's new (growing) leg, `wleg` the probe-width leg of a sketch block.
     fl, wleg = left ? (3, 1) : (1, 3)
     tags = Telum.inds(frame)[fl].itags
-    aug, dd_basis, direction_count, streamed = frame, nothing, 0, 0
+    aug, dd_basis, direction_count, streamed, discovered = frame, nothing, 0, 0, 0
     boost = Dict{Any,Int}()
     # QR the sketched block against the frame augmented so far, append the new directions to
     # `dd_basis` and `aug`, and return how many were added.
@@ -65,6 +65,7 @@ function _dd_controller(
     function stream(Om, field::Symbol)
         width = leg_dim(Om, wleg)
         streamed += width
+        field === :n_probes && (discovered += width)
         ledger === nothing || setfield!(ledger, field, getfield(ledger, field) + width)
         return sketch(Om)
     end
@@ -102,8 +103,7 @@ function _dd_controller(
         end
         # Validation probes are not discovery columns. Keep their accounting in the
         # ledger, but do not let repeated statistical checks exhaust the discovery cap.
-        capped = ledger === nothing ? direction_count >= ncap :
-                 ledger.n_probes >= wcap || direction_count >= ncap
+        capped = discovered >= wcap || direction_count >= ncap
         if ok || capped
             ledger === nothing || _record_sample!(ledger, side, ind, per, hcols, last, wleg, alloc)
             ok && return (dd_basis, :met)
