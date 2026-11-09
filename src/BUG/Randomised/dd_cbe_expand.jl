@@ -43,7 +43,7 @@ function dd_cbe_expand(
     rank_floor::Int = 0,
 )
     side in (:left, :right) || throw(ArgumentError("side must be :left or :right"))
-    mode in (:adaptive, :fixed, :rank_adaptive) ||
+    mode in (:adaptive, :fixed, :rank_adaptive, :rank_fast) ||
         throw(ArgumentError("unknown DD mode: $mode"))
     rank_initial_width >= 1 || throw(ArgumentError("rank_initial_width must be positive"))
     rank_floor >= 0 || throw(ArgumentError("rank_floor must be nonnegative"))
@@ -201,7 +201,10 @@ function dd_cbe_expand(
                 pick = selected(chosen_k)
             end
             # Fresh independent holdout: rank selection never sees this action.
-            Ho2 = draw(2 * holdout_width, nothing)
+            # Optimized pilot: keep the independent confirmation, but use
+            # the same 2-column holdout width rather than the older 2s.
+            # Charge-resolved sectors are still sampled independently.
+            Ho2 = draw(mode === :rank_fast ? holdout_width : 2 * holdout_width, nothing)
             if Ho2 !== nothing
                 ledger === nothing || (ledger.n_holdout += leg_dim(Ho2, wleg))
                 Y2 = sketch(Ho2)
@@ -231,7 +234,7 @@ function dd_cbe_expand(
     # With an allocation the incremental controller decides the width (it is always
     # thin); without one, or for the exact reference, the numerical-rank stop of `_range_find`
     # alone.
-    directions, direction_count = if mode === :rank_adaptive && alloc !== nothing && !exact
+    directions, direction_count = if mode in (:rank_adaptive, :rank_fast) && alloc !== nothing && !exact
         ranked_dd()
     elseif mode === :fixed && !exact
         probe = draw(min(fixed_width, full_opp), nothing)
