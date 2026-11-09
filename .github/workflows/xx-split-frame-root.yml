@@ -31,6 +31,8 @@ jobs:
             @assert bond_frame_root_ceilings([1,2,3],64,2)==[2,3,6]
             @assert bond_work_ceilings_strict([1,2,3],64;factor=1.2)==[2,3,4]
           '
+      - name: Regression test: separate root and frame limits
+        run: julia --project test/BUG/Core/RankAdaptation/test_bond_work_ceiling.jl
       - name: Short cross-d U1 XX, split-frame-root vs strict cap and TDVP2
         env:
           BUG_SPLIT_STEPS: '2'
