@@ -506,6 +506,40 @@ function bond_work_ceilings_strict(
     ]
 end
 
+"""
+    bond_frame_root_ceilings(old_bonds, maxdim, root_bond;
+                             frame_factor=2.0, root_factor=1.2)
+
+Two-tier augmentation resource limit. Away from the root, DD/RSVD and enriched
+K/L frames may grow to `ceil(frame_factor * D_b_old)`; at the root bond
+both W and Z input frame widths are limited to
+`ceil(root_factor * D_root_old)`, before root Galerkin evolution.
+The root core has at most `D_W*D_Z` elements. All caps are frozen from the
+MPS at the *beginning* of the step; a rejected step never updates them.
+The root restriction is a WORKING-FRAME limit, not merely final compression.
+"""
+function bond_frame_root_ceilings(
+    old_bonds::AbstractVector{<:Integer},
+    maxdim::Int,
+    root_bond::Int;
+    frame_factor::Real = 2.0,
+    root_factor::Real = 1.2,
+)
+    1 <= root_bond <= length(old_bonds) ||
+        throw(BoundsError(old_bonds, root_bond))
+    frame_factor > 1 || throw(ArgumentError("frame_factor must exceed 1"))
+    root_factor > 1 || throw(ArgumentError("root_factor must exceed 1"))
+    root_factor <= frame_factor ||
+        throw(ArgumentError("root_factor cannot exceed frame_factor"))
+    maxdim >= 1 || throw(ArgumentError("maxdim must be positive"))
+    return [
+        max(1, min(maxdim, ceil(Int, round(
+            (b == root_bond ? root_factor : frame_factor) * old_bonds[b];
+            digits=9,
+        )))) for b in eachindex(old_bonds)
+    ]
+end
+
 "A work ceiling: one for every bond (`work_ceiling`), or one per bond (`bond_work_ceilings`)."
 const WorkCeiling = Union{Int,Vector{Int}}
 
