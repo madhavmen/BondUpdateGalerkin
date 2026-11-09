@@ -80,7 +80,9 @@ for L in (8,), interaction in (:short,:long)
     W = couplings(L,longrange)
     mpo = model(L,W)
     H = exact_hamiltonian(L,W)
-    ref = reference_profile(H,spin_domain_wall_state(L,1),L,dt*nsteps)
+    initial = spin_domain_wall_state(L,1)
+    # Small ED reference is computed at each sampled time, not only at t_final.
+    exact_at = [reference_profile(H, initial, L, dt*k) for k in 1:nsteps]
     for (method,policy) in configs, seed in 0:2
         psi = spin_domain_wall_state(L,1)
         rng = MersenneTwister(seed)
@@ -88,7 +90,7 @@ for L in (8,), interaction in (:short,:long)
             info = cbe_bug_step!(psi,mpo,-im*dt;order=2,
                 maxdim=cap,tol_basis=basis,tol_trunc=trunc,
                 tol_root=root_tol,expansion=policy,rng=rng)
-            err = maximum(abs.(profile(psi).-ref)) # valid at final time only; plotted final row
+            err = maximum(abs.(profile(psi).-exact_at[step]))
             Lg = info.ledger
             push!(rows,(interaction,L,method,seed,step,step*dt,
                 err,maximum(bond_dims(psi)),info.record.D_stage,
@@ -100,13 +102,13 @@ for L in (8,), interaction in (:short,:long)
     psi = spin_domain_wall_state(L,1)
     for step in 1:nsteps
         info = tdvp2_step!(psi,mpo,-im*dt;maxdim=cap,weight_tol=trunc)
-        err = maximum(abs.(profile(psi).-ref))
+        err = maximum(abs.(profile(psi).-exact_at[step]))
         push!(rows,(interaction,L,"tdvp2",0,step,step*dt,
             err,maximum(bond_dims(psi)),0,0,0,0,0,0,0,0,0,0,0,"reference"))
     end
 end
 write_rows("trajectories.csv",
-    ("interaction","L","method","seed","step","t","sz_error_vs_final_reference",
+    ("interaction","L","method","seed","step","t","max_sz_error",
      "D_final","D_stage","n_probes","n_holdout","n_dd","n_krylov",
      "n_h1","root_iters","t_cbe","t_kry","t_root","t_step","budget_status"),rows)
 println("Wrote ",joinpath(outdir,"trajectories.csv"))
