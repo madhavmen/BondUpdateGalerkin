@@ -66,6 +66,11 @@ function cbe_bug_step!(
     # `:frame_root` distinguishes K/L frame growth (default 2*D_b) from
     # the *two input frames* of the root Galerkin solve (1.2*D_root).
     # A root cap is NOT merely a cap on the final root SVD rank.
+    # `:half_root` uses TWO limits frozen from the same pre-step MPS:
+    # DD+CBE+enriched Krylov half-sweep <= ceil(bond_ceiling_factor*D_b)
+    # at ALL bonds, then the checked root-frontier and Galerkin phase
+    # can enlarge ONLY the root to ceil(root_ceiling_factor*D_root).
+    # E.g. 1.2 and 2.0. Both are MAXIMA, never forced rank targets.
     # A bond already at `maxdim` cannot enlarge its frame that step.
     work_ceiling_rule::Symbol = :maxdim,
     bond_ceiling_factor::Real = 0.0,
@@ -209,10 +214,15 @@ function cbe_bug_step!(
     accL = _HalfAcc()
     accR = _HalfAcc()
 
-    # The work ceiling, an `Int` for every bond or one per bond (`_cap_at`).
-    wcap_step = options.workcap
-    # The expansion settings every DD-QR CBE of the step takes, half-sweeps and frontier sweeps.
-    exkw = (growth = ADAPTIVE_GROWTH, exact = exact, alloc = alloc, workcap = wcap_step)
+    # Independent half-sweep versus post-half-sweep (root closure/Galerkin) ceilings.
+    # Both are based on the ORIGINAL pre-step MPS bond ranks.
+    wcap_half, wcap_step = options.half_workcap, options.workcap
+    # In the half sweeps, every CBE+K/L stage is limited to 1.2 D_b.
+    exkw = (growth = ADAPTIVE_GROWTH, exact = exact, alloc = alloc, workcap = wcap_half)
+    # During the checked global-frontier closure and optional outside-residual
+    # re-enrichment only the ROOT bond may reach 2 D_root. The DD expansion
+    # controller and its enriched Krylov recurrence MUST use this same ceiling.
+    root_exkw = merge(exkw, (workcap = wcap_step,))
 
     # The ledger and the RNG are per half-sweep, because under `parallel = true` the two run
     # concurrently: a shared `AdaptiveLedger` loses `+=` updates, and a shared `MersenneTwister`
@@ -229,10 +239,10 @@ function cbe_bug_step!(
         alloc,
         expansion,
         exkw,
-        wcap_step,
+        wcap_half,
         keep_states,
         options.keep_tols,
-        work_ceiling_rule in (:bond, :bond_strict, :frame_root),
+        work_ceiling_rule in (:bond, :bond_strict, :frame_root, :half_root),
     )
 
     troot = Ref(0.0)
@@ -293,7 +303,7 @@ function cbe_bug_step!(
         root_start,
         tau,
         alloc,
-        exkw,
+        root_exkw,
         expanded,
         ledger;
         order = order,
@@ -394,7 +404,7 @@ function cbe_bug_step!(
             tau = tau,
             eshift = eshift,
             alloc = alloc,
-            expansion_settings = exkw,
+            expansion_settings = root_exkw,
             expansion = expansion,
             expanded = expanded,
             ledger = ledger,
