@@ -62,6 +62,7 @@ function cbe_bug_step!(
     # `bond_ceiling_factor = f > 1`, `min(ceil(f*d*D_b), maxdim)` instead;
     # `f = 1.2` allows up to 1.2 times the local one-site physical space.
     # This cap is on DD/Krylov/closure working frames, not a truncation accuracy target.
+    # `:bond_strict` enforces min(ceil(f*D_b), maxdim), WITHOUT the physical d.
     # A bond already at `maxdim` cannot enlarge its frame that step.
     work_ceiling_rule::Symbol = :maxdim,
     bond_ceiling_factor::Real = 0.0,
@@ -226,7 +227,7 @@ function cbe_bug_step!(
         wcap_step,
         keep_states,
         options.keep_tols,
-        work_ceiling_rule === :bond,
+        work_ceiling_rule in (:bond, :bond_strict),
     )
 
     troot = Ref(0.0)
