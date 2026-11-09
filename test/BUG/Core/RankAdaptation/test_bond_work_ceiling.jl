@@ -142,6 +142,44 @@ include(joinpath(@__DIR__, "..", "..", "..", "common", "dense_reference.jl"))
         end
     end
 
+    @testset "two PHASE ceilings: half 1.2D and root 2D" begin
+        caps = bond_half_root_ceilings([1,5,10,65],1024,2;
+            half_factor=1.2,root_factor=2.0)
+        @test caps.half == [2,6,12,78]
+        @test caps.root == [2,10,12,78]
+        @test bond_half_root_ceilings([1,5,10],64,3).root == [2,6,20]
+        @test bond_half_root_ceilings([1,5,10],8,2).root == [2,8,8]
+        @test_throws BoundsError bond_half_root_ceilings([1,2,3],64,4)
+        @test_throws ArgumentError bond_half_root_ceilings([1,2,3],64,2;
+            half_factor=1.5,root_factor=1.2)
+
+        half_cap = bond_half_root_ceilings(start_bonds,64,fld(chain_length,2))
+        @test half_cap.root[fld(chain_length,2)] >= half_cap.half[fld(chain_length,2)]
+        @test all(half_cap.root[b] == half_cap.half[b]
+                  for b in eachindex(start_bonds) if b != fld(chain_length,2))
+
+        # Actual order-2 BUG, NOT just array algebra. A too-large half-sweep
+        # root frame would give a false impression of reduced iteration cost.
+        state = copy(start_state)
+        info = cbe_bug_step!(state,hamiltonian,time_step;
+            step_settings...,
+            order=2,closure_checks=true,
+            work_ceiling_rule=:half_root,
+            bond_ceiling_factor=1.2,
+            root_ceiling_factor=2.0)
+        @test all(info.expanded .<= half_cap.root)
+        @test info.expanded[info.root] <= half_cap.root[info.root]
+        @test info.root_right <= half_cap.root[info.root]
+        @test all(bond_dims(state) .<= half_cap.root)
+        @test all(entry.width <=
+                  (haskey(entry,:pass) ? half_cap.root : half_cap.half)[entry.bond]
+                  for entry in info.ledger.bond_log)
+        @test info.expanded[info.root]*info.root_right <= half_cap.root[info.root]^2
+        # No physical dimension factor in either array.
+        @test bond_half_root_ceilings([1,5,10],64,2;half_factor=1.2,
+                root_factor=2.0) == (half=[2,6,12],root=[2,10,12])
+    end
+
     @testset "refused settings" begin
         refused(; keywords...) = cbe_bug_step!(
             copy(start_state),
