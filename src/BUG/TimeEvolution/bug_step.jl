@@ -59,8 +59,10 @@ function cbe_bug_step!(
     # The working-rank ceiling of every DD-QR CBE and local Krylov stage. `:maxdim`: one ceiling
     # `max(d*maxdim, d*D_max)` for every bond (`work_ceiling`). `:bond`: `min(2*d*D_b, maxdim)` at
     # bond `b`, from its dimension at the start of the step (`bond_work_ceilings`); with
-    # `bond_ceiling_factor = f > 1`, `min(ceil(f*D_b), maxdim)` instead (the usual CBE stage
-    # ceiling is `f = 1.2`). A bond already at `maxdim` then gets no enrichment room that step.
+    # `bond_ceiling_factor = f > 1`, `min(ceil(f*d*D_b), maxdim)` instead;
+    # `f = 1.2` allows up to 1.2 times the local one-site physical space.
+    # This cap is on DD/Krylov/closure working frames, not a truncation accuracy target.
+    # A bond already at `maxdim` cannot enlarge its frame that step.
     work_ceiling_rule::Symbol = :maxdim,
     bond_ceiling_factor::Real = 0.0,
     # ── imaginary time ──
