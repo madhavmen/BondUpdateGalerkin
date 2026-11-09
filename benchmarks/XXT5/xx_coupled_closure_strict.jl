@@ -59,8 +59,29 @@ function full_hamiltonian(L,twoS,J)
     return Hermitian(H)
 end
 
-function error_and_norm(psi,ref)
-    v=dense_state(psi)
+# U(1)-aware exact bra contractions; unlike generic dense_state(), these retain
+# each physical charge label and have already been tested on d=3 and d=4.
+function sector_indices_and_bras(L,twoS)
+    d=twoS+1
+    target=div(L*twoS,2)
+    q=spin_space(twoS)
+    indices=Int[]
+    bras=Any[]
+    for k in 0:d^L-1
+        b=digits_of(k,d,L)
+        sum(b)==target || continue
+        push!(indices,k+1)
+        push!(bras,_full_tensor(sector_product_state(q,
+                        [((twoS-2*a,),) for a in b])))
+    end
+    return indices,bras
+end
+function sector_state(psi,bras)
+    T=_full_tensor(psi)
+    return ComplexF64[tensor_inner(bra,T) for bra in bras]
+end
+function error_and_norm(psi,ref,bras)
+    v=sector_state(psi,bras)
     f=min(1.0,abs2(dot(v,ref))/(real(dot(v,v))*real(dot(ref,ref))))
     return sqrt(max(0.0,1.0-f)),abs(norm(v)-1.0)
 end
@@ -81,8 +102,15 @@ open(joinpath(outdir,"physical_one_step.csv"),"w") do io
         initial=spin_domain_wall_state(L,twoS)
         J=xx_couplings(L,kind)
         mpo=xx_mpo(L,twoS,J)
-        H=full_hamiltonian(L,twoS,J)
-        v0=dense_state(initial)
+        Hfull=full_hamiltonian(L,twoS,J)
+        indices,bras=sector_indices_and_bras(L,twoS)
+        H=Hermitian(Matrix(Hfull)[indices,indices])
+        wall=[j<=div(L,2) ? 0 : twoS for j in 1:L]
+        wall_idx=findfirst(i -> digits_of(indices[i]-1,d,L)==wall, eachindex(indices))
+        wall_idx === nothing && error("Domain-wall state not in S_z=0 sector")
+        v0=zeros(ComplexF64,length(indices));v0[wall_idx]=1
+        norm(sector_state(initial,bras)-v0)<1e-11 ||
+           error("U1 MPS sector basis differs from exact domain-wall state")
         varED=real(dot(v0,H*(H*v0)))
         varMPO=mpo_variance(initial,mpo)
         isapprox(varED,varMPO;rtol=1e-9,atol=1e-10) ||
@@ -113,7 +141,7 @@ open(joinpath(outdir,"physical_one_step.csv"),"w") do io
                     info=run.info;psi=run.state
                     accepted=run.accepted;natt=length(run.attempts)
                     work=run.totals
-                    @assert (accepted || norm(dense_state(psi)-v0)<1e-12)
+                    @assert (accepted || norm(sector_state(psi,bras)-v0)<1e-12)
                 elseif policy === :tdvp2
                     tdvp2_step!(psi,mpo,-im*dt;maxdim=128,weight_tol=tol*1e-3)
                 else
@@ -138,7 +166,7 @@ open(joinpath(outdir,"physical_one_step.csv"),"w") do io
                           wall_s=info.t_step)
                 end
                 elapsed=(time_ns()-t0)/1e9
-                err,normerr=error_and_norm(psi,ref)
+                err,normerr=error_and_norm(psi,ref,bras)
                 if info===nothing
                     wleft=0;wright=0;stage=0;reason="reference";status="reference"
                 else
