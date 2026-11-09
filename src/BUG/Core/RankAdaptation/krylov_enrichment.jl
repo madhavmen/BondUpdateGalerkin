@@ -221,6 +221,8 @@ function _krylov_enrich(
     maxdepth::Int = _KRY_MAXDEPTH,
     amp::Float64 = 1.0,
     state_seed::Bool = true,
+    recurrence::Symbol = :arnoldi,
+    fixed_depth::Int = 0,
 )
     side in (:left, :right) || throw(ArgumentError("side must be :left or :right"))
     perp = side === :left ? perp_component : perp_component_right
@@ -262,6 +264,8 @@ function _krylov_enrich(
         maxdepth = maxdepth,
         amp = amp,
         state_seed = state_seed,
+        recurrence = recurrence,
+        fixed_depth = fixed_depth,
     )
     capped = kb.capped
     if ranked
