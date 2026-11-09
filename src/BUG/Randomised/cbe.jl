@@ -250,6 +250,8 @@ Base.@kwdef struct DDQRExpansion <: BasisExpansion
     mode::Symbol = :adaptive
     fixed_width::Int = 0
     fixed_rank::Int = 0
+    # Only :rank_adaptive: initial rank-selection sketch width (grown as needed).
+    rank_initial_width::Int = 4
     holdout_width::Int = 4
     # 1 = existing sequential controller; >1 adds multiple charge-targeted
     # discovery blocks per independent holdout checkpoint.
@@ -283,6 +285,7 @@ expand_frame(
     mode = strategy.mode,
     fixed_width = strategy.fixed_width,
     fixed_rank = strategy.fixed_rank,
+    rank_initial_width = strategy.rank_initial_width,
     holdout_width = strategy.holdout_width,
     batch_blocks = strategy.batch_blocks,
     cap_selection = strategy.cap_selection,
