@@ -31,6 +31,7 @@ function _resolve_step_options(
     frontier_tol,
     work_ceiling_rule,
     bond_ceiling_factor,
+    root_ceiling_factor,
     keep_states,
     keep_tols,
     frames_only,
@@ -60,16 +61,21 @@ function _resolve_step_options(
     order >= 1 || throw(ArgumentError("order must be >= 1, got $order"))
     fold_omega = something(fold_omega, order > 1 && !exact)
     frontier_tol >= 0 || throw(ArgumentError("frontier_tol must be >= 0, got $frontier_tol"))
-    work_ceiling_rule in (:maxdim, :bond) ||
-        throw(ArgumentError("work_ceiling_rule must be :maxdim or :bond, got $work_ceiling_rule"))
+    work_ceiling_rule in (:maxdim, :bond, :bond_strict, :frame_root) ||
+        throw(ArgumentError("work_ceiling_rule must be :maxdim, :bond, :bond_strict or :frame_root, got $work_ceiling_rule"))
     bond_ceiling_factor == 0 ||
-        (bond_ceiling_factor > 1 && work_ceiling_rule === :bond) ||
+        (bond_ceiling_factor > 1 && work_ceiling_rule in (:bond, :bond_strict, :frame_root)) ||
         throw(
             ArgumentError(
                 "bond_ceiling_factor must be 0, or > 1 with work_ceiling_rule = :bond, got " *
                 "$bond_ceiling_factor with :$work_ceiling_rule",
             ),
         )
+    root_ceiling_factor > 1 ||
+        throw(ArgumentError("root_ceiling_factor must exceed one"))
+    work_ceiling_rule === :frame_root &&
+        root_ceiling_factor > (bond_ceiling_factor == 0 ? 2.0 : bond_ceiling_factor) &&
+        throw(ArgumentError("root_ceiling_factor must not exceed frame factor"))
     closure_probe >= 0 ||
         throw(ArgumentError("closure_probe must be a non-negative count, got $closure_probe"))
     isempty(keep_tols) ||
@@ -104,6 +110,12 @@ function _resolve_step_options(
     workcap =
         work_ceiling_rule === :bond ?
         bond_work_ceilings(bond_ranks, local_dim(psi), maxdim; factor = bond_ceiling_factor) :
+        work_ceiling_rule === :bond_strict ?
+        bond_work_ceilings_strict(bond_ranks, maxdim; factor = bond_ceiling_factor) :
+        work_ceiling_rule === :frame_root ?
+        bond_frame_root_ceilings(bond_ranks, maxdim, root_link;
+            frame_factor = bond_ceiling_factor == 0 ? 2.0 : bond_ceiling_factor,
+            root_factor = root_ceiling_factor) :
         work_ceiling(maxdim, maximum(bond_ranks; init = 0), local_dim(psi))
     return (
         site_count = site_count,

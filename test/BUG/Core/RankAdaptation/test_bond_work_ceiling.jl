@@ -106,6 +106,42 @@ include(joinpath(@__DIR__, "..", "..", "..", "common", "dense_reference.jl"))
         end
     end
 
+    @testset "2D_b frame cap and ceil(1.2D_root) Galerkin input cap" begin
+        @test bond_frame_root_ceilings([1,5,10,65], 1024, 2) == [2,6,20,130]
+        @test bond_frame_root_ceilings([1,5,10,65], 1024, 3) == [2,10,12,130]
+        @test bond_frame_root_ceilings([1,5,10,65], 64, 3) == [2,10,12,64]
+        @test_throws ArgumentError bond_frame_root_ceilings([1,2,3], 64, 2;
+            frame_factor=1.1, root_factor=1.2)
+        @test_throws BoundsError bond_frame_root_ceilings([1,2,3], 64, 4)
+
+        root_link = fld(chain_length, 2)
+        split_caps = bond_frame_root_ceilings(start_bonds, 64, root_link)
+        @test split_caps[root_link] ==
+            min(64, ceil(Int, round(1.2*start_bonds[root_link];digits=9)))
+        for b in eachindex(start_bonds)
+            b == root_link && continue
+            @test split_caps[b] == min(64,2*start_bonds[b])
+        end
+        for order in (2, 3)
+            state = copy(start_state)
+            info = cbe_bug_step!(state,hamiltonian,time_step;
+                step_settings...,order=order,
+                work_ceiling_rule=:frame_root,
+                bond_ceiling_factor=2.0,
+                root_ceiling_factor=1.2,
+                closure_checks=true)
+            @test info.root == root_link
+            @test all(info.expanded .<= split_caps)
+            @test info.expanded[info.root] <= split_caps[root_link]
+            @test info.root_right <= split_caps[root_link]
+            @test all(bond_dims(state) .<= split_caps)
+            @test all(entry.width <= split_caps[entry.bond]
+                      for entry in info.ledger.bond_log)
+            # Root S tensor uses W and Z INPUT widths, not just the SVD rank.
+            @test info.expanded[info.root]*info.root_right <= split_caps[root_link]^2
+        end
+    end
+
     @testset "refused settings" begin
         refused(; keywords...) = cbe_bug_step!(
             copy(start_state),

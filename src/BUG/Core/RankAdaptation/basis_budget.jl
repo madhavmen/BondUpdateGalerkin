@@ -485,6 +485,61 @@ function bond_work_ceilings(
     return [max(min(ceiling_of(bond_rank), maxdim), 1) for bond_rank in bond_ranks]
 end
 
+"""
+    bond_work_ceilings_strict(bond_ranks, maxdim; factor=1.2)
+
+Use EXACTLY `ceil(1.2*D_b)` per bond at the START of the timestep. No extra local
+Hilbert-space factor. The cap applies to all DD/K/L/closure working frames and
+their root Galerkin product. This is deliberately much stricter than `:bond`,
+which scales its factor by the physical dimension. A rank-one cut may grow to
+two directions on the first step, independently of whether d=2,3,4.
+"""
+function bond_work_ceilings_strict(
+    bond_ranks::AbstractVector{<:Integer},
+    maxdim::Int;
+    factor::Real = 1.2,
+)
+    factor > 1 || throw(ArgumentError("strict bond factor must exceed 1"))
+    return [
+        max(1, min(maxdim, ceil(Int, round(factor * r; digits=9))))
+        for r in bond_ranks
+    ]
+end
+
+"""
+    bond_frame_root_ceilings(old_bonds, maxdim, root_bond;
+                             frame_factor=2.0, root_factor=1.2)
+
+Two-tier augmentation resource limit. Away from the root, DD/RSVD and enriched
+K/L frames may grow to `ceil(frame_factor * D_b_old)`; at the root bond
+both W and Z input frame widths are limited to
+`ceil(root_factor * D_root_old)`, before root Galerkin evolution.
+The root core has at most `D_W*D_Z` elements. All caps are frozen from the
+MPS at the *beginning* of the step; a rejected step never updates them.
+The root restriction is a WORKING-FRAME limit, not merely final compression.
+"""
+function bond_frame_root_ceilings(
+    old_bonds::AbstractVector{<:Integer},
+    maxdim::Int,
+    root_bond::Int;
+    frame_factor::Real = 2.0,
+    root_factor::Real = 1.2,
+)
+    1 <= root_bond <= length(old_bonds) ||
+        throw(BoundsError(old_bonds, root_bond))
+    frame_factor > 1 || throw(ArgumentError("frame_factor must exceed 1"))
+    root_factor > 1 || throw(ArgumentError("root_factor must exceed 1"))
+    root_factor <= frame_factor ||
+        throw(ArgumentError("root_factor cannot exceed frame_factor"))
+    maxdim >= 1 || throw(ArgumentError("maxdim must be positive"))
+    return [
+        max(1, min(maxdim, ceil(Int, round(
+            (b == root_bond ? root_factor : frame_factor) * old_bonds[b];
+            digits=9,
+        )))) for b in eachindex(old_bonds)
+    ]
+end
+
 "A work ceiling: one for every bond (`work_ceiling`), or one per bond (`bond_work_ceilings`)."
 const WorkCeiling = Union{Int,Vector{Int}}
 

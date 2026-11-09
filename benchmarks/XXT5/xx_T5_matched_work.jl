@@ -202,6 +202,39 @@ function policy_specs(basis_tol)
         ("T5_uncapped",DDQRExpansion(holdout_width=2,acceptance_factor=0.6,
                     batch_blocks=2,cap_selection=:svd,krylov_mode=:lanczos),
                     NamedTuple()),
+        # New genuine rank adaptation: thin block SVD ranks the DD candidates,
+        # a holdout selects the MINIMUM accepted k, and a second holdout confirms.
+        ("T5_rank_adaptK",DDQRExpansion(mode=:rank_adaptive,
+                    rank_initial_width=4,holdout_width=4,
+                    acceptance_factor=0.7,krylov_mode=:lanczos),
+                    (work_ceiling_rule=:bond,bond_ceiling_factor=1.2,)),
+        ("T5_rank_fixedK8",DDQRExpansion(mode=:rank_adaptive,
+                    rank_initial_width=4,holdout_width=4,
+                    acceptance_factor=0.7,krylov_mode=:lanczos,krylov_fixed_depth=8),
+                    (work_ceiling_rule=:bond,bond_ceiling_factor=1.2,)),
+        ("T5_rank_arnoldi",DDQRExpansion(mode=:rank_adaptive,
+                    rank_initial_width=4,holdout_width=4,
+                    acceptance_factor=0.7,krylov_mode=:arnoldi),
+                    (work_ceiling_rule=:bond,bond_ceiling_factor=1.2,)),
+        ("T5_oldstrict_adaptK",DDQRExpansion(mode=:fixed,fixed_width=8,
+                    fixed_rank=4,krylov_mode=:lanczos),
+                    (work_ceiling_rule=:bond_strict,bond_ceiling_factor=1.2,)),
+        ("T5_split_fixed8",DDQRExpansion(mode=:fixed,fixed_width=8,
+                    fixed_rank=4,krylov_mode=:lanczos,krylov_fixed_depth=8),
+                    (work_ceiling_rule=:frame_root,bond_ceiling_factor=2.0,
+                     root_ceiling_factor=1.2,)),
+        ("T5_split_adaptK",DDQRExpansion(mode=:fixed,fixed_width=8,
+                    fixed_rank=4,krylov_mode=:lanczos),
+                    (work_ceiling_rule=:frame_root,bond_ceiling_factor=2.0,
+                     root_ceiling_factor=1.2,)),
+        ("T5_split_rank",DDQRExpansion(mode=:rank_adaptive,rank_initial_width=4,
+                    holdout_width=4,acceptance_factor=0.7,krylov_mode=:lanczos),
+                    (work_ceiling_rule=:frame_root,bond_ceiling_factor=2.0,
+                     root_ceiling_factor=1.2,)),
+        ("T5_split_batched",DDQRExpansion(holdout_width=2,batch_blocks=2,
+                    cap_selection=:svd,acceptance_factor=0.6,krylov_mode=:lanczos),
+                    (work_ceiling_rule=:frame_root,bond_ceiling_factor=2.0,
+                     root_ceiling_factor=1.2,)),
     ]
 end
 
@@ -273,10 +306,17 @@ for (twoS,L) in cases
                         elapsed=(time_ns()-start_ns)/1e9
                         ledger=info.ledger
                         if haskey(kw,:bond_ceiling_factor)
-                            ceilings=bond_work_ceilings(start_bonds,d,maxdim;
-                                                     factor=kw.bond_ceiling_factor)
+                            ceilings=kw.work_ceiling_rule===:frame_root ?
+                                bond_frame_root_ceilings(start_bonds,maxdim,info.root;
+                                    frame_factor=kw.bond_ceiling_factor,
+                                    root_factor=kw.root_ceiling_factor) :
+                                kw.work_ceiling_rule===:bond_strict ?
+                                bond_work_ceilings_strict(start_bonds,maxdim;
+                                    factor=kw.bond_ceiling_factor) :
+                                bond_work_ceilings(start_bonds,d,maxdim;
+                                    factor=kw.bond_ceiling_factor)
                             all(info.expanded .<= ceilings) ||
-                                error("Left frame exceeded 1.2*d*old_chi for d=$d, method=$method")
+                                error("Left frame exceeded bond working cap for d=$d, method=$method")
                             all(bond_dims(psi) .<= ceilings) ||
                                 error("Final bond exceeded per-bond working cap for d=$d")
                             for bondentry in ledger.bond_log
@@ -284,7 +324,7 @@ for (twoS,L) in cases
                                     error("Augmented K/L frame exceeded cap, d=$d, bond=$(bondentry.bond)")
                             end
                             info.root_right <= ceilings[info.root] ||
-                                error("Right root frame exceeded 1.2*d*old_chi cap")
+                                error("Right root frame exceeded cap")
                         end
                         cnt=info.record.counters
                         D=maximum(bond_dims(psi))

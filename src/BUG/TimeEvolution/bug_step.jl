@@ -62,9 +62,14 @@ function cbe_bug_step!(
     # `bond_ceiling_factor = f > 1`, `min(ceil(f*d*D_b), maxdim)` instead;
     # `f = 1.2` allows up to 1.2 times the local one-site physical space.
     # This cap is on DD/Krylov/closure working frames, not a truncation accuracy target.
+    # `:bond_strict` enforces min(ceil(f*D_b), maxdim), WITHOUT the physical d.
+    # `:frame_root` distinguishes K/L frame growth (default 2*D_b) from
+    # the *two input frames* of the root Galerkin solve (1.2*D_root).
+    # A root cap is NOT merely a cap on the final root SVD rank.
     # A bond already at `maxdim` cannot enlarge its frame that step.
     work_ceiling_rule::Symbol = :maxdim,
     bond_ceiling_factor::Real = 0.0,
+    root_ceiling_factor::Real = 1.2,
     # ── imaginary time ──
     # The root integrator (`ROOT_METHODS`): `:exp` is the Saad-converged
     # exponential (the reference); `:trapezoid`/`:radau2`/`:radau3` apply that
@@ -160,6 +165,7 @@ function cbe_bug_step!(
         frontier_tol = frontier_tol,
         work_ceiling_rule = work_ceiling_rule,
         bond_ceiling_factor = bond_ceiling_factor,
+        root_ceiling_factor = root_ceiling_factor,
         keep_states = keep_states,
         keep_tols = keep_tols,
         frames_only = frames_only,
@@ -226,7 +232,7 @@ function cbe_bug_step!(
         wcap_step,
         keep_states,
         options.keep_tols,
-        work_ceiling_rule === :bond,
+        work_ceiling_rule in (:bond, :bond_strict, :frame_root),
     )
 
     troot = Ref(0.0)
