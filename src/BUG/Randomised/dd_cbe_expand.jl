@@ -28,10 +28,10 @@ function dd_cbe_expand(
     workcap::Int = 0,
     growth::Float64 = ADAPTIVE_GROWTH,
     exact::Bool = false,
-    rng::AbstractRNG = MersenneTwister(0x5EED),
-    kc::KernelCounters = KernelCounters(),
+    rng::AbstractRNG = MersenneTwister(0x5EED),# fix a seed
+    kc::KernelCounters = KernelCounters(), # counter for how many time the MPO site application is performed
     version::Int = 0,
-    holdout_width::Int = _DD_HOLDOUT,
+    holdout_width::Int = _DD_HOLDOUT, # oversampling
     audit::Bool = false,
 )
     side in (:left, :right) || throw(ArgumentError("side must be :left or :right"))

@@ -1,12 +1,7 @@
-# Shared pieces of the QTT benchmark drivers: environment parameters, CSV output, and independent
-# sparse-grid references written from the finite-difference stencils (no QTT code).
-#
-# The stencils are written here instead of
-# being taken from the tests, whose dense matrices are small-grid only.
 
 using LinearAlgebra, SparseArrays, Random
 using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QTTS, BondUpdateGalerkin.Baselines
-set_symmetry!(:none)
+set_symmetry!(:none) # no symmetry enforced for PDE problems.
 
 env_string(key, default) = get(ENV, key, default)
 env_int(key, default) = parse(Int, env_string(key, string(default)))
@@ -14,7 +9,7 @@ env_float(key, default) = parse(Float64, env_string(key, string(default)))
 env_list(key, default) =
     [parse(Float64, item) for item in split(env_string(key, default), ",") if !isempty(item)]
 
-"Write NamedTuple rows to a CSV (header from the union of keys, in first-seen order)."
+"""saving to csv file"""
 function write_csv(path, rows)
     isempty(rows) && return
     columns = collect(keys(rows[1]))
@@ -34,8 +29,10 @@ end
 The sparse `N x N` finite-difference matrix of derivative order `order` (1 or 2) with spacing `h`
 and boundary condition `bc` (`:periodic`, `:dirichlet0`, `:onesided`), row by row.
 """
+# build a finite difference MPO
 function sparse_stencil(N::Int, h::Real, order::Int, bc::Symbol)
     rows, cols, weights = Int[], Int[], Float64[]
+    # central difference stencil 
     central =
         order == 1 ? ((1, 1 / (2h)), (-1, -1 / (2h))) : ((1, 1 / h^2), (0, -2 / h^2), (-1, 1 / h^2))
     onesided_first = order == 1 ? [-3, 4, -1] ./ (2h) : [2, -5, 4, -1] ./ h^2

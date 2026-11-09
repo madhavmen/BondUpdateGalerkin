@@ -71,7 +71,7 @@ function _rational_coeffs(vals, vecs, tau::ComplexF64, root_method::Symbol, shif
 end
 
 """
-Saad's a-posteriori estimate of the next basis vector's contribution: `beta_k*|[exp(tau*T_k)]_k1|`.
+a-posteriori estimate of the next basis vector's contribution: `beta_k*|[exp(tau*T_k)]_k1|`.
 This is the CONVERGENCE measure. `beta` alone is a BREAKDOWN detector and does not fire on a
 generic operator -- measured: identical results for thresholds from 1e-6 to 1e-13.
 """
@@ -82,8 +82,7 @@ const _TAIL_NODES = 8
 
 """
     _tail_sup(evalcoeff, step, betak; above = Inf) -> Float64
-
-Saad's tail [`_tail`](@ref) at `step`, guarded against cancellation in real time: the largest
+tail [`_tail`](@ref) at `step`, guarded against cancellation in real time: the largest
 `betak * |[exp(s step T_k)]_{k,1}|` over `s = j / _TAIL_NODES`, `j = 1, ..., _TAIL_NODES`. The
 endpoint entry alone can vanish while the residual over the step does not (`T_2` with eigenvalue
 gap `2 pi / |step|` stops at depth 2 with an O(1) error). In real time the error is at most
@@ -349,7 +348,7 @@ end
          conv_tol=0.0, substeps=1)
 
 `exp(tau*A)*vector` where `apply(v) = A*v` is matrix-free. `hermitian=true` uses Lanczos, `false`
-Arnoldi (needed for the non-Hermitian K and L generators). `conv_tol > 0` stops on Saad's
+Arnoldi (needed for the non-Hermitian K and L generators). `conv_tol > 0` stops on error
 estimate; `substeps = 0` splits `tau` adaptively. `report = Ref{Any}()` receives `(iterations,
 substeps, err)` ([`_report!`](@ref)). `root_method` (`:exp` default) can also be `:trapezoid`,
 `:radau2` or `:radau3`, which apply that implicit stability function in one stage and ignore

@@ -1,8 +1,8 @@
-# The half-sweep Krylov stage: the Krylov weight (a residual integral), the frame extension,
+# The half-sweep Krylov step: the Krylov weight (a residual integral), the frame extension,
 # `_krylov_enrich`, and the ledger fold after it. The local recurrence it
 # drives (`_krylov_basis`) is in `krylov_recurrence.jl`, included right after this file.
 
-# ── THE HALF-SWEEP KRYLOV STAGE OF `cbe_bug_step!` (Tests C and D) ───────────────────────────
+# ── THE HALF-SWEEP KRYLOV step OF `cbe_bug_step!` (Tests C and D) ───────────────────────────
 
 # Bond tags of the left (`W`) and right (`Z`) Krylov frames at bond `bond`.
 _tagW(bond::Int) = "cbeW,$bond"
@@ -12,7 +12,7 @@ _tagZ(bond::Int) = "cbeZ,$bond"
 # convergence judgement.
 const _KRY_BREAKDOWN = 1e-13
 
-# ── STAGE 3: residual-driven K/L Krylov enrichment (Tests C and D) ──
+# ── step 3: residual-driven K/L Krylov enrichment (Tests C and D) ──
 # Krylov vectors live on one-site tensors, but the projector `I - QQ'` acts on the frame (an
 # isometry on `(link, site)`): a vector adds only through the part of its local range the frame
 # lacks. `_krylov_enrich`'s `start_frame` is the CBE output `U_ex`, so old directions are kept
@@ -71,7 +71,7 @@ function _kry_weight(
         state_seed = state_seed,
     )
 end
-
+# currently exporing different stopping critera for krylov step
 """
     _residual_integral(defect_norm, generator, tau; state_seed = true) -> Float64
 
@@ -173,12 +173,12 @@ end
 """
     _append_ranked(frame, candidates, side, allowance, workcap) -> (frame, n_added, fits)
 
-The ranked selection of one local Krylov stage (`alloc.krylov_rank > 0`). `candidates` are the
+The ranked selection of one local Krylov step (`alloc.krylov_rank > 0`). `candidates` are the
 weighted residuals `weight * (I - QQ') v_k` of every direction the chain found above the allowance,
 all outside the same `frame`. One SVD of their direct sum ranks the local directions by their weight
 in the step, and the fewest top ones whose discarded tail fits `allowance` join the frame. The
 sequential rule instead appends each vector's own directions in chain order, each against its own
-allowance, until the work ceiling stops it; on a nonlocal generator that fills the stage frame to
+allowance, until the work ceiling stops it; on a nonlocal generator that fills the step frame to
 the ceiling, far above the rank the step keeps. `fits = false`: the work ceiling cut the selection
 with more than `allowance` left.
 """
@@ -264,6 +264,7 @@ function _krylov_enrich(
         state_seed = state_seed,
     )
     capped = kb.capped
+    # increase the frame with augmented state
     if ranked
         frame, added, fits =
             _append_ranked(start_frame, candidates, side, alloc.krylov_rank, workcap)

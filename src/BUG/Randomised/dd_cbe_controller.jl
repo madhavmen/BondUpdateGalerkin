@@ -10,7 +10,7 @@ The default independent holdout width `holdout_width` (`s`; an
 implementation constant; tests 2, 4, 8).
 """
 const _DD_HOLDOUT = 4
-
+# this is a hand set value. A smaller holdout is also fine.
 """
     _dd_controller(frame, side, draw, sketch, project, initial_width, wcap, ncap, alloc, ledger;
                    kc, holdout_width, audit, holdout, trace) -> (dd_basis, status)

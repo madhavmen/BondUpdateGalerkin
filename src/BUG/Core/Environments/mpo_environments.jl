@@ -1,6 +1,3 @@
-# MPO environments (Eq. 1.8), the two-site effective Hamiltonian (Eq. 1.7) and the link-leg and
-# streamed two-site contractions the Core sweeps share. Included right after
-# `Core/TensorNetworks/mpo.jl`, whose `MPO` type the signatures here use.
 
 # ── site operators and bra tensors ──────────────────────────────────────────
 
@@ -39,7 +36,6 @@ _bra_left_boundary(site_tensor) = TLArray(prime(site_tensor, 3)')
 "Bra tensor closing the right boundary: `link_r` unprimed, for the same reason."
 _bra_right_boundary(site_tensor) = TLArray(prime(site_tensor, 1)')
 
-# ── environments: Eq. (1.8) ──────────────────────────────────────────────────
 
 """
     MPOLink(E)
@@ -52,13 +48,13 @@ struct MPOLink
     E::Any
 end
 
-"The environment on a chain boundary: `L^[0] = 1` of Eq. (1.8)."
+"The environment on a chain boundary: `L^[0] = 1` of."
 boundary_channels(::MPO) = MPOLink(nothing)
 
 """
     _mpo_left_step(environment, site_tensor, mpo_tensor, bra_tensor = site_tensor) -> TLArray
 
-One step of Eq. (1.8): push the left `environment` on link `i` through `site_tensor` and
+One step of: push the left `environment` on link `i` through `site_tensor` and
 `mpo_tensor` at site `i`, returning the environment on link `i+1` with legs `(bra, mpo, ket)`.
 
 `site_tensor` may be a state tensor OR an expanded frame -- both carry an MPS tensor's
@@ -303,13 +299,13 @@ function mpo_variance(psi::SymMPS, mpo::MPO)
     return h_squared / norm_squared - mean_energy^2
 end
 
-# ── the effective Hamiltonians: Eq. (1.7) ────────────────────────────────────
+# ── the effective Hamiltonians:  ────────────────────────────────────
 
 """
     apply_h_two_site(Theta, mpo, bond, lenv, renv) -> TLArray
 
 `H Theta` for the two-site block at bond `(bond, bond+1)`, legs
-`(link_l, site_l, site_r, link_r)` in and out -- Eq. (1.7) with two MPO tensors between
+`(link_l, site_l, site_r, link_r)` in and out -- with two MPO tensors between
 the environments.
 
 ONE contraction chain, against the channel version's five-case sum: the automaton's

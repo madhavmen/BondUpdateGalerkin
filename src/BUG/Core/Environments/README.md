@@ -1,8 +1,7 @@
 # `src/BUG/Core/Environments/`
 
 The Hamiltonian enters the engine only here: as an MPO contracted into left and right environments,
-and the effective operators built from them. There is no other Hamiltonian representation (no
-gates, no term-list environments).
+and the effective operators built from them. 
 
 | file | contents |
 |---|---|

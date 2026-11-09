@@ -4,7 +4,7 @@
 """
     MPOOneSiteH
 
-The single-site effective Hamiltonian of Eq. (1.7), `H_eff^[j] = L^[j-1] W^[j] R^[j+1]`, held
+The single-site effective Hamiltonian  held
 as its three factors rather than contracted: the operand is a site tensor, so contracting them
 first would build a `(chi d) x (chi d)` matrix where three sequential contractions cost
 `O(chi^2 d w)`.
@@ -71,7 +71,7 @@ the expanded frames:
 
     H_eff^{(0)} S = sum_w L[w] S R[w]
 
-One contraction over the MPO leg -- Eq. (1.7) at a bond, where the site tensor of the
+One contraction over the MPO leg at a bond, where the site tensor of the
 1-site form is absent. Acting with it never touches a site tensor, so a Krylov matvec is
 `O(chi^2 w)` rather than the `O(chi^2 d^2)` of a two-site apply.
 """
@@ -138,6 +138,8 @@ apply_zero_site(shifted::ShiftedH, core) =
 # collapse the rank), and no rank-4 tensor is ever allocated.
 
 # ── writing an expansion back into the state ─────────────────────────────────
+
+# the methods below are specifically for BUG 
 
 """
     _absorb_left!(psi, bond, U_ex) -> psi

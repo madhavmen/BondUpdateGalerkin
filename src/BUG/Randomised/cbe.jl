@@ -1,4 +1,4 @@
-# cbe.jl: the sketch closures (a built `H Theta`, or the probe folded into the MPO contraction)
+# cbe.jl: the sketch closures (a built `H Theta`) Theta are the sites where the MPO is being acted on.
 # and the sector-graded probe helpers of controlled bond expansion, and the `DDQRExpansion`
 # strategy the Core sweeps call. The probe and the residual test (`sketch.jl`) and the range
 # finder (`range_finder.jl`) are included before it; the DD-QR kernels, controller and bond
