@@ -68,7 +68,6 @@ for key, records in sorted(series.items()):
         wall_seconds=sum(number(r,"step_sec") for r in records),
         nonmet_steps=sum(r["budget_status"] != "met" for r in records),
     ))
-)
 def save_csv(dest, dataset):
     with (out / dest).open("w", newline="") as f:
         writer = csv.DictWriter(f, dataset[0].keys())
