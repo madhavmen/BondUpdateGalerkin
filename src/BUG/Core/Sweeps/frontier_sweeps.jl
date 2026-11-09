@@ -151,7 +151,6 @@ function _frontier_left(
                 amp = amp,
                 state_seed = false,
                 krylov_controls(ckw.expansion)...,
-                krylov_controls(ckw.expansion)...,
             )
             _record_krylov!(bl, st, alloc)
             krylov_frame
@@ -307,6 +306,7 @@ function _frontier_right(
                 workcap = _cap_at(workcap, bond),
                 amp = amp,
                 state_seed = false,
+                krylov_controls(ckw.expansion)...,
             )
             _record_krylov!(bl, st, alloc)
             krylov_frame
