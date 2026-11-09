@@ -252,7 +252,14 @@ Base.@kwdef struct DDQRExpansion <: BasisExpansion
     fixed_rank::Int = 0
     holdout_width::Int = 4
     acceptance_factor::Float64 = 1.0
+    # The K/L one-site generator must be Hermitian to use :lanczos.
+    krylov_mode::Symbol = :arnoldi
+    # 0: residual-controlled stop; >0: fixed depth (experimental baseline).
+    krylov_fixed_depth::Int = 0
 end
+
+krylov_controls(policy::DDQRExpansion) =
+    (recurrence = policy.krylov_mode, fixed_depth = policy.krylov_fixed_depth)
 
 # Grow one frame of the bond `(site, site+1)` by the DD-QR CBE; returns `dd_cbe_expand`'s result.
 expand_frame(
