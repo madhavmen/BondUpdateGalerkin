@@ -69,6 +69,7 @@ const basis = parse(Float64, get(ENV, "BUG_XX_BASIS", "1e-5"))
 const trunc = parse(Float64, get(ENV, "BUG_XX_TRUNC", "1e-8"))
 const root_tol = parse(Float64, get(ENV, "BUG_XX_ROOT", "1e-10"))
 const cap = parse(Int, get(ENV, "BUG_XX_MAXDIM", "64"))
+const selected_policies = filter(!isempty, split(get(ENV, "BUG_XX_POLICIES", ""), ","))
 const configs = (
     ("fixed2", DDQRExpansion(mode=:fixed,fixed_width=4,fixed_rank=2), NamedTuple()),
     ("fixed4", DDQRExpansion(mode=:fixed,fixed_width=8,fixed_rank=4), NamedTuple()),
@@ -86,6 +87,17 @@ const configs = (
         krylov_mode=:lanczos,krylov_fixed_depth=8), NamedTuple()),
     ("fixed4_lanczos12", DDQRExpansion(mode=:fixed,fixed_width=8,fixed_rank=4,
         krylov_mode=:lanczos,krylov_fixed_depth=12), NamedTuple()),
+    # Verified global Krylov closure (the non-checking default can miss first-step directions).
+    ("fixed4_checked", DDQRExpansion(mode=:fixed,fixed_width=8,fixed_rank=4),
+        (closure_checks=true,)),
+    ("adaptive_checked", DDQRExpansion(holdout_width=2,acceptance_factor=0.6),
+        (closure_checks=true,)),
+    ("lanczos_checked", DDQRExpansion(holdout_width=2,acceptance_factor=0.6,
+        krylov_mode=:lanczos), (closure_checks=true,)),
+    ("outside_checked", DDQRExpansion(holdout_width=2,acceptance_factor=0.6),
+        (closure_checks=true,outside_residual=true,root_report=Ref{Any}())),
+    ("order3_checked", DDQRExpansion(holdout_width=2,acceptance_factor=0.6),
+        (closure_checks=true,order=3,)),
 )
 rows = Any[]
 frames_rows = Any[]
@@ -117,12 +129,14 @@ for L in (8,), interaction in (:short,:long)
     exact_vec = [eig.vectors * (exp.(-im*dt*k .* eig.values) .* c0) for k in 1:nsteps]
     exact_at = [dense_profile(v,L) for v in exact_vec]
     for (method,policy,stepkw) in configs, seed in 0:(nseeds-1)
+        (isempty(selected_policies) || method in selected_policies) || continue
         psi = spin_domain_wall_state(L,1)
         rng = MersenneTwister(seed)
         for step in 1:nsteps
-            info = cbe_bug_step!(psi,mpo,-im*dt;order=2,
+            methodkw = merge((order=2,), stepkw)
+            info = cbe_bug_step!(psi,mpo,-im*dt;
                 maxdim=cap,tol_basis=basis,tol_trunc=trunc,
-                tol_root=root_tol,expansion=policy,rng=rng,stepkw...)
+                tol_root=root_tol,expansion=policy,rng=rng,methodkw...)
             err = maximum(abs.(profile(psi).-exact_at[step]))
             state_err, norm_err = vector_errors(psi,exact_vec[step])
             d_final = bond_dims(psi)
@@ -154,6 +168,7 @@ for L in (8,), interaction in (:short,:long)
                 policy.mode === :fixed ? "uncertified" : string(budget_status(Lg))))
         end
     end
+    (isempty(selected_policies) || "tdvp2" in selected_policies) || continue
     psi = spin_domain_wall_state(L,1)
     for step in 1:nsteps
         t0 = time_ns()
