@@ -117,7 +117,13 @@ function dd_cbe_expand(
     # mandatory (otherwise rank search exploits holdout noise). This is an empirical
     # error monitor, NOT a rigorous confidence bound under repeated optional stops.
     function ranked_dd()
-        maxprobe = min(full_opp, max(wcap, cap + 4))
+        # Explicit MPO-probe ceiling for the fast policy. At large chi (500+)
+        # we never expand a single U(1) DD discovery sketch without limit.
+        # A failed independently checked residual is reported as UNMET rather
+        # than allowing validation cost to scale with the entire bond space.
+        maxprobe = mode === :rank_fast ?
+            min(full_opp, wcap, max(rank_initial_width, 64)) :
+            min(full_opp, max(wcap, cap + 4))
         width = min(maxprobe, max(rank_initial_width, rank_floor + 2))
         width <= 0 && return (nothing, 0)
         best = nothing
