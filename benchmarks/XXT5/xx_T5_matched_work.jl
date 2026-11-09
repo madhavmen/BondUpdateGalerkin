@@ -16,7 +16,7 @@
 # BUG_HIGHER_SAMPLE_EVERY="2"
 using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB, BondUpdateGalerkin.Baselines
 using LinearAlgebra, Random, Statistics, Telum
-include(joinpath(@__DIR__, "..", "..", "..", "test", "common", "dense_reference.jl"))
+include(joinpath(@__DIR__, "..", "..", "test", "common", "dense_reference.jl"))
 
 outdir = isempty(ARGS) ? "results/xx-T5" : ARGS[1]
 mkpath(outdir)
@@ -33,7 +33,7 @@ sample_every = parse(Int,get(ENV,"BUG_HIGHER_SAMPLE_EVERY","5"))
 maxdim = parse(Int,get(ENV,"BUG_HIGHER_MAXDIM","128"))
 selected = parse_list("BUG_HIGHER_POLICIES","")
 sample_steps = Set(vcat(1,[k for k in 1:nsteps if k % sample_every==0],nsteps))
-isapprox(dt*nsteps,5.0;atol=1e-10) ||
+(get(ENV,"BUG_T5_SMOKE","0")=="1" || isapprox(dt*nsteps,5.0;atol=1e-10)) ||
   throw(ArgumentError("T=5 benchmark requires nsteps*dt=5, got $(nsteps*dt)"))
 
 
