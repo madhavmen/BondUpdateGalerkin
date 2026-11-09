@@ -1,0 +1,77 @@
+name: XX 1.2-bond-cap batched DD matched accuracy
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'src/BUG/Randomised/cbe.jl'
+      - 'src/BUG/Randomised/dd_cbe_controller.jl'
+      - 'src/BUG/Randomised/dd_cbe_expand.jl'
+      - 'benchmarks/QMB/ClosedSystem/xx_matched_accuracy_higher_d.jl'
+      - '.github/workflows/xx-cap-batched-rsvd.yml'
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.11'
+      - uses: julia-actions/cache@v2
+      - name: Instantiate
+        run: julia --project -e 'using Pkg; Pkg.instantiate()'
+      - name: Check bond-limited, sequential and batched DD U1 XX on all local dimensions
+        env:
+          BUG_HIGHER_CASES: '1:4,2:4,3:4'
+          BUG_HIGHER_STEPS: '2'
+          BUG_HIGHER_SEEDS: '1'
+          BUG_HIGHER_TOLS: '1e-2'
+          BUG_HIGHER_SAMPLE_EVERY: '1'
+          BUG_HIGHER_POLICIES: 'fixed4_cap12,sequential_cap12,batch2_cap12,batch3_cap12,batch2_uncapped,tdvp2'
+        run: julia --project benchmarks/QMB/ClosedSystem/xx_matched_accuracy_higher_d.jl results/xx-cap-batch-smoke
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cap-batch-smoke
+          path: results/xx-cap-batch-smoke/
+          if-no-files-found: warn
+
+  matched:
+    needs: smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: spinhalf
+            case: '1:8'
+          - label: spinone
+            case: '2:6'
+          - label: spinthreehalf
+            case: '3:6'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.11'
+      - uses: julia-actions/cache@v2
+      - run: julia --project -e 'using Pkg; Pkg.instantiate()'
+      - name: Accuracy vs work, cap 1.2 and batched DD (${{ matrix.label }})
+        env:
+          BUG_HIGHER_CASES: '${{ matrix.case }}'
+          BUG_HIGHER_STEPS: '12'
+          BUG_HIGHER_DT: '0.04'
+          BUG_HIGHER_SEEDS: '2'
+          BUG_HIGHER_TOLS: '1e-2,1e-3'
+          BUG_HIGHER_SAMPLE_EVERY: '3'
+          BUG_HIGHER_MAXDIM: '128'
+          BUG_HIGHER_POLICIES: 'fixed4_cap12,sequential_cap12,batch2_cap12,batch3_cap12,fixed4_adaptK,adaptive_lanczos,batch2_uncapped,tdvp2'
+        run: julia --project benchmarks/QMB/ClosedSystem/xx_matched_accuracy_higher_d.jl results/xx-cap-batch-${{ matrix.label }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cap-batch-${{ matrix.label }}
+          path: results/xx-cap-batch-${{ matrix.label }}/
+          if-no-files-found: warn
