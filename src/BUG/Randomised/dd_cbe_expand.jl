@@ -33,8 +33,17 @@ function dd_cbe_expand(
     version::Int = 0,
     holdout_width::Int = _DD_HOLDOUT,
     audit::Bool = false,
+    mode::Symbol = :adaptive,
+    fixed_width::Int = 0,
+    fixed_rank::Int = 0,
+    acceptance_factor::Float64 = 1.0,
 )
     side in (:left, :right) || throw(ArgumentError("side must be :left or :right"))
+    mode in (:adaptive, :fixed) || throw(ArgumentError("unknown DD mode: $mode"))
+    mode === :fixed && (fixed_width < 1 || fixed_rank < 1) &&
+        throw(ArgumentError("fixed mode requires positive fixed_width and fixed_rank"))
+    0 < acceptance_factor <= 1 ||
+        throw(ArgumentError("acceptance_factor must be in (0,1]"))
     left = side === :left
     left_basis, right_basis = frame_pair.U0, frame_pair.V0
     old_rank = frame_pair.old_rank
@@ -91,7 +100,13 @@ function dd_cbe_expand(
     # With an allocation the incremental controller decides the width (it is always
     # thin); without one, or for the exact reference, the numerical-rank stop of `_range_find`
     # alone.
-    directions, direction_count = if alloc === nothing || exact
+    directions, direction_count = if mode === :fixed && !exact
+        probe = draw(min(fixed_width, full_opp), nothing)
+        selected = probe === nothing ? nothing : first(_dd_select(frame, sketch(probe), side, kc))
+        # Fixed-rank is a cap, deliberately without a residual certification.
+        fixed_basis = selected === nothing ? nothing : _trim_total(selected, fl, fixed_rank)
+        (fixed_basis, fixed_basis === nothing ? 0 : leg_dim(fixed_basis, fl))
+    elseif alloc === nothing || exact
         Qr, _, nr = _certified_range(
             draw,
             wleg,
@@ -122,6 +137,7 @@ function dd_cbe_expand(
             kc = kc,
             holdout_width = holdout_width,
             audit = audit,
+            acceptance_factor = acceptance_factor,
         )
         (Qc, Qc === nothing ? 0 : leg_dim(Qc, fl))
     end
