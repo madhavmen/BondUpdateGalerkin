@@ -15,6 +15,10 @@ A basis-selection (enrichment) strategy for the bond frames of a BUG sweep. A su
 """
 abstract type BasisExpansion end
 
+# Local Krylov recurrence is orthogonal to the DD expansion policy. The default keeps
+# the historically validated full Arnoldi chain; Hermitian models may opt in to Lanczos.
+krylov_controls(::BasisExpansion) = (recurrence = :arnoldi, fixed_depth = 0)
+
 """
     expand_frame(strategy, frame, mpo, bond, lch, rch, side; kwargs...) -> CBEExpansion
 
