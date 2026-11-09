@@ -272,6 +272,7 @@ function _half_left!(
             cx.tau,
             cx.alloc;
             workcap = _cap_at(cx.wcap, bond),
+            krylov_controls(cx.expansion)...,
         )
         acc.tkry += (time_ns() - tk0) / 1e9
         _record_krylov!(bondlg, kst, cx.alloc)
@@ -375,6 +376,7 @@ function _half_right!(
             cx.tau,
             cx.alloc;
             workcap = _cap_at(cx.wcap, bond),
+            krylov_controls(cx.expansion)...,
         )
         acc.tkry += (time_ns() - tk0) / 1e9
         _record_krylov!(bondlg, kst, cx.alloc)
