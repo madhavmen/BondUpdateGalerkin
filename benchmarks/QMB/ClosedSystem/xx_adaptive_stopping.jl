@@ -63,7 +63,8 @@ function write_rows(name, headers, rows)
 end
 
 const dt = 0.05
-const nsteps = 12
+const nsteps = parse(Int, get(ENV, "BUG_XX_STEPS", "12"))
+const nseeds = parse(Int, get(ENV, "BUG_XX_SEEDS", "3"))
 const basis = 1e-5
 const trunc = 1e-8
 const root_tol = 1e-10
@@ -83,7 +84,7 @@ for L in (8,), interaction in (:short,:long)
     initial = spin_domain_wall_state(L,1)
     # Small ED reference is computed at each sampled time, not only at t_final.
     exact_at = [reference_profile(H, initial, L, dt*k) for k in 1:nsteps]
-    for (method,policy) in configs, seed in 0:2
+    for (method,policy) in configs, seed in 0:(nseeds-1)
         psi = spin_domain_wall_state(L,1)
         rng = MersenneTwister(seed)
         for step in 1:nsteps
