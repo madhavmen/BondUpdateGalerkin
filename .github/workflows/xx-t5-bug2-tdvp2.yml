@@ -1,0 +1,91 @@
+name: T5 U1 XX BUG2 vs TDVP2 stopping ablations
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'benchmarks/XXT5/**'
+      - '.github/workflows/xx-t5-bug2-tdvp2.yml'
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.11'
+      - uses: julia-actions/cache@v2
+      - name: Instantiate project
+        run: julia --project -e 'using Pkg; Pkg.instantiate()'
+      - name: Smoke BUG2, capped RSVD+Krylov and TDVP2 on d2 d3 d4
+        env:
+          BUG_T5_SMOKE: '1'
+          BUG_HIGHER_CASES: '1:4,2:4,3:4'
+          BUG_HIGHER_INTERACTIONS: 'short,long'
+          BUG_HIGHER_STEPS: '2'
+          BUG_HIGHER_DT: '0.05'
+          BUG_HIGHER_SEEDS: '1'
+          BUG_HIGHER_TOLS: '1e-2'
+          BUG_HIGHER_SAMPLE_EVERY: '1'
+          BUG_HIGHER_POLICIES: 'T5_fixed4_k8,T5_fixed4_adaptK,sequential_svd_cap12,batch2_svd_cap12,tdvp2'
+        run: julia --project benchmarks/XXT5/xx_T5_matched_work.jl results/T5-smoke
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: XX-T5-smoke
+          path: results/T5-smoke/
+          if-no-files-found: warn
+
+  full-T5:
+    needs: smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: 'd2-short'
+            case: '1:10'
+            model: 'short'
+          - label: 'd2-long'
+            case: '1:10'
+            model: 'long'
+          - label: 'd3-short'
+            case: '2:6'
+            model: 'short'
+          - label: 'd3-long'
+            case: '2:6'
+            model: 'long'
+          - label: 'd4-short'
+            case: '3:6'
+            model: 'short'
+          - label: 'd4-long'
+            case: '3:6'
+            model: 'long'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.11'
+      - uses: julia-actions/cache@v2
+      - name: Instantiate Julia + pinned dependencies
+        run: julia --project -e 'using Pkg; Pkg.instantiate()'
+      - name: T5 ${{ matrix.label }} BUG2 stopping efficiency and bond growth
+        env:
+          BUG_HIGHER_CASES: '${{ matrix.case }}'
+          BUG_HIGHER_INTERACTIONS: '${{ matrix.model }}'
+          BUG_HIGHER_STEPS: '50'
+          BUG_HIGHER_DT: '0.1'
+          BUG_HIGHER_SEEDS: '2'
+          BUG_HIGHER_TOLS: '1e-2,1e-3'
+          BUG_HIGHER_SAMPLE_EVERY: '5'
+          BUG_HIGHER_MAXDIM: '128'
+          BUG_HIGHER_POLICIES: 'T5_fixed4_k8,T5_fixed4_k12,T5_fixed4_adaptK,sequential_svd_cap12,batch2_svd_cap12,T5_batch2_fixedK8,T5_batch2_arnoldi,T5_uncapped,tdvp2'
+        run: julia --project benchmarks/XXT5/xx_T5_matched_work.jl results/T5-${{ matrix.label }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: XX-T5-${{ matrix.label }}
+          path: results/T5-${{ matrix.label }}/
+          if-no-files-found: warn
