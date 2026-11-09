@@ -28,8 +28,8 @@ Maintain a scientifically correct, externally usable Julia package with a single
 - `src/QTTS/`: `Tooling/` (grids, QTT and MPO construction), `Elementwise/`, `Models/{Heston,GrossPitaevskii}/`.
 - `src/Baselines/`: independent comparison integrators and exact references.
 - `benchmarks/QMB/`, `benchmarks/QTTS/`, `benchmarks/kernels/`: maintained benchmark drivers (`benchmarks/README.md`).
-- `examples/QMB/`, `examples/QTTS/`: self-checking examples; `studies/`: research code outside the package; `docs/src/`: the manual.
+- `examples/QMB/`, `examples/QTTS/`: self-checking examples; `docs/src/`: the manual.
 
-The full target tree, folder responsibilities and dependency rules are in `docs/dev/implementation_plan.md` Section 2; the legacy-file move map is in Section 8. Consult `agents/architecture.md` for dependency rules and `agents/scientific-validation.md` for scientifically consequential changes. The migration from BUG-Julia is complete; `docs/dev/migration-map.md` records every legacy file's destination or archive decision.
+Every folder of `src/` has a README with its responsibilities and a file-by-file layout, and `test/README.md` maps every test file; `docs/src/developer_architecture.md` holds the module dependencies. Consult `agents/architecture.md` for dependency rules and `agents/scientific-validation.md` for scientifically consequential changes. The migration from BUG-Julia is complete.
 
 Do not run cluster-scale simulations or produce generated figures without an explicit task requirement. Prefer deterministic fast tests before expensive verification. Never call a change "validated" if the checks did not run.

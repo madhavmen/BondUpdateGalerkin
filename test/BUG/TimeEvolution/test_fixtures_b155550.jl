@@ -1,7 +1,7 @@
 # Regression against the frozen reference runs in test/fixtures/b155550: the engine must give the
 # same scientific answers as the runs the fixtures were made from.
 #
-# Each case reruns the fixture script's own calls (docs/dev/tools/make_fixtures_b155550.jl) with the
+# Each case reruns the calls the fixtures were made with (fixture script no longer in the repository) with the
 # same seed. The randomised sketches and the thread count make the runs differ at the truncation
 # tolerance, never bit for bit, so every quantity is compared with a tolerance:
 #   - against the frozen run: S^z profiles to 1e-5, energies to 1e-6 relative;

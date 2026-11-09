@@ -73,7 +73,7 @@ stage-solver statistics, the frame audits and timings.
 - `docs/`: the manual (`julia --project=docs docs/make.jl` after instantiating `docs/`); `docs/src/mps.md`
   explains the MPS container, symmetry modes, state builders and canonical form.
 - `examples/`: runnable scripts, each checked against an exact or independent reference.
-- `docs/dev/`: developer notes and the interface contracts.
+- `src/README.md` and the README in every folder below it: what each folder does and which file holds what; `test/README.md` maps the tests.
 
 ## Tests
 

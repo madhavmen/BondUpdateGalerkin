@@ -4,7 +4,7 @@ What problem does this change solve? Is it structural, numerical, physics/PDE, p
 
 ## Architecture and API
 
-- Affected area: `BUG` / `QMB` / `QTTS` / `Baselines` / docs / studies
+- Affected area: `BUG` / `QMB` / `QTTS` / `Baselines` / docs
 - Public API changed? What is the migration/deprecation story?
 - No duplicate algorithm/model code or invalid dependency direction?
 

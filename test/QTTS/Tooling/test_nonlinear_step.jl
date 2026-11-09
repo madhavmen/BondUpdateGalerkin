@@ -6,7 +6,7 @@
 # checked against them on one step.
 #
 # The plane wave runs at order 2 and two step sizes; the frozen runs are the fixtures
-# `qtt_heston_backward` and `qtt_gp` of docs/dev/tools/make_fixtures_b155550.jl.
+# `qtt_heston_backward` and `qtt_gp` (test/fixtures/b155550).
 
 using Test, LinearAlgebra
 import JSON

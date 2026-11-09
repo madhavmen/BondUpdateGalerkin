@@ -1,4 +1,5 @@
-# liouville_blocks.jl: MPDO contractions by walking the abelian blocks (from `liouville.jl`, included right after it).
+# MPDO observables: trace, expectation values, reduced density matrices and the dense matrix of a
+# vectorised density operator, contracted by walking its abelian blocks.
 
 # ── contractions by walking the abelian blocks ─────────────────────────────────────────────────
 

@@ -162,5 +162,4 @@ The BUG engine does not read `SymMPS` fields. It uses the interface in
 | `inner_product(bra, ket)` | `<bra|ket>` |
 | `symmetry(psi)` | the symmetry trait |
 
-`test/BUG/Core/Interfaces/test_state_conformance.jl` runs one suite against each state type, and
-`docs/dev/interfaces.md` holds the contract.
+`test/BUG/Core/Interfaces/test_state_conformance.jl` runs one suite against each state type.

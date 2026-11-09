@@ -25,7 +25,7 @@ expansion through `BasisExpansion`.
 
 ## State contract
 
-Every state implements the contract of `docs/dev/interfaces.md` (`nsites`, `physical_dimension`,
+Every state implements the contract of `src/BUG/Core/Interfaces/state.jl`, tabulated on the [MPS page](mps.md) (`nsites`, `physical_dimension`,
 `bond_dimension`, `orthogonality_center`, `canonicalize!`, `inner_product`, `symmetry`);
 `test/BUG/Core/Interfaces/test_state_conformance.jl` runs one suite against each state type.
 Operations replace site tensors (`psi[i] = ...`) and never mutate one in place, so `copy(psi)`

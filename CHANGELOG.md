@@ -102,8 +102,14 @@ Methods and ablations outside the default path:
   `krylov_depth`.
 - `stage_solver = :krylov_root` of `qtt_bug_step!`.
 
+Developer notes: `docs/dev/` (the implementation plan, migration map, interface notes, release
+audit, file inventory and the b155550 fixture script) and `studies/README.md`. The state contract is
+tabulated on `docs/src/mps.md` instead.
+
 ### Added
 
+- A README in every folder of `src/` (what the folder does, which file holds what) and in
+  `test/` (every test file) and `docs/`.
 - Manual page `docs/src/mps.md`: the `SymMPS` container, symmetry modes, state builders, canonical
   form, charge sectors, observables and the state interface.
 - `cbe_bug_step!` keywords:

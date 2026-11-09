@@ -1,4 +1,4 @@
-# pxp_scars.jl: scars: the PXP model of a Rydberg blockade chain (from `mbl_scars.jl`, included right after it).
+# Quantum many-body scars: the PXP model of a Rydberg blockade chain, and its Z2 / Z_k start states.
 
 # ── SCARS: the PXP model of a Rydberg blockade chain ──
 # Virtual dimension 4 for every L: states id, P placed, X placed, done. The two boundary entries

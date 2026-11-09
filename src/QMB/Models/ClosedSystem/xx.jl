@@ -1,6 +1,6 @@
 # ── the U(1) XX chain, H = J sum (S^x S^x + S^y S^y), from a domain wall ──
 # Spins are `twoS = 2s` (s = 1/2 or 3, d = 2s + 1). Telum's Clebsch-Gordan convention gives the same J
-# at every s, pinned by test_spin_xx.jl.
+# at every s, pinned by test_xx.jl.
 # Only s = 1/2 has a free-fermion closed form; the s = 3 references are sector ED and converged MPS runs.
 
 "The nearest-neighbour coupling matrix `w` on the bonds `bonds` (strict upper triangle)."

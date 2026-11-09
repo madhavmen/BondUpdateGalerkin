@@ -1,4 +1,4 @@
-# Parallel against serial half-sweeps, sized to run in seconds: L = 6, two steps, and the ordinary, midpoint and order-2 schemes
+# Parallel against serial half-sweeps, sized to run in seconds: L = 6, two steps, and the order-1 and order-2 steps
 # (order 4 is the same frontier code as order 2).
 #
 # `parallel = true` runs the two half-sweeps as two tasks. It must be the SAME METHOD as the serial

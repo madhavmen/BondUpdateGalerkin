@@ -1,7 +1,6 @@
 # The comparison methods: each baseline against an independent reference on the same problem the
-# BUG tests use -- TDVP2 on the XX chain against its frozen run and free fermions, CBE-DMRG on a
-# chain, the unitarity of the one-site TDVP-CBE, and a QTT TDVP2 step against the dense
-# exponential.
+# BUG tests use -- TDVP2 on the XX chain against its frozen run and free fermions, and a QTT TDVP2
+# step against the dense exponential.
 
 using Test, LinearAlgebra
 import JSON, Random
