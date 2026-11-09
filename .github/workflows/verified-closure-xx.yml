@@ -1,0 +1,45 @@
+name: Verified closure XX benchmark
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'benchmarks/QMB/ClosedSystem/xx_adaptive_stopping.jl'
+      - '.github/workflows/verified-closure-xx.yml'
+jobs:
+  verified:
+    runs-on: ubuntu-latest
+    timeout-minutes: 95
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.11'
+      - uses: julia-actions/cache@v2
+      - name: Instantiate
+        run: julia --project -e 'using Pkg; Pkg.instantiate()'
+      - name: Two-step checked closure smoke
+        env:
+          BUG_XX_STEPS: '2'
+          BUG_XX_SEEDS: '1'
+          BUG_XX_POLICIES: 'tdvp2,fixed4,adaptive2conservative,fixed4_checked,adaptive_checked,lanczos_checked,order3_checked,outside_checked'
+        run: julia --project benchmarks/QMB/ClosedSystem/xx_adaptive_stopping.jl results/xx-verified-smoke
+      - name: Strict 24-step closure and root rank benchmark
+        env:
+          BUG_XX_STEPS: '24'
+          BUG_XX_SEEDS: '2'
+          BUG_XX_POLICIES: 'tdvp2,fixed4,adaptive2conservative,fixed4_checked,adaptive_checked,lanczos_checked,order3_checked,outside_checked'
+        run: julia --project benchmarks/QMB/ClosedSystem/xx_adaptive_stopping.jl results/xx-verified-strict
+      - name: Looser 24-step closure and root rank benchmark
+        env:
+          BUG_XX_STEPS: '24'
+          BUG_XX_SEEDS: '2'
+          BUG_XX_BASIS: '1e-3'
+          BUG_XX_TRUNC: '1e-6'
+          BUG_XX_POLICIES: 'tdvp2,fixed4,adaptive2conservative,fixed4_checked,adaptive_checked,lanczos_checked,order3_checked,outside_checked'
+        run: julia --project benchmarks/QMB/ClosedSystem/xx_adaptive_stopping.jl results/xx-verified-loose
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: xx-verified-closure-results
+          path: results/xx-verified-*/
+          if-no-files-found: warn
