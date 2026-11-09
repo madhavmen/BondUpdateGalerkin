@@ -272,6 +272,19 @@ function policy_specs(basis_tol)
                     holdout_width=2,acceptance_factor=0.6,
                     batch_blocks=2,cap_selection=:svd,krylov_mode=:lanczos),
                     (work_ceiling_rule=:bond,bond_ceiling_factor=1.2,)),
+        # One-pass tail rank selection: same MPO sketch as fixed width 8/12.
+        # Crucially, this is NOT an independently validated DD residual.
+        # The checked order2 global Krylov closure and ED state error decide
+        # whether this cheaper selection is physically acceptable.
+        ("RSVD_tail12_factor01",DDQRExpansion(mode=:rank_tail,
+                    fixed_width=12,tail_factor=0.10,krylov_mode=:lanczos),
+                    (work_ceiling_rule=:bond,bond_ceiling_factor=1.2,)),
+        ("RSVD_tail12_factor005",DDQRExpansion(mode=:rank_tail,
+                    fixed_width=12,tail_factor=0.05,krylov_mode=:lanczos),
+                    (work_ceiling_rule=:bond,bond_ceiling_factor=1.2,)),
+        ("RSVD_tail8_factor01",DDQRExpansion(mode=:rank_tail,
+                    fixed_width=8,tail_factor=0.10,krylov_mode=:lanczos),
+                    (work_ceiling_rule=:bond,bond_ceiling_factor=1.2,)),
     ]
 end
 
