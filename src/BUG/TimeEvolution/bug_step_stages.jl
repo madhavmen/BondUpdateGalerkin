@@ -60,10 +60,10 @@ function _resolve_step_options(
     order >= 1 || throw(ArgumentError("order must be >= 1, got $order"))
     fold_omega = something(fold_omega, order > 1 && !exact)
     frontier_tol >= 0 || throw(ArgumentError("frontier_tol must be >= 0, got $frontier_tol"))
-    work_ceiling_rule in (:maxdim, :bond) ||
-        throw(ArgumentError("work_ceiling_rule must be :maxdim or :bond, got $work_ceiling_rule"))
+    work_ceiling_rule in (:maxdim, :bond, :bond_strict) ||
+        throw(ArgumentError("work_ceiling_rule must be :maxdim, :bond or :bond_strict, got $work_ceiling_rule"))
     bond_ceiling_factor == 0 ||
-        (bond_ceiling_factor > 1 && work_ceiling_rule === :bond) ||
+        (bond_ceiling_factor > 1 && work_ceiling_rule in (:bond, :bond_strict)) ||
         throw(
             ArgumentError(
                 "bond_ceiling_factor must be 0, or > 1 with work_ceiling_rule = :bond, got " *
@@ -104,6 +104,8 @@ function _resolve_step_options(
     workcap =
         work_ceiling_rule === :bond ?
         bond_work_ceilings(bond_ranks, local_dim(psi), maxdim; factor = bond_ceiling_factor) :
+        work_ceiling_rule === :bond_strict ?
+        bond_work_ceilings_strict(bond_ranks, maxdim; factor = bond_ceiling_factor) :
         work_ceiling(maxdim, maximum(bond_ranks; init = 0), local_dim(psi))
     return (
         site_count = site_count,
