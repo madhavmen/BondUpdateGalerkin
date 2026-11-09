@@ -13,9 +13,10 @@
 """
     cbe_bug_coupled_step(psi, mpo, tau; tol_basis=1e-3, max_retries=4, ...)
 
-Run order-2 CBE-BUG with separate per-bond limits: DD/enriched K/L
-working frames up to `2*D_b_old`, except the root bond, where both
-Galerkin-input frames are capped at `ceil(1.2*D_root_old)`.
+Run order-2 CBE-BUG with TWO separate maximum per-bond limits:
+during DD+enriched K/L half-sweeps EVERY bond is <= ceil(1.2*D_b_old).
+In the checked global closure and root solve ONLY the root input frames
+may grow to <= 2*D_root_old. All non-root bonds stay <= ceil(1.2*D_b_old).
 No physical-d factor enters either cap. An independent DD holdout chooses a minimal rank.
 The local enriched Lanczos stages and the checked global Krylov frontiers then
 validate the combined frame. If the global or DD budget fails, the entire
@@ -55,12 +56,12 @@ function cbe_bug_coupled_step(
     original = deepcopy(psi)
     old = bond_dims(original)
     root_bond = _bug_root_link(length(original))
-    caps = bond_frame_root_ceilings(
+    caps = bond_half_root_ceilings(
         old, maxdim, root_bond;
-        frame_factor = 2.0,
-        root_factor = 1.2,
+        half_factor = 1.2,
+        root_factor = 2.0,
     )
-    maxroom = maximum(caps .- old; init = 0)
+    maxroom = maximum(caps.root .- old; init = 0)
     base_seed = rand(rng, UInt64)
     history = Any[]
     cumulative = (
@@ -98,22 +99,26 @@ function cbe_bug_coupled_step(
             tol_root = tol_root,
             maxdim = maxdim,
             expansion = policy,
-            work_ceiling_rule = :frame_root,
-            bond_ceiling_factor = 2.0,
-            root_ceiling_factor = 1.2,
+            work_ceiling_rule = :half_root,
+            bond_ceiling_factor = 1.2,
+            root_ceiling_factor = 2.0,
             rng = MersenneTwister(base_seed),
         )
         wall_s = (time_ns()-t0)/1e9
         # Work caps are checked against the dimensions BEFORE any trial.
-        all(info.expanded .<= caps) ||
-            error("DD/KL frame exceeded per-bond 2*D or root 1.2*D cap")
-        info.root_right <= caps[info.root] ||
-            error("right root input exceeded root 1.2*D cap")
-        all(bond_dims(candidate) .<= caps) ||
-            error("final bond exceeded per-bond 2*D or root 1.2*D cap")
+        all(info.expanded .<= caps.root) ||
+            error("post-closure frame exceeded its per-bond maximum")
+        info.root_right <= caps.root[info.root] ||
+            error("right root input exceeded 2*D_root maximum")
+        all(bond_dims(candidate) .<= caps.root) ||
+            error("final bond exceeded per-bond maximum")
         for bl in info.ledger.bond_log
-            bl.width <= caps[bl.bond] ||
-                error("one of the augmented K/L/closure frames violated cap")
+            # Ordinary half-sweep entries have no :pass; closure entries do.
+            # This catches a false success where the half-sweep used the larger
+            # root allowance before global closure was even evaluated.
+            applicable_cap = haskey(bl, :pass) ? caps.root : caps.half
+            bl.width <= applicable_cap[bl.bond] ||
+                error("half-sweep/closure frame violated its phase-specific limit")
         end
         lg = info.ledger
         # The two statuses MUST be kept distinct. In particular, closure

@@ -540,6 +540,42 @@ function bond_frame_root_ceilings(
     ]
 end
 
+"""
+    bond_half_root_ceilings(old_bonds, maxdim, root;
+                            half_factor=1.2, root_factor=2.0)
+
+Two independent MAXIMUM working-rank ceilings, both frozen from the same
+pre-step MPS bond ranks, with NO physical-site dimension factor.
+
+- half[b] <= min(maxdim, ceil(half_factor * D_b_old)) for EVERY bond,
+  on BOTH CBE half-sweeps and their enriched K/L Lanczos stages;
+- root[b] = half[b] at all non-root bonds; root[root_bond] <=
+  min(maxdim, ceil(root_factor * D_root_old)) for checked global
+  frontiers, root re-enrichment, and the root Galerkin solve.
+
+The two root input frames W and Z are EACH limited by root[root_bond].
+The maximum permitted root-core size is root[root_bond]^2; the solver
+does NOT have to fill these spaces. This is a work/geometry cap, not
+a state-error tolerance and not a forced retained bond rank.
+"""
+function bond_half_root_ceilings(
+    old_bonds::AbstractVector{<:Integer},
+    maxdim::Int,
+    root_bond::Int;
+    half_factor::Real = 1.2,
+    root_factor::Real = 2.0,
+)
+    1 <= root_bond <= length(old_bonds) || throw(BoundsError(old_bonds, root_bond))
+    half_factor > 1 || throw(ArgumentError("half_factor must exceed one"))
+    root_factor >= half_factor ||
+        throw(ArgumentError("root_factor must be at least half_factor"))
+    half = bond_work_ceilings_strict(old_bonds, maxdim; factor = half_factor)
+    root = copy(half)
+    root[root_bond] = max(half[root_bond],
+        min(maxdim, ceil(Int, round(root_factor * old_bonds[root_bond]; digits = 9))))
+    return (half = half, root = root)
+end
+
 "A work ceiling: one for every bond (`work_ceiling`), or one per bond (`bond_work_ceilings`)."
 const WorkCeiling = Union{Int,Vector{Int}}
 

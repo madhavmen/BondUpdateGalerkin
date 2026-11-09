@@ -1,0 +1,104 @@
+name: BUG2 half1p2 root2 U1 XX matched accuracy
+on:
+  pull_request:
+    paths:
+      - 'src/BUG/TimeEvolution/bug_step.jl'
+      - 'src/BUG/TimeEvolution/bug_step_stages.jl'
+      - 'src/BUG/TimeEvolution/coupled_dd_krylov.jl'
+      - 'src/BUG/Core/RankAdaptation/basis_budget.jl'
+      - 'test/BUG/Core/RankAdaptation/test_bond_work_ceiling.jl'
+      - 'benchmarks/XXT5/xx_T5_matched_work.jl'
+      - '.github/workflows/xx-half12-root2.yml'
+  workflow_dispatch:
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.11'
+      - uses: julia-actions/cache@v2
+      - name: Install pinned packages
+        run: julia --project -e 'using Pkg; Pkg.instantiate()'
+      - name: Check both phase cap arrays
+        run: |
+          julia --project -e '
+            using BondUpdateGalerkin.BUG
+            z=bond_half_root_ceilings([1,5,10,65],128,2;half_factor=1.2,root_factor=2.0)
+            @assert z.half==[2,6,12,78]
+            @assert z.root==[2,10,12,78]
+            @assert z.root[2]>z.half[2]
+            @assert all(z.root[i]==z.half[i] for i in (1,3,4))
+          '
+      - name: Test U1 rank cap through actual K L and closure frames
+        run: julia --project test/BUG/Core/RankAdaptation/test_bond_work_ceiling.jl
+      - name: Small XX domain-wall smoke d2 d3 d4
+        env:
+          BUG_T5_SMOKE: '1'
+          BUG_HIGHER_CASES: '1:4,2:4,3:4'
+          BUG_HIGHER_STEPS: '2'
+          BUG_HIGHER_DT: '0.05'
+          BUG_HIGHER_SEEDS: '1'
+          BUG_HIGHER_TOLS: '1e-2'
+          BUG_HIGHER_SAMPLE_EVERY: '1'
+          BUG_HIGHER_POLICIES: 'T5_half12_root2_fixed8,T5_half12_root2_adaptK,T5_half12_root2_RSVDCBE,T5_half12_root2_batched,tdvp2'
+        run: julia --project benchmarks/XXT5/xx_T5_matched_work.jl results/half12-root2-smoke
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: half12-root2-smoke
+          path: results/half12-root2-smoke/
+          if-no-files-found: warn
+  T5:
+    needs: smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: d2-nearest
+            case: '1:10'
+            interaction: short
+          - label: d2-long
+            case: '1:10'
+            interaction: long
+          - label: d3-nearest
+            case: '2:6'
+            interaction: short
+          - label: d3-long
+            case: '2:6'
+            interaction: long
+          - label: d4-nearest
+            case: '3:6'
+            interaction: short
+          - label: d4-long
+            case: '3:6'
+            interaction: long
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.11'
+      - uses: julia-actions/cache@v2
+      - run: julia --project -e 'using Pkg; Pkg.instantiate()'
+      - name: T5 ${{ matrix.label }} at matched achieved error - BUG2 versus TDVP2
+        env:
+          BUG_HIGHER_CASES: '${{ matrix.case }}'
+          BUG_HIGHER_INTERACTIONS: '${{ matrix.interaction }}'
+          BUG_HIGHER_STEPS: '50'
+          BUG_HIGHER_DT: '0.1'
+          BUG_HIGHER_SEEDS: '2'
+          BUG_HIGHER_TOLS: '1e-2,1e-3'
+          BUG_HIGHER_SAMPLE_EVERY: '5'
+          BUG_HIGHER_MAXDIM: '128'
+          BUG_HIGHER_POLICIES: 'T5_oldstrict_adaptK,T5_half12_root2_fixed8,T5_half12_root2_fixed12,T5_half12_root2_adaptK,T5_half12_root2_RSVDCBE,T5_half12_root2_batched,tdvp2'
+        run: julia --project benchmarks/XXT5/xx_T5_matched_work.jl results/T5-half12-root2-${{ matrix.label }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T5-half12-root2-${{ matrix.label }}
+          path: results/T5-half12-root2-${{ matrix.label }}/
+          if-no-files-found: warn
