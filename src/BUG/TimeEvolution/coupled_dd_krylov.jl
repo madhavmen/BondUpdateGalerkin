@@ -13,8 +13,10 @@
 """
     cbe_bug_coupled_step(psi, mpo, tau; tol_basis=1e-3, max_retries=4, ...)
 
-Run order-2 CBE-BUG under `ceil(1.2*D_b_old)` working-rank ceilings, *without*
-a physical-d factor. An independent DD holdout first chooses a minimal rank.
+Run order-2 CBE-BUG with separate per-bond limits: DD/enriched K/L
+working frames up to `2*D_b_old`, except the root bond, where both
+Galerkin-input frames are capped at `ceil(1.2*D_root_old)`.
+No physical-d factor enters either cap. An independent DD holdout chooses a minimal rank.
 The local enriched Lanczos stages and the checked global Krylov frontiers then
 validate the combined frame. If the global or DD budget fails, the entire
 candidate step is retried on the same original MPS with a larger minimum DD
@@ -52,7 +54,12 @@ function cbe_bug_coupled_step(
     # have independent storage even if a local kernel mutates a tensor in place.
     original = deepcopy(psi)
     old = bond_dims(original)
-    caps = bond_work_ceilings_strict(old, maxdim; factor = 1.2)
+    root_bond = _bug_root_link(length(original))
+    caps = bond_frame_root_ceilings(
+        old, maxdim, root_bond;
+        frame_factor = 2.0,
+        root_factor = 1.2,
+    )
     maxroom = maximum(caps .- old; init = 0)
     base_seed = rand(rng, UInt64)
     history = Any[]
@@ -91,18 +98,19 @@ function cbe_bug_coupled_step(
             tol_root = tol_root,
             maxdim = maxdim,
             expansion = policy,
-            work_ceiling_rule = :bond_strict,
-            bond_ceiling_factor = 1.2,
+            work_ceiling_rule = :frame_root,
+            bond_ceiling_factor = 2.0,
+            root_ceiling_factor = 1.2,
             rng = MersenneTwister(base_seed),
         )
         wall_s = (time_ns()-t0)/1e9
         # Work caps are checked against the dimensions BEFORE any trial.
         all(info.expanded .<= caps) ||
-            error("DD/KL frame exceeded strict 1.2*old bond cap")
+            error("DD/KL frame exceeded per-bond 2*D or root 1.2*D cap")
         info.root_right <= caps[info.root] ||
-            error("right root input exceeded strict 1.2*old bond cap")
+            error("right root input exceeded root 1.2*D cap")
         all(bond_dims(candidate) .<= caps) ||
-            error("final bond exceeded strict 1.2*old bond cap")
+            error("final bond exceeded per-bond 2*D or root 1.2*D cap")
         for bl in info.ledger.bond_log
             bl.width <= caps[bl.bond] ||
                 error("one of the augmented K/L/closure frames violated cap")
