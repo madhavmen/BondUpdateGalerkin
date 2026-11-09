@@ -121,7 +121,13 @@ function _dd_controller(
         dd_basis !== nothing &&
         any(((charge, _),) -> sector_dim(frame, fl, charge) == 0, Telum.spaces(dd_basis)[fl])
 
-    width = clamp(initial_width, 1, max(min(wcap, ncap), 1))
+    # Rank-cap selection needs OVERSAMPLING: otherwise a cap of one new bond
+    # direction gives a single QR vector and the SVD never gets to rank the
+    # competing charge sectors. Keep only a tiny <=4-column extra pool, drawn
+    # through the same matrix-free MPO streaming path.
+    width = cap_selection === :svd ?
+        clamp(max(initial_width, ncap + min(4, ncap)), 1, max(wcap, 1)) :
+        clamp(initial_width, 1, max(min(wcap, ncap), 1))
     last = draw(width, nothing)
     last === nothing && return (nothing, :empty)
     direction_count += absorb!(stream(last, :n_probes))
