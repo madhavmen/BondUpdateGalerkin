@@ -1,8 +1,10 @@
-name: XX 1.2-bond-cap batched DD matched accuracy
+name: XX 1.2d-bond-cap batched DD matched accuracy
 on:
   workflow_dispatch:
   pull_request:
     paths:
+      - 'src/BUG/Core/RankAdaptation/basis_budget.jl'
+      - 'test/BUG/Core/RankAdaptation/test_bond_work_ceiling.jl'
       - 'src/BUG/Randomised/cbe.jl'
       - 'src/BUG/Randomised/dd_cbe_controller.jl'
       - 'src/BUG/Randomised/dd_cbe_expand.jl'
@@ -21,6 +23,8 @@ jobs:
       - uses: julia-actions/cache@v2
       - name: Instantiate
         run: julia --project -e 'using Pkg; Pkg.instantiate()'
+      - name: Test physical-dimension-scaled per-bond cap for rank-1 and entangled MPS
+        run: julia --project test/BUG/Core/RankAdaptation/test_bond_work_ceiling.jl
       - name: Check bond-limited, sequential and batched DD U1 XX on all local dimensions
         env:
           BUG_HIGHER_CASES: '1:4,2:4,3:4'
@@ -58,7 +62,7 @@ jobs:
           version: '1.11'
       - uses: julia-actions/cache@v2
       - run: julia --project -e 'using Pkg; Pkg.instantiate()'
-      - name: Accuracy vs work, cap 1.2 and batched DD (${{ matrix.label }})
+      - name: Accuracy vs work, cap 1.2d and batched DD (${{ matrix.label }})
         env:
           BUG_HIGHER_CASES: '${{ matrix.case }}'
           BUG_HIGHER_STEPS: '12'
