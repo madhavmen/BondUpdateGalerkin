@@ -37,6 +37,7 @@ function _dd_controller(
     kc::KernelCounters = KernelCounters(),
     holdout_width::Int = _DD_HOLDOUT,
     batch_blocks::Int = 1,
+    cap_selection::Symbol = :storage,
     audit::Bool = false,
     holdout = width -> draw(width, nothing),
     trace::Union{Nothing,Vector} = nothing,
@@ -46,6 +47,8 @@ function _dd_controller(
         throw(ArgumentError("acceptance_factor must lie in (0,1]"))
     1 <= batch_blocks <= 8 ||
         throw(ArgumentError("batch_blocks must lie in 1:8"))
+    cap_selection in (:storage, :svd) ||
+        throw(ArgumentError("cap_selection must be :storage or :svd"))
     left = side === :left
     # `fl` is the frame's new (growing) leg, `wleg` the probe-width leg of a sketch block.
     fl, wleg = left ? (3, 1) : (1, 3)
@@ -65,7 +68,30 @@ function _dd_controller(
         room = ncap - current
         room <= 0 && return 0
         if leg_dim(new_basis, fl) > room
-            new_basis = _trim_total(new_basis, fl, room)
+            if cap_selection === :svd
+                # A rank-revealing SVD of the THIN double-discarded sketch, not
+                # of the full two-site tensor. On a tight cap, choose the
+                # globally strongest sampled directions across U(1) sectors,
+                # rather than the first sectors in storage order. Charge
+                # symmetry is preserved by Telum's block-SVD.
+                (svd_basis, dt, db) = _measure(() -> begin
+                    off = TLArray(left ? perp_component(aug, sketched) :
+                                        perp_component_right(aug, sketched))
+                    legs = left ? (1, 2) : (2, 3)
+                    result = svd(off, legs, _TAG_K, _TAG_KR;
+                        Nkeep = room,
+                        cutoff = _rank_cut(0.0, off, norm(off)),
+                        get_lists = true)
+                    isempty(result.kept_list) ? nothing :
+                        left ? _reortho_left(aug, TLArray(result.U)) :
+                               _reortho_right(aug, TLArray(permutedims(result.U, (3, 1, 2))))
+                end)
+                kc.t_qr += dt
+                kc.b_qr += db
+                new_basis = svd_basis
+            else
+                new_basis = _trim_total(new_basis, fl, room)
+            end
             new_basis === nothing && return 0
         end
         new_basis = TLArray(setitag(new_basis, fl, tags))
