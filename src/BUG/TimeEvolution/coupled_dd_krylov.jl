@@ -48,7 +48,9 @@ function cbe_bug_coupled_step(
     1 <= max_retries <= 12 || throw(ArgumentError("max_retries must be in 1:12"))
     krylov_mode in (:lanczos, :arnoldi) ||
         throw(ArgumentError("unknown local Krylov recurrence: $krylov_mode"))
-    original = copy(psi)
+    # SymMPS.copy shares TLArray tensor objects. A transactional retry must
+    # have independent storage even if a local kernel mutates a tensor in place.
+    original = deepcopy(psi)
     old = bond_dims(original)
     caps = bond_work_ceilings_strict(old, maxdim; factor = 1.2)
     maxroom = maximum(caps .- old; init = 0)
@@ -70,7 +72,7 @@ function cbe_bug_coupled_step(
         floor = attempt == 1 ? 0 : min(maxroom, 2^(attempt-2))
         floor == last_floor && break
         last_floor = floor
-        candidate = copy(original)
+        candidate = deepcopy(original)
         policy = DDQRExpansion(
             mode = :rank_adaptive,
             rank_initial_width = max(rank_initial_width, floor + 2),
@@ -152,7 +154,7 @@ function cbe_bug_coupled_step(
         floor >= maxroom && break
     end
     return (
-        state = copy(original),
+        state = deepcopy(original),
         info = last,
         accepted = false,
         status = :cap_or_budget_unmet,
