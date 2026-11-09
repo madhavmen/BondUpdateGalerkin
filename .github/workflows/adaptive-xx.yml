@@ -10,7 +10,7 @@ on:
 jobs:
   numerical-smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 85
+    timeout-minutes: 105
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
@@ -19,6 +19,8 @@ jobs:
       - uses: julia-actions/cache@v2
       - name: Instantiate Julia dependencies
         run: julia --project -e 'using Pkg; Pkg.instantiate()'
+      - name: Test Hermitian Lanczos enrichment recurrence
+        run: julia --project test/BUG/Core/RankAdaptation/test_local_lanczos.jl
       - name: Run nearest-neighbor and long-range XX smoke
         env:
           BUG_XX_STEPS: '2'
