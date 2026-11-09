@@ -39,7 +39,10 @@ function _dd_controller(
     audit::Bool = false,
     holdout = width -> draw(width, nothing),
     trace::Union{Nothing,Vector} = nothing,
+    acceptance_factor::Float64 = 1.0,
 )
+    0 < acceptance_factor <= 1 ||
+        throw(ArgumentError("acceptance_factor must lie in (0,1]"))
     left = side === :left
     # `fl` is the frame's new (growing) leg, `wleg` the probe-width leg of a sketch block.
     fl, wleg = left ? (3, 1) : (1, 3)
@@ -90,14 +93,17 @@ function _dd_controller(
         ind = indicator(alloc, est)
         trace === nothing ||
             push!(trace, (direction_count, ind, indicator(alloc, resid(first_check)[1])))
-        ok = ind <= alloc.sample
+        ok = ind <= acceptance_factor * alloc.sample
         # A pass close to the line (or into a new sector) is confirmed on a twice wider holdout.
         if ok && !escalated && (audit || ind > alloc.sample / 2 || newsector())
             escalated = true
             wide_check = fresh(2 * holdout_width)
             wide_check === nothing || (check = wide_check; continue)
         end
-        capped = streamed >= wcap || direction_count >= ncap
+        # Validation probes are not discovery columns. Keep their accounting in the
+        # ledger, but do not let repeated statistical checks exhaust the discovery cap.
+        capped = ledger === nothing ? direction_count >= ncap :
+                 ledger.n_probes >= wcap || direction_count >= ncap
         if ok || capped
             ledger === nothing || _record_sample!(ledger, side, ind, per, hcols, last, wleg, alloc)
             ok && return (dd_basis, :met)
