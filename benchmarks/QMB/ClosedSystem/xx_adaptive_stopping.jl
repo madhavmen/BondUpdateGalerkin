@@ -48,7 +48,7 @@ function reference_profile(H, psi, L, t)
     x = dense_state(psi)
     v = exp(-im*t*Hermitian(H))*x
     nv = real(dot(v,v))
-    return [sum(((((k-1) >> (L-j)) & 1) == 1 ? 0.5 : -0.5)*abs2(v[k])
+    return [sum(((((k-1) >> (L-j)) & 1) == 0 ? 0.5 : -0.5)*abs2(v[k])
                  for k in eachindex(v))/nv for j in 1:L]
 end
 profile(psi) = real.(magnetisation(copy(psi))) ./ real(overlap(psi,psi))
