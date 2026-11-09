@@ -254,6 +254,9 @@ Base.@kwdef struct DDQRExpansion <: BasisExpansion
     # 1 = existing sequential controller; >1 adds multiple charge-targeted
     # discovery blocks per independent holdout checkpoint.
     batch_blocks::Int = 1
+    # :storage = historical first-sector trimming; :svd = dominant singular
+    # vectors of the THIN projected DD sketch if the 1.2*chi_b rank cap binds.
+    cap_selection::Symbol = :storage
     acceptance_factor::Float64 = 1.0
     # The K/L one-site generator must be Hermitian to use :lanczos.
     krylov_mode::Symbol = :arnoldi
@@ -282,6 +285,7 @@ expand_frame(
     fixed_rank = strategy.fixed_rank,
     holdout_width = strategy.holdout_width,
     batch_blocks = strategy.batch_blocks,
+    cap_selection = strategy.cap_selection,
     acceptance_factor = strategy.acceptance_factor,
 )
 
