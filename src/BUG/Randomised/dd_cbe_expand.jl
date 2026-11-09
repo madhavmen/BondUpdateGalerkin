@@ -40,11 +40,13 @@ function dd_cbe_expand(
     fixed_rank::Int = 0,
     acceptance_factor::Float64 = 1.0,
     rank_initial_width::Int = 4,
+    rank_floor::Int = 0,
 )
     side in (:left, :right) || throw(ArgumentError("side must be :left or :right"))
     mode in (:adaptive, :fixed, :rank_adaptive) ||
         throw(ArgumentError("unknown DD mode: $mode"))
     rank_initial_width >= 1 || throw(ArgumentError("rank_initial_width must be positive"))
+    rank_floor >= 0 || throw(ArgumentError("rank_floor must be nonnegative"))
     1 <= batch_blocks <= 8 || throw(ArgumentError("batch_blocks must be in 1:8"))
     cap_selection in (:storage, :svd) ||
         throw(ArgumentError("cap_selection must be :storage or :svd"))
@@ -116,7 +118,7 @@ function dd_cbe_expand(
     # error monitor, NOT a rigorous confidence bound under repeated optional stops.
     function ranked_dd()
         maxprobe = min(full_opp, max(wcap, cap + 4))
-        width = min(maxprobe, rank_initial_width)
+        width = min(maxprobe, max(rank_initial_width, rank_floor + 2))
         width <= 0 && return (nothing, 0)
         best = nothing
         for _attempt in 1:12
@@ -126,19 +128,27 @@ function dd_cbe_expand(
             Y = TLArray(project(sketch(Om)))
             norm(Y) <= _CBE_EPS &&
                 return (nothing, 0)
-            # The only costly factorization is on the thin (d*chi)-by-width
-            # *sketch*, with U(1) block structure; no full DD matrix is built.
+            # The full discarded-space matrix is never formed. Reuse this same
+            # MPO sketch for EVERY candidate DD rank during binary search.
             legs = left ? (1, 2) : (2, 3)
             rmax = min(cap, width)
+            if rmax < min(rank_floor, cap) && width < maxprobe
+                width = min(maxprobe, 2 * width)
+                continue
+            end
+            rank_cache = Dict{Int,Any}()
             function selected(k)
                 k == 0 && return nothing
+                haskey(rank_cache, k) && return rank_cache[k]
                 fac = svd(Y, legs, _TAG_K, _TAG_KR;
                     Nkeep = k,
                     cutoff = _rank_cut(0.0, Y, norm(Y)),
                     get_lists = true)
-                isempty(fac.kept_list) && return nothing
-                return left ? _reortho_left(frame, TLArray(fac.U)) :
-                              _reortho_right(frame, TLArray(permutedims(fac.U, (3, 1, 2))))
+                result = isempty(fac.kept_list) ? nothing :
+                         left ? _reortho_left(frame, TLArray(fac.U)) :
+                                _reortho_right(frame, TLArray(permutedims(fac.U, (3, 1, 2))))
+                rank_cache[k] = result
+                return result
             end
             # Cache one independent holdout for ALL rank candidates. A minimal
             # satisfactory k is found by logarithmically many small block SVDs.
@@ -161,7 +171,8 @@ function dd_cbe_expand(
             end
             threshold = acceptance_factor * alloc.sample
             if test_on(nothing, HY, Ho) <= threshold
-                pick, chosen_k = nothing, 0
+                chosen_k = min(rank_floor, rmax)
+                pick = selected(chosen_k)
             else
                 best = selected(rmax)
                 if test_on(best, HY, Ho) > threshold
@@ -186,8 +197,8 @@ function dd_cbe_expand(
                         low = mid
                     end
                 end
-                chosen_k = high
-                pick = selected(high)
+                chosen_k = max(high, min(rank_floor, rmax))
+                pick = selected(chosen_k)
             end
             # Fresh independent holdout: rank selection never sees this action.
             Ho2 = draw(2 * holdout_width, nothing)
