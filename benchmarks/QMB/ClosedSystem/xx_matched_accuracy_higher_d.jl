@@ -254,7 +254,7 @@ for (twoS,L) in cases
                     prof_err=maximum(abs.(local_approx-local_exact))
                     write_row(rowfile,d,twoS,L,interaction,basis_tol,"tdvp2",0,
                         k,k*dt,err,prof_err,abs(norm(v)-1),0,
-                        maximum(bond_dims(psi)),0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+                        maximum(bond_dims(psi)),0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
                         elapsed,"reference","")
                     println("TDVP d=$d L=$L $interaction step=$k err=$err")
                 end
