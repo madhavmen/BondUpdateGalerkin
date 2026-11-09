@@ -28,7 +28,7 @@ jobs:
           BUG_HIGHER_SEEDS: '1'
           BUG_HIGHER_TOLS: '1e-2'
           BUG_HIGHER_SAMPLE_EVERY: '1'
-          BUG_HIGHER_POLICIES: 'fixed4_cap12,sequential_cap12,batch2_cap12,batch3_cap12,batch2_uncapped,tdvp2'
+          BUG_HIGHER_POLICIES: 'fixed4_cap12,sequential_cap12,sequential_svd_cap12,batch2_cap12,batch2_svd_cap12,batch3_svd_cap12,tdvp2'
         run: julia --project benchmarks/QMB/ClosedSystem/xx_matched_accuracy_higher_d.jl results/xx-cap-batch-smoke
       - uses: actions/upload-artifact@v4
         if: always()
@@ -67,7 +67,7 @@ jobs:
           BUG_HIGHER_TOLS: '1e-2,1e-3'
           BUG_HIGHER_SAMPLE_EVERY: '3'
           BUG_HIGHER_MAXDIM: '128'
-          BUG_HIGHER_POLICIES: 'fixed4_cap12,sequential_cap12,batch2_cap12,batch3_cap12,fixed4_adaptK,adaptive_lanczos,batch2_uncapped,tdvp2'
+          BUG_HIGHER_POLICIES: 'fixed4_cap12,sequential_cap12,sequential_svd_cap12,batch2_cap12,batch2_svd_cap12,batch3_svd_cap12,fixed4_adaptK,adaptive_lanczos,batch2_uncapped,tdvp2'
         run: julia --project benchmarks/QMB/ClosedSystem/xx_matched_accuracy_higher_d.jl results/xx-cap-batch-${{ matrix.label }}
       - uses: actions/upload-artifact@v4
         if: always()
