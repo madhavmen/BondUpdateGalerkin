@@ -10,7 +10,7 @@ on:
 jobs:
   numerical-smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 85
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
@@ -24,8 +24,22 @@ jobs:
           BUG_XX_STEPS: '2'
           BUG_XX_SEEDS: '1'
         run: julia --project benchmarks/QMB/ClosedSystem/xx_adaptive_stopping.jl results/xx-adaptive
-      - uses: actions/upload-artifact@v4
+      - name: XX strict 24-step benchmark (3 seeds)
+        env:
+          BUG_XX_STEPS: '24'
+          BUG_XX_SEEDS: '3'
+        run: julia --project benchmarks/QMB/ClosedSystem/xx_adaptive_stopping.jl results/xx-strict
+      - name: XX looser 24-step benchmark (3 seeds)
+        env:
+          BUG_XX_STEPS: '24'
+          BUG_XX_SEEDS: '3'
+          BUG_XX_BASIS: '1e-3'
+          BUG_XX_TRUNC: '1e-6'
+        run: julia --project benchmarks/QMB/ClosedSystem/xx_adaptive_stopping.jl results/xx-loose
+      - name: Upload all available numerical results
+        uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: xx-adaptive-smoke-results
-          path: results/xx-adaptive/
+          name: xx-adaptive-benchmark-results
+          path: results/xx-*/
+          if-no-files-found: warn
