@@ -6,7 +6,7 @@
 # Short- and long-range models are BOTH genuine U(1) XX exchange operators;
 # long-range spin exchange is interacting after Jordan-Wigner transformation.
 using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB, BondUpdateGalerkin.Baselines
-using LinearAlgebra, Random, Statistics
+using LinearAlgebra, Random, Statistics, Telum
 include(joinpath(@__DIR__, "..", "..", "..", "test", "common", "dense_reference.jl"))
 
 outdir = isempty(ARGS) ? "results/xx_adaptive_stopping" : ARGS[1]
@@ -148,10 +148,10 @@ for L in (8,), interaction in (:short,:long)
     for method in (:lanczos,:arnoldi), tol in (1e-4,1e-6,1e-8,1e-10)
         report = Ref{Any}()
         solve = method == :lanczos ? lanczos_expv : arnoldi_expv
-        v = solve(x->H*x,ComplexF64(-im*dt),u;
+        v = solve(x->TLArray(H*Array(x)),ComplexF64(-im*dt),u;
             conv_tol=tol,maxiter=40,report=report)
         push!(kr,(interaction,L,method,tol,report[].iterations,
-                  norm(v-ref)/norm(ref),report[].err))
+                  norm(Array(v)-ref)/norm(ref),report[].err))
     end
 end
 write_rows("krylov.csv",
