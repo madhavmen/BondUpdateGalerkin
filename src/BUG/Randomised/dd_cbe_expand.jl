@@ -32,6 +32,7 @@ function dd_cbe_expand(
     kc::KernelCounters = KernelCounters(),
     version::Int = 0,
     holdout_width::Int = _DD_HOLDOUT,
+    batch_blocks::Int = 1,
     audit::Bool = false,
     mode::Symbol = :adaptive,
     fixed_width::Int = 0,
@@ -40,6 +41,7 @@ function dd_cbe_expand(
 )
     side in (:left, :right) || throw(ArgumentError("side must be :left or :right"))
     mode in (:adaptive, :fixed) || throw(ArgumentError("unknown DD mode: $mode"))
+    1 <= batch_blocks <= 8 || throw(ArgumentError("batch_blocks must be in 1:8"))
     mode === :fixed && (fixed_width < 1 || fixed_rank < 1) &&
         throw(ArgumentError("fixed mode requires positive fixed_width and fixed_rank"))
     0 < acceptance_factor <= 1 ||
@@ -161,6 +163,7 @@ function dd_cbe_expand(
             ledger;
             kc = kc,
             holdout_width = holdout_width,
+            batch_blocks = batch_blocks,
             audit = audit,
             acceptance_factor = acceptance_factor,
         )
