@@ -41,12 +41,16 @@ function dd_cbe_expand(
     acceptance_factor::Float64 = 1.0,
     rank_initial_width::Int = 4,
     rank_floor::Int = 0,
+    tail_factor::Float64 = 0.10,
 )
     side in (:left, :right) || throw(ArgumentError("side must be :left or :right"))
-    mode in (:adaptive, :fixed, :rank_adaptive, :rank_fast) ||
+    mode in (:adaptive, :fixed, :rank_adaptive, :rank_fast, :rank_tail) ||
         throw(ArgumentError("unknown DD mode: $mode"))
     rank_initial_width >= 1 || throw(ArgumentError("rank_initial_width must be positive"))
     rank_floor >= 0 || throw(ArgumentError("rank_floor must be nonnegative"))
+    0 < tail_factor <= 1 || throw(ArgumentError("tail_factor must lie in (0,1]"))
+    mode === :rank_tail && fixed_width < 1 &&
+        throw(ArgumentError("rank_tail requires positive fixed_width"))
     1 <= batch_blocks <= 8 || throw(ArgumentError("batch_blocks must be in 1:8"))
     cap_selection in (:storage, :svd) ||
         throw(ArgumentError("cap_selection must be :storage or :svd"))
