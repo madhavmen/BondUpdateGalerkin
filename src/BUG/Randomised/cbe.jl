@@ -244,11 +244,19 @@ The default [`BasisExpansion`](@ref) of `cbe_bug_step!`: each frame grows by the
 MPO-streamed, QR-only CBE ([`dd_cbe_expand`](@ref)), and the frontier sweeps sketch and estimate
 their outside-space action with the sector-graded Gaussian probes of this file.
 """
-struct DDQRExpansion <: BasisExpansion end
+Base.@kwdef struct DDQRExpansion <: BasisExpansion
+    # :adaptive uses residual-certified incremental sketches. :fixed deliberately
+    # skips validation to provide the fixed oversampling/retention baseline.
+    mode::Symbol = :adaptive
+    fixed_width::Int = 0
+    fixed_rank::Int = 0
+    holdout_width::Int = 4
+    acceptance_factor::Float64 = 1.0
+end
 
 # Grow one frame of the bond `(site, site+1)` by the DD-QR CBE; returns `dd_cbe_expand`'s result.
 expand_frame(
-    ::DDQRExpansion,
+    strategy::DDQRExpansion,
     frames::BondFrame,
     mpo,
     site::Int,
@@ -256,7 +264,15 @@ expand_frame(
     rch,
     side::Symbol;
     kwargs...,
-) = dd_cbe_expand(frames, mpo, site, lch, rch, side; kwargs...)
+) = dd_cbe_expand(
+    frames, mpo, site, lch, rch, side;
+    kwargs...,
+    mode = strategy.mode,
+    fixed_width = strategy.fixed_width,
+    fixed_rank = strategy.fixed_rank,
+    holdout_width = strategy.holdout_width,
+    acceptance_factor = strategy.acceptance_factor,
+)
 
 # The shared lazily built `(skl, skr)` pair for a caller-supplied `H Theta` builder.
 sketch_closures(::DDQRExpansion, frames::BondFrame, build_action) =
