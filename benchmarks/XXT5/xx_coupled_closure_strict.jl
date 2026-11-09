@@ -167,6 +167,12 @@ open(joinpath(outdir,"physical_one_step.csv"),"w") do io
                 end
                 elapsed=(time_ns()-t0)/1e9
                 err,normerr=error_and_norm(psi,ref,bras)
+                # A transactional coupled rejection does NOT advance time.
+                # Do not mislabel the original state's difference from the
+                # t+dt exact state as a solver error; record NaN and rejected.
+                if policy===:coupled && !accepted
+                    err=NaN
+                end
                 if info===nothing
                     wleft=0;wright=0;stage=0;reason="reference";status="reference"
                 else
