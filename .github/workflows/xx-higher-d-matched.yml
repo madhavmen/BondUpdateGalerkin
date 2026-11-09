@@ -1,0 +1,61 @@
+name: Matched-accuracy XX spin1 spin3half
+on:
+  pull_request:
+    paths:
+      - "benchmarks/QMB/ClosedSystem/xx_matched_accuracy_higher_d.jl"
+      - ".github/workflows/xx-higher-d-matched.yml"
+  workflow_dispatch:
+
+jobs:
+  sector-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1.11"
+      - uses: julia-actions/cache@v2
+      - run: julia --project -e 'using Pkg; Pkg.instantiate()'
+      - name: Spin1 / spin3half exact sector and fixed-vs-adaptive smoke
+        env:
+          BUG_HIGHER_CASES: "2:4,3:4"
+          BUG_HIGHER_STEPS: "2"
+          BUG_HIGHER_SEEDS: "1"
+          BUG_HIGHER_TOLS: "1e-2"
+          BUG_HIGHER_SAMPLE_EVERY: "1"
+          BUG_HIGHER_POLICIES: "fixed4_depth4,adaptive_lanczos"
+        run: julia --project benchmarks/QMB/ClosedSystem/xx_matched_accuracy_higher_d.jl results/xx-higher-smoke
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: xx-higher-smoke
+          path: results/xx-higher-smoke/
+          if-no-files-found: warn
+  matched-accuracy:
+    needs: sector-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1.11"
+      - uses: julia-actions/cache@v2
+      - run: julia --project -e 'using Pkg; Pkg.instantiate()'
+      - name: Higher-d XX operator-application Pareto study
+        env:
+          BUG_HIGHER_CASES: "2:6,3:6"
+          BUG_HIGHER_STEPS: "6"
+          BUG_HIGHER_SEEDS: "2"
+          BUG_HIGHER_DT: "0.08"
+          BUG_HIGHER_TOLS: "1e-2,1e-3"
+          BUG_HIGHER_SAMPLE_EVERY: "2"
+          BUG_HIGHER_POLICIES: "fixed4_depth4,fixed4_depth8,fixed8_depth8,fixed4_adaptK,adaptive_lanczos,adaptive_arnoldi,tdvp2"
+        run: julia --project benchmarks/QMB/ClosedSystem/xx_matched_accuracy_higher_d.jl results/xx-higher-matched
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: xx-higher-matched
+          path: results/xx-higher-matched/
+          if-no-files-found: warn
