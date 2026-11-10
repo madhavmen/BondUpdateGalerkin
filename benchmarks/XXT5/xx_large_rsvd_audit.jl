@@ -31,7 +31,10 @@
 # Environment: AUDIT_MODE=arms|reference AUDIT_TWOS=1 AUDIT_INITIAL=neel|domain_wall AUDIT_L=64
 #              AUDIT_TOL=1e-3 AUDIT_SEED=0 AUDIT_STEPS=50 AUDIT_DT=0.1 AUDIT_MAXDIM=256
 #              AUDIT_SAMPLE_EVERY=5 AUDIT_POLICIES="name,...,tdvp2" AUDIT_REFERENCE=path
-#              AUDIT_REF_SUBSTEPS=10 AUDIT_REF_MAXDIM=1024
+#              AUDIT_REF_SUBSTEPS=10 AUDIT_REF_MAXDIM=1024 AUDIT_SET=branch|krylov_factorial
+#              AUDIT_PARALLEL=false|true|full; diagnostics: AUDIT_TRUNC_RATIO=1e-3
+#              AUDIT_CEILING_RULE=bond|maxdim AUDIT_CEILING_FACTOR=1.2 AUDIT_ROOT=<bond>
+#              AUDIT_WARM_TDVP2_STEPS=0
 # Arm runs write OUTPUT_DIR/steps.csv (one row per arm and step) and OUTPUT_DIR/bonds.csv (one row
 # per bond-log entry of every BUG step).
 
@@ -48,7 +51,24 @@ const SITE_DIM = SPIN_TWICE + 1
 const INITIAL = get(ENV, "AUDIT_INITIAL", "neel")
 const CHAIN_LENGTH = parse(Int, get(ENV, "AUDIT_L", "64"))
 const BASIS_TOL = parse(Float64, get(ENV, "AUDIT_TOL", "1e-3"))
-const TRUNC_TOL = 1e-3 * BASIS_TOL
+# tol_trunc / tol_basis: 1e-3 is the branch convention. TDVP2 gets the same per-cut allowance.
+const TRUNC_RATIO = parse(Float64, get(ENV, "AUDIT_TRUNC_RATIO", "1e-3"))
+const TRUNC_TOL = TRUNC_RATIO * BASIS_TOL
+# Diagnostic knobs (USER 11-10: on the Neel state the BUG bond grows far faster than TDVP2's). The
+# defaults reproduce the factorial runs; they apply to AUDIT_SET=krylov_factorial only.
+# Work ceiling of the factorial arms: `bond` = min(ceil(factor d D_b), D_max), `maxdim` = D_max on
+# every bond (the per-bond rule off).
+const CEILING_RULE = Symbol(get(ENV, "AUDIT_CEILING_RULE", "bond"))
+const CEILING_FACTOR = parse(Float64, get(ENV, "AUDIT_CEILING_FACTOR", "1.2"))
+CEILING_RULE in (:bond, :maxdim) ||
+    error("AUDIT_CEILING_RULE must be bond or maxdim, got $CEILING_RULE")
+# The BUG root bond; empty = cbe_bug_step!'s default (the centre). Tests whether the excess chi
+# follows the distance from the root.
+const ROOT_SETTING = get(ENV, "AUDIT_ROOT", "")
+const ROOT_BOND = isempty(ROOT_SETTING) ? nothing : parse(Int, ROOT_SETTING)
+# The first AUDIT_WARM_TDVP2_STEPS steps of every BUG arm are TDVP2 steps with the same cut, so the
+# BUG steps start from an accurate entangled state instead of the product state. No rows for them.
+const WARM_TDVP2_STEPS = parse(Int, get(ENV, "AUDIT_WARM_TDVP2_STEPS", "0"))
 const SEED = parse(Int, get(ENV, "AUDIT_SEED", "0"))
 const STEP_COUNT = parse(Int, get(ENV, "AUDIT_STEPS", "50"))
 const TIME_STEP = parse(Float64, get(ENV, "AUDIT_DT", "0.1"))
@@ -108,16 +128,33 @@ const KRYLOV_OPTIONS = [
 ]
 const FACTORIAL_NAMES =
     ["$(rsvd_name)+$(krylov_name)" for (rsvd_name, _) in RSVD_OPTIONS for (krylov_name, _, _) in KRYLOV_OPTIONS]
+# Opt-in through AUDIT_POLICIES only (USER 11-10: is the adaptive RSVD drawing too few columns?):
+# a wide fixed sketch, a wide rank_adaptive start, and the exact DD probe (`exact = true`, the
+# complete projected basis with a certified numerical rank: the RSVD's all-columns limit).
+const WIDE_RSVD_OPTIONS = [
+    ("fixed32rank16", (mode = :fixed, fixed_width = 32, fixed_rank = 16), (;)),
+    (
+        "rank_adaptive_wide",
+        (mode = :rank_adaptive, rank_initial_width = 16, holdout_width = 8, acceptance_factor = 0.7),
+        (;),
+    ),
+    ("exact_probe", (mode = :fixed, fixed_width = 8, fixed_rank = 4), (exact = true,)),
+]
 
 "Every RSVD option x every adaptive Krylov solver, all under the per-bond :bond cap 1.2 d D_b."
 function krylov_factorial_specs(basis_tol)
-    common = (work_ceiling_rule = :bond, bond_ceiling_factor = 1.2)
+    common =
+        CEILING_RULE === :bond ?
+        (work_ceiling_rule = :bond, bond_ceiling_factor = CEILING_FACTOR) :
+        (work_ceiling_rule = :maxdim, bond_ceiling_factor = 0.0)
+    rsvd_options = vcat([(name, rsvd, (;)) for (name, rsvd) in RSVD_OPTIONS], WIDE_RSVD_OPTIONS)
     return [
         (
             "$(rsvd_name)+$(krylov_name)",
             DDQRExpansion(; rsvd..., krylov...),
-            ranked ? merge(common, (krylov_rank_tol = basis_tol,)) : common,
-        ) for (rsvd_name, rsvd) in RSVD_OPTIONS for (krylov_name, krylov, ranked) in KRYLOV_OPTIONS
+            merge(common, rsvd_extra, ranked ? (krylov_rank_tol = basis_tol,) : (;)),
+        ) for (rsvd_name, rsvd, rsvd_extra) in rsvd_options for
+        (krylov_name, krylov, ranked) in KRYLOV_OPTIONS
     ]
 end
 policy_set_specs(basis_tol) =
@@ -286,7 +323,20 @@ const STEP_HEADER = [
     # cbe_bug_step!'s `parallel` setting and the Julia thread count of the run.
     "parallel",
     "threads",
+    # The diagnostic knobs of the run (defaults: bond, 1.2, 1e-3, centre, 0).
+    "ceiling_rule",
+    "ceiling_factor",
+    "trunc_ratio",
+    "root_setting",
+    "warm_tdvp2_steps",
 ]
+const DIAGNOSTIC_FIELDS = (
+    CEILING_RULE,
+    CEILING_FACTOR,
+    TRUNC_RATIO,
+    isempty(ROOT_SETTING) ? "centre" : ROOT_SETTING,
+    WARM_TDVP2_STEPS,
+)
 const BOND_HEADER = [
     "initial",
     "twoS",
@@ -340,7 +390,21 @@ function run_bug_arm(io; steps_io, bonds_io, chain_length, step_count, name, exp
     psi = initial_state(chain_length)
     rng = MersenneTwister(SEED + 71)
     keywords = merge((order = 2, closure_checks = true, parallel = PARALLEL), extra)
+    # The root override applies to the audited chain only, not to the L = 8 warm-up.
+    ROOT_BOND !== nothing &&
+        chain_length == CHAIN_LENGTH &&
+        (keywords = merge(keywords, (root = ROOT_BOND,)))
     for step = 1:step_count
+        if io !== nothing && step <= WARM_TDVP2_STEPS
+            tdvp2_step!(
+                psi,
+                hamiltonian,
+                ComplexF64(-im * TIME_STEP);
+                maxdim = MAXDIM,
+                weight_tol = TRUNC_TOL,
+            )
+            continue
+        end
         chi_old = bond_dims(psi)
         timed = @timed cbe_bug_step!(
             psi,
@@ -358,7 +422,10 @@ function run_bug_arm(io; steps_io, bonds_io, chain_length, step_count, name, exp
         info = timed.value
         ledger = info.ledger
         counters = info.record.counters
-        ceilings = bond_work_ceilings(chi_old, SITE_DIM, MAXDIM; factor = extra.bond_ceiling_factor)
+        ceilings =
+            extra.work_ceiling_rule === :bond ?
+            bond_work_ceilings(chi_old, SITE_DIM, MAXDIM; factor = extra.bond_ceiling_factor) :
+            fill(MAXDIM, length(chi_old))
         log = ledger.bond_log
         graded =
             is_sample_step(step) ? graded_observables(psi, hamiltonian, current_mpos, step) :
@@ -412,6 +479,7 @@ function run_bug_arm(io; steps_io, bonds_io, chain_length, step_count, name, exp
                 bond_profile(psi, step),
                 PARALLEL_SETTING,
                 Threads.nthreads(),
+                DIAGNOSTIC_FIELDS...,
             ),
         )
         for entry in log
@@ -500,6 +568,7 @@ function run_tdvp2_arm(io; steps_io, chain_length, step_count)
                 bond_profile(psi, step),
                 "false",
                 Threads.nthreads(),
+                DIAGNOSTIC_FIELDS...,
             ),
         )
         @printf(
@@ -578,8 +647,8 @@ function run_arms()
     isempty(unknown) || error("unknown policies: $unknown")
     for name in SELECTED_POLICIES
         name == "tdvp2" && continue
-        get(policies[name][2], :work_ceiling_rule, nothing) === :bond ||
-            error("$name does not use the per-bond :bond cap this audit checks")
+        get(policies[name][2], :work_ceiling_rule, nothing) in (:bond, :maxdim) ||
+            error("$name uses neither the per-bond :bond cap nor :maxdim")
     end
     # Warm-up of every arm on a short chain: compilation is not counted in any wall time.
     for name in SELECTED_POLICIES
