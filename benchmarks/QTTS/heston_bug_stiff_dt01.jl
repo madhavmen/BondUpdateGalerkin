@@ -144,6 +144,8 @@ last_rank=initial_rank
 stop_reason="completed"
 wall_start=time()
 previous_state=nothing
+function run_benchmark!()
+    global psi, refstate, peak_rank, peak_aug, last_rank, stop_reason, previous_state
 for k=1:nsteps
     # Fix h = 0.1: no time adaptivity, no logarithmic grid in price.
     kwargs=(; order=3,tol_basis=1e-6,tol_trunc=1e-8,
@@ -202,6 +204,8 @@ for k=1:nsteps
         break
     end
 end
+end
+run_benchmark!()
 finish=stop_reason==="completed"
 contracted=last_rank<initial_rank
 println("RESULT mode=$mode bits=$bits form=$initial boundary=$bc result=$stop_reason initial_rank=$initial_rank final_rank=$last_rank peak_rank=$peak_rank peak_aug=$peak_aug contracted=$contracted elapsed=$(round(time()-wall_start,digits=1))")
