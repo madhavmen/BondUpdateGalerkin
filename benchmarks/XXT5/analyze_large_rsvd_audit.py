@@ -33,6 +33,18 @@ TAIL_FIXED_PARTNER = {
     "RSVD_tail8_factor01": "RSVD_fixed8rank4_Kadapt",
 }
 PROBE_CEILING = 64
+# :rank_fast caps EACH draw at 64 columns; a failed check doubles the width and draws afresh, so one
+# bond-log entry can sum the series w0, 2 w0, ..., 64 (rank_initial_width w0 of each pilot arm).
+PILOT_INITIAL_WIDTH = {"RSVD_pilot2_Kadapt": 2, "RSVD_pilot3_Kadapt": 3, "RSVD_pilot4_Kadapt": 4, "RSVD_pilot3_margin8": 3}
+
+
+def doubling_series_bound(initial_width, ceiling=PROBE_CEILING):
+    total, width = 0, initial_width
+    while True:
+        total += width
+        if width >= ceiling:
+            return total
+        width = min(ceiling, 2 * width)
 # rank_tail and its fixed partner draw "the same sketch" when their mean per-entry draws agree this well.
 SKETCH_MATCH = 0.10
 # An arm is "no worse" when its worst sampled S^z error is within this factor of the reference arm's;
@@ -138,10 +150,12 @@ def claims_report(summary, bonds):
                 f"S^z error x{error_ratio:.2f}, wall x{wall_ratio:.2f} | "
                 f"{verdict(column_ratio < 1 and error_ratio <= ACCURACY_SLACK)} |"
             )
+            series_bound = doubling_series_bound(PILOT_INITIAL_WIDTH[policy])
             lines.append(
-                f"| C2 at most {PROBE_CEILING} trial columns per bond | {policy} | max {pilot['max_entry_probes']:.0f} "
-                f"(max chi_old {pilot['max_chi_old']:.0f}; rank_adaptive max {standard['max_entry_probes']:.0f}) | "
-                f"{verdict(pilot['max_entry_probes'] <= PROBE_CEILING)} |"
+                f"| C2 each draw at most {PROBE_CEILING} columns (per-entry sum <= {series_bound}) | {policy} | "
+                f"max per entry {pilot['max_entry_probes']:.0f} (max chi_old {pilot['max_chi_old']:.0f}; "
+                f"rank_adaptive max {standard['max_entry_probes']:.0f}) | "
+                f"{verdict(pilot['max_entry_probes'] <= series_bound)} |"
             )
         for policy, width in TAIL_POLICIES.items():
             partner_name = TAIL_FIXED_PARTNER[policy]
