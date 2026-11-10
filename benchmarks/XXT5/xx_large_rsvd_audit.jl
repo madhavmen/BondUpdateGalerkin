@@ -9,7 +9,8 @@
 # - `:rank_tail` uses the same single sketch as the fixed width (8 or 12 columns), no holdout, and
 #   keeps fewer directions; its accuracy is only guarded by the global Krylov closure
 #   -> per-bond probes equal to the fixed width, zero holdout, dd_selected, errors, budget status.
-# - every BUG arm stays inside the old per-bond cap min(maxdim, ceil(1.2 * d * chi_old))
+# - every BUG arm stays inside the per-bond cap ceil(1.2 * d * D_b), D_b the bond's own dimension at
+#   the start of the step; no global chi cap (maxdim is set out of reach, see MAXDIM)
 #   -> cap_violations (must be 0).
 #
 # Model: nearest-neighbour spin-S XX chain, J = 1, open ends, U(1), d = 2S + 1 (AUDIT_TWOS = 2S),
@@ -28,7 +29,7 @@
 #
 # Usage (repository root): julia --project benchmarks/XXT5/xx_large_rsvd_audit.jl OUTPUT_DIR
 # Environment: AUDIT_MODE=arms|reference AUDIT_TWOS=1 AUDIT_INITIAL=neel|domain_wall AUDIT_L=64
-#              AUDIT_TOL=1e-3 AUDIT_SEED=0 AUDIT_STEPS=50 AUDIT_DT=0.1 AUDIT_MAXDIM=512
+#              AUDIT_TOL=1e-3 AUDIT_SEED=0 AUDIT_STEPS=50 AUDIT_DT=0.1 AUDIT_MAXDIM=100000
 #              AUDIT_SAMPLE_EVERY=5 AUDIT_POLICIES="name,...,tdvp2" AUDIT_REFERENCE=path
 #              AUDIT_REF_SUBSTEPS=10 AUDIT_REF_MAXDIM=1024
 # Arm runs write OUTPUT_DIR/steps.csv (one row per arm and step) and OUTPUT_DIR/bonds.csv (one row
@@ -51,7 +52,10 @@ const TRUNC_TOL = 1e-3 * BASIS_TOL
 const SEED = parse(Int, get(ENV, "AUDIT_SEED", "0"))
 const STEP_COUNT = parse(Int, get(ENV, "AUDIT_STEPS", "50"))
 const TIME_STEP = parse(Float64, get(ENV, "AUDIT_DT", "0.1"))
-const MAXDIM = parse(Int, get(ENV, "AUDIT_MAXDIM", "512"))
+# The only rank limit of the BUG arms is the per-bond cap ceil(1.2 * d * D_b); truncation is set by
+# tol_trunc alone. maxdim enters the step only as min(maxdim, .) and as the SVD Nkeep, so a value no
+# bond reaches removes it (a binding maxdim = 512 froze chi at t ~ 2 in profile job 17876100).
+const MAXDIM = parse(Int, get(ENV, "AUDIT_MAXDIM", "100000"))
 const SAMPLE_EVERY = parse(Int, get(ENV, "AUDIT_SAMPLE_EVERY", "5"))
 const REFERENCE_PATH = get(ENV, "AUDIT_REFERENCE", "")
 const REFERENCE_SUBSTEPS = parse(Int, get(ENV, "AUDIT_REF_SUBSTEPS", "10"))
@@ -248,7 +252,7 @@ model_mpos(chain_length) = (
 """
 Count every frame wider than the per-bond cap `ceilings`: the left frames, the final bonds, each
 augmented K/L frame in the bond log and the right root frame. The branch's arms all use the
-`:bond` rule, `min(maxdim, ceil(1.2 * d * chi_old))`.
+`:bond` rule, `ceil(1.2 * d * chi_old)` per bond (maxdim out of reach).
 """
 function cap_violations(info, psi, ceilings)
     count = sum(info.expanded .> ceilings) + sum(bond_dims(psi) .> ceilings)
