@@ -58,15 +58,25 @@ const REFERENCE_SUBSTEPS = parse(Int, get(ENV, "AUDIT_REF_SUBSTEPS", "10"))
 const REFERENCE_MAXDIM = parse(Int, get(ENV, "AUDIT_REF_MAXDIM", "1024"))
 const REFERENCE_WEIGHT_TOL = 1e-12
 MODE in ("arms", "reference") || error("AUDIT_MODE must be arms or reference, got $MODE")
-INITIAL in ("neel", "domain_wall") || error("AUDIT_INITIAL must be neel or domain_wall, got $INITIAL")
+INITIAL in ("neel", "domain_wall") ||
+    error("AUDIT_INITIAL must be neel or domain_wall, got $INITIAL")
 SPIN_TWICE >= 1 || error("AUDIT_TWOS must be positive")
 
 # The arms added on oldcap-fast-rsvd-xx and the baselines its workflow compares them with.
 const DEFAULT_POLICIES = [
-    "RSVD_pilot2_Kadapt", "RSVD_pilot3_Kadapt", "RSVD_pilot4_Kadapt", "RSVD_pilot3_margin8",
-    "RSVD_rank_standard_Kadapt", "RSVD_fixed8rank4_Kadapt", "RSVD_fixed12rank8_Kadapt",
-    "RSVD_sequential_Kadapt", "RSVD_batched_Kadapt", "RSVD_tail12_factor01",
-    "RSVD_tail12_factor005", "RSVD_tail8_factor01", "tdvp2",
+    "RSVD_pilot2_Kadapt",
+    "RSVD_pilot3_Kadapt",
+    "RSVD_pilot4_Kadapt",
+    "RSVD_pilot3_margin8",
+    "RSVD_rank_standard_Kadapt",
+    "RSVD_fixed8rank4_Kadapt",
+    "RSVD_fixed12rank8_Kadapt",
+    "RSVD_sequential_Kadapt",
+    "RSVD_batched_Kadapt",
+    "RSVD_tail12_factor01",
+    "RSVD_tail12_factor005",
+    "RSVD_tail8_factor01",
+    "tdvp2",
 ]
 const SELECTED_POLICIES =
     filter(!isempty, strip.(split(get(ENV, "AUDIT_POLICIES", join(DEFAULT_POLICIES, ",")), ",")))
@@ -105,7 +115,9 @@ function measured_observables(psi, hamiltonian, current_mpos)
     norm_squared = real(overlap(psi, psi))
     return (
         sz = spin_sz_profile(psi, SPIN_TWICE) ./ norm_squared,
-        current = [-real(mpo_energy(psi, current_mpo)) / norm_squared for current_mpo in current_mpos],
+        current = [
+            -real(mpo_energy(psi, current_mpo)) / norm_squared for current_mpo in current_mpos
+        ],
         energy = real(mpo_energy(psi, hamiltonian)) / norm_squared,
         norm_squared = norm_squared,
     )
@@ -123,20 +135,29 @@ function load_reference(path, chain_length)
         profile = get!(() -> fill(NaN, entry_count), table, parse(Int, step))
         profile[parse(Int, index)] = parse(Float64, value)
     end
-    reference = Dict(step => (sz = sz_by_step[step], current = current_by_step[step]) for step in keys(sz_by_step))
+    reference = Dict(
+        step => (sz = sz_by_step[step], current = current_by_step[step]) for
+        step in keys(sz_by_step)
+    )
     all(entry -> !any(isnan, entry.sz) && !any(isnan, entry.current), values(reference)) ||
         error("reference $path is incomplete or was written for another L")
     return reference
 end
 
 const REFERENCE =
-    MODE == "arms" && !isempty(REFERENCE_PATH) ? load_reference(REFERENCE_PATH, CHAIN_LENGTH) : nothing
-MODE == "arms" && SPIN_TWICE != 1 && REFERENCE === nothing &&
-    error("spin $(SPIN_TWICE)/2 has no free-fermion solution: run AUDIT_MODE=reference and pass AUDIT_REFERENCE")
+    MODE == "arms" && !isempty(REFERENCE_PATH) ? load_reference(REFERENCE_PATH, CHAIN_LENGTH) :
+    nothing
+MODE == "arms" &&
+    SPIN_TWICE != 1 &&
+    REFERENCE === nothing &&
+    error(
+        "spin $(SPIN_TWICE)/2 has no free-fermion solution: run AUDIT_MODE=reference and pass AUDIT_REFERENCE",
+    )
 
 "The values every arm is graded against at `step`."
 reference_observables(chain_length, step) =
-    REFERENCE === nothing ? free_fermion_observables(chain_length, step * TIME_STEP) : REFERENCE[step]
+    REFERENCE === nothing ? free_fermion_observables(chain_length, step * TIME_STEP) :
+    REFERENCE[step]
 
 "Errors of the MPS against the reference at `step`."
 function graded_observables(psi, hamiltonian, current_mpos, step)
@@ -152,16 +173,63 @@ function graded_observables(psi, hamiltonian, current_mpos, step)
 end
 
 const STEP_HEADER = [
-    "initial", "twoS", "L", "basis_tol", "seed", "policy", "step", "t", "wall_s", "alloc_bytes",
-    "D_max", "D_stage", "D_root_left", "D_root_right", "h1", "h1_closure", "root", "root_frontier",
-    "h2_leak", "stream_cols", "stream_calls", "dd_probes", "dd_holdout", "dd_selected", "n_krylov",
-    "max_entry_probes", "max_entry_holdout", "max_entry_selected", "workcap_entries",
-    "cap_violations", "budget_status", "unmet", "sz_error", "current_error", "energy_drift",
+    "initial",
+    "twoS",
+    "L",
+    "basis_tol",
+    "seed",
+    "policy",
+    "step",
+    "t",
+    "wall_s",
+    "alloc_bytes",
+    "D_max",
+    "D_stage",
+    "D_root_left",
+    "D_root_right",
+    "h1",
+    "h1_closure",
+    "root",
+    "root_frontier",
+    "h2_leak",
+    "stream_cols",
+    "stream_calls",
+    "dd_probes",
+    "dd_holdout",
+    "dd_selected",
+    "n_krylov",
+    "max_entry_probes",
+    "max_entry_holdout",
+    "max_entry_selected",
+    "workcap_entries",
+    "cap_violations",
+    "budget_status",
+    "unmet",
+    "sz_error",
+    "current_error",
+    "energy_drift",
     "norm_error",
 ]
 const BOND_HEADER = [
-    "initial", "twoS", "L", "basis_tol", "seed", "policy", "step", "bond", "side", "pass",
-    "chi_old", "ceiling", "width", "n_probes", "n_holdout", "n_selected", "n_krylov", "workcap", "met",
+    "initial",
+    "twoS",
+    "L",
+    "basis_tol",
+    "seed",
+    "policy",
+    "step",
+    "bond",
+    "side",
+    "pass",
+    "chi_old",
+    "ceiling",
+    "width",
+    "n_probes",
+    "n_holdout",
+    "n_selected",
+    "n_krylov",
+    "workcap",
+    "met",
 ]
 # 13 significant digits: reference values are compared at errors far below 1e-6.
 format_field(value::AbstractFloat) = isfinite(value) ? @sprintf("%.12e", value) : string(value)
@@ -214,38 +282,90 @@ function run_bug_arm(io; steps_io, bonds_io, chain_length, step_count, name, exp
         counters = info.record.counters
         ceilings = bond_work_ceilings(chi_old, SITE_DIM, MAXDIM; factor = extra.bond_ceiling_factor)
         log = ledger.bond_log
-        graded = is_sample_step(step) ? graded_observables(psi, hamiltonian, current_mpos, step) : NO_SAMPLE
+        graded =
+            is_sample_step(step) ? graded_observables(psi, hamiltonian, current_mpos, step) :
+            NO_SAMPLE
         write_row(
             steps_io,
             (
-                INITIAL, SPIN_TWICE, chain_length, BASIS_TOL, SEED, name, step, step * TIME_STEP,
-                timed.time, timed.bytes, maximum(bond_dims(psi)), info.record.D_stage,
-                info.expanded[info.root], info.root_right, counters.n_one_site, ledger.n_h1_closure,
-                counters.n_root, ledger.n_root_frontier, ledger.n_h2_leak, counters.n_stream_cols,
-                counters.n_stream, ledger.n_probes, ledger.n_holdout, ledger.n_selected,
-                ledger.n_krylov, maximum((entry.n_probes for entry in log); init = 0),
+                INITIAL,
+                SPIN_TWICE,
+                chain_length,
+                BASIS_TOL,
+                SEED,
+                name,
+                step,
+                step * TIME_STEP,
+                timed.time,
+                timed.bytes,
+                maximum(bond_dims(psi)),
+                info.record.D_stage,
+                info.expanded[info.root],
+                info.root_right,
+                counters.n_one_site,
+                ledger.n_h1_closure,
+                counters.n_root,
+                ledger.n_root_frontier,
+                ledger.n_h2_leak,
+                counters.n_stream_cols,
+                counters.n_stream,
+                ledger.n_probes,
+                ledger.n_holdout,
+                ledger.n_selected,
+                ledger.n_krylov,
+                maximum((entry.n_probes for entry in log); init = 0),
                 maximum((entry.n_holdout for entry in log); init = 0),
                 maximum((entry.n_selected for entry in log); init = 0),
-                count(entry -> entry.workcap, log), cap_violations(info, psi, ceilings),
-                budget_status(ledger), join(string.(ledger.unmet), ";"), graded.sz_error,
-                graded.current_error, graded.energy_drift, graded.norm_error,
+                count(entry -> entry.workcap, log),
+                cap_violations(info, psi, ceilings),
+                budget_status(ledger),
+                join(string.(ledger.unmet), ";"),
+                graded.sz_error,
+                graded.current_error,
+                graded.energy_drift,
+                graded.norm_error,
             ),
         )
         for entry in log
             write_row(
                 bonds_io,
                 (
-                    INITIAL, SPIN_TWICE, chain_length, BASIS_TOL, SEED, name, step, entry.bond,
-                    entry.side, get(entry, :pass, 0), chi_old[entry.bond], ceilings[entry.bond],
-                    entry.width, entry.n_probes, entry.n_holdout, entry.n_selected, entry.n_krylov,
-                    entry.workcap, entry.met,
+                    INITIAL,
+                    SPIN_TWICE,
+                    chain_length,
+                    BASIS_TOL,
+                    SEED,
+                    name,
+                    step,
+                    entry.bond,
+                    entry.side,
+                    get(entry, :pass, 0),
+                    chi_old[entry.bond],
+                    ceilings[entry.bond],
+                    entry.width,
+                    entry.n_probes,
+                    entry.n_holdout,
+                    entry.n_selected,
+                    entry.n_krylov,
+                    entry.workcap,
+                    entry.met,
                 ),
             )
         end
         @printf(
             "RUN %s d=%d L=%d tol=%.0e %s seed=%d step=%d wall=%.2fs D=%d probes=%d holdout=%d sz_err=%.2e\n",
-            INITIAL, SITE_DIM, chain_length, BASIS_TOL, name, SEED, step, timed.time,
-            maximum(bond_dims(psi)), ledger.n_probes, ledger.n_holdout, graded.sz_error
+            INITIAL,
+            SITE_DIM,
+            chain_length,
+            BASIS_TOL,
+            name,
+            SEED,
+            step,
+            timed.time,
+            maximum(bond_dims(psi)),
+            ledger.n_probes,
+            ledger.n_holdout,
+            graded.sz_error
         )
     end
 end
@@ -255,21 +375,51 @@ function run_tdvp2_arm(io; steps_io, chain_length, step_count)
     hamiltonian, current_mpos = model_mpos(chain_length)
     psi = initial_state(chain_length)
     for step = 1:step_count
-        timed = @timed tdvp2_step!(psi, hamiltonian, ComplexF64(-im * TIME_STEP); maxdim = MAXDIM, weight_tol = TRUNC_TOL)
+        timed = @timed tdvp2_step!(
+            psi,
+            hamiltonian,
+            ComplexF64(-im * TIME_STEP);
+            maxdim = MAXDIM,
+            weight_tol = TRUNC_TOL,
+        )
         io === nothing && continue
-        graded = is_sample_step(step) ? graded_observables(psi, hamiltonian, current_mpos, step) : NO_SAMPLE
+        graded =
+            is_sample_step(step) ? graded_observables(psi, hamiltonian, current_mpos, step) :
+            NO_SAMPLE
         zeros_for_counters = zeros(Int, 19)
         write_row(
             steps_io,
             (
-                INITIAL, SPIN_TWICE, chain_length, BASIS_TOL, SEED, "tdvp2", step, step * TIME_STEP,
-                timed.time, timed.bytes, maximum(bond_dims(psi)), zeros_for_counters..., "reference",
-                "", graded.sz_error, graded.current_error, graded.energy_drift, graded.norm_error,
+                INITIAL,
+                SPIN_TWICE,
+                chain_length,
+                BASIS_TOL,
+                SEED,
+                "tdvp2",
+                step,
+                step * TIME_STEP,
+                timed.time,
+                timed.bytes,
+                maximum(bond_dims(psi)),
+                zeros_for_counters...,
+                "reference",
+                "",
+                graded.sz_error,
+                graded.current_error,
+                graded.energy_drift,
+                graded.norm_error,
             ),
         )
         @printf(
             "TDVP2 %s d=%d L=%d tol=%.0e step=%d wall=%.2fs D=%d sz_err=%.2e\n",
-            INITIAL, SITE_DIM, chain_length, BASIS_TOL, step, timed.time, maximum(bond_dims(psi)), graded.sz_error
+            INITIAL,
+            SITE_DIM,
+            chain_length,
+            BASIS_TOL,
+            step,
+            timed.time,
+            maximum(bond_dims(psi)),
+            graded.sz_error
         )
     end
 end
@@ -288,8 +438,13 @@ function write_reference()
         write_row(io, ["quantity", "index", "step", "value"])
         for step = 1:STEP_COUNT
             for _ = 1:REFERENCE_SUBSTEPS
-                tdvp2_step!(psi, hamiltonian, ComplexF64(-im * substep); maxdim = REFERENCE_MAXDIM,
-                    weight_tol = REFERENCE_WEIGHT_TOL)
+                tdvp2_step!(
+                    psi,
+                    hamiltonian,
+                    ComplexF64(-im * substep);
+                    maxdim = REFERENCE_MAXDIM,
+                    weight_tol = REFERENCE_WEIGHT_TOL,
+                )
             end
             is_sample_step(step) || continue
             measured = measured_observables(psi, hamiltonian, current_mpos)
@@ -302,12 +457,21 @@ function write_reference()
             calibration = NaN
             if SPIN_TWICE == 1
                 exact = free_fermion_observables(CHAIN_LENGTH, step * TIME_STEP)
-                calibration = max(maximum(abs.(measured.sz .- exact.sz)), maximum(abs.(measured.current .- exact.current)))
+                calibration = max(
+                    maximum(abs.(measured.sz .- exact.sz)),
+                    maximum(abs.(measured.current .- exact.current)),
+                )
                 worst_calibration = max(worst_calibration, calibration)
             end
             @printf(
                 "REFERENCE %s d=%d L=%d step=%d D=%d energy=%.2e calibration_vs_free_fermions=%.2e\n",
-                INITIAL, SITE_DIM, CHAIN_LENGTH, step, maximum(bond_dims(psi)), measured.energy, calibration
+                INITIAL,
+                SITE_DIM,
+                CHAIN_LENGTH,
+                step,
+                maximum(bond_dims(psi)),
+                measured.energy,
+                calibration
             )
         end
     end
@@ -315,7 +479,8 @@ function write_reference()
 end
 
 function run_arms()
-    policies = Dict(name => (expansion, extra) for (name, expansion, extra) in policy_specs(BASIS_TOL))
+    policies =
+        Dict(name => (expansion, extra) for (name, expansion, extra) in policy_specs(BASIS_TOL))
     unknown = filter(name -> name != "tdvp2" && !haskey(policies, name), SELECTED_POLICIES)
     isempty(unknown) || error("unknown policies: $unknown")
     for name in SELECTED_POLICIES
@@ -329,8 +494,16 @@ function run_arms()
             run_tdvp2_arm(nothing; steps_io = nothing, chain_length = 8, step_count = 1)
         else
             expansion, extra = policies[name]
-            run_bug_arm(nothing; steps_io = nothing, bonds_io = nothing, chain_length = 8,
-                step_count = 1, name, expansion, extra)
+            run_bug_arm(
+                nothing;
+                steps_io = nothing,
+                bonds_io = nothing,
+                chain_length = 8,
+                step_count = 1,
+                name,
+                expansion,
+                extra,
+            )
         end
     end
     println("WARMUP_DONE")
@@ -341,11 +514,20 @@ function run_arms()
     for name in SELECTED_POLICIES
         if name == "tdvp2"
             # TDVP2 draws no random numbers, so one seed is enough.
-            SEED == 0 && run_tdvp2_arm(true; steps_io, chain_length = CHAIN_LENGTH, step_count = STEP_COUNT)
+            SEED == 0 &&
+                run_tdvp2_arm(true; steps_io, chain_length = CHAIN_LENGTH, step_count = STEP_COUNT)
         else
             expansion, extra = policies[name]
-            run_bug_arm(true; steps_io, bonds_io, chain_length = CHAIN_LENGTH,
-                step_count = STEP_COUNT, name, expansion, extra)
+            run_bug_arm(
+                true;
+                steps_io,
+                bonds_io,
+                chain_length = CHAIN_LENGTH,
+                step_count = STEP_COUNT,
+                name,
+                expansion,
+                extra,
+            )
         end
     end
     close(steps_io)
@@ -356,7 +538,9 @@ function main()
     set_symmetry!(:U1)
     mkpath(OUTPUT_DIR)
     MODE == "reference" ? write_reference() : run_arms()
-    println("XX_LARGE_RSVD_AUDIT_COMPLETE mode=$MODE $INITIAL d=$SITE_DIM L=$CHAIN_LENGTH tol=$BASIS_TOL seed=$SEED output=$OUTPUT_DIR")
+    println(
+        "XX_LARGE_RSVD_AUDIT_COMPLETE mode=$MODE $INITIAL d=$SITE_DIM L=$CHAIN_LENGTH tol=$BASIS_TOL seed=$SEED output=$OUTPUT_DIR",
+    )
 end
 
 main()
