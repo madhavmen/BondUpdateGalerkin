@@ -60,6 +60,17 @@ const REFERENCE_PATH = get(ENV, "AUDIT_REFERENCE", "")
 const REFERENCE_SUBSTEPS = parse(Int, get(ENV, "AUDIT_REF_SUBSTEPS", "10"))
 const REFERENCE_MAXDIM = parse(Int, get(ENV, "AUDIT_REF_MAXDIM", "1024"))
 const REFERENCE_WEIGHT_TOL = 1e-12
+# cbe_bug_step!'s `parallel`: false (serial), true (the K and L half-sweeps run concurrently) or
+# full (`:full`, the parallel K/L/S integrator, itself a different step). Needs `julia -t 2` or more.
+const PARALLEL_SETTING = get(ENV, "AUDIT_PARALLEL", "false")
+const PARALLEL =
+    PARALLEL_SETTING == "false" ? false :
+    PARALLEL_SETTING == "true" ? true :
+    PARALLEL_SETTING == "full" ? :full :
+    error("AUDIT_PARALLEL must be false, true or full, got $PARALLEL_SETTING")
+PARALLEL === false ||
+    Threads.nthreads() >= 2 ||
+    error("AUDIT_PARALLEL=$PARALLEL_SETTING needs julia -t 2 or more, have $(Threads.nthreads())")
 MODE in ("arms", "reference") || error("AUDIT_MODE must be arms or reference, got $MODE")
 INITIAL in ("neel", "domain_wall") ||
     error("AUDIT_INITIAL must be neel or domain_wall, got $INITIAL")
@@ -272,6 +283,9 @@ const STEP_HEADER = [
     "t_closure",
     # Every bond dimension after the step, ";"-separated, at sampled steps only.
     "bond_profile",
+    # cbe_bug_step!'s `parallel` setting and the Julia thread count of the run.
+    "parallel",
+    "threads",
 ]
 const BOND_HEADER = [
     "initial",
@@ -325,7 +339,7 @@ function run_bug_arm(io; steps_io, bonds_io, chain_length, step_count, name, exp
     hamiltonian, current_mpos = model_mpos(chain_length)
     psi = initial_state(chain_length)
     rng = MersenneTwister(SEED + 71)
-    keywords = merge((order = 2, closure_checks = true), extra)
+    keywords = merge((order = 2, closure_checks = true, parallel = PARALLEL), extra)
     for step = 1:step_count
         chi_old = bond_dims(psi)
         timed = @timed cbe_bug_step!(
@@ -396,6 +410,8 @@ function run_bug_arm(io; steps_io, bonds_io, chain_length, step_count, name, exp
                 info.t_trunc,
                 ledger.t_closure,
                 bond_profile(psi, step),
+                PARALLEL_SETTING,
+                Threads.nthreads(),
             ),
         )
         for entry in log
@@ -482,6 +498,8 @@ function run_tdvp2_arm(io; steps_io, chain_length, step_count)
                 graded.norm_error,
                 zeros(7)...,
                 bond_profile(psi, step),
+                "false",
+                Threads.nthreads(),
             ),
         )
         @printf(
