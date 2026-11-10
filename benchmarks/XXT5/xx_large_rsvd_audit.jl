@@ -92,12 +92,20 @@ function free_fermion_observables(chain_length, t)
     )
 end
 
-"S^z profile and bond currents of an MPS, each divided by the MPS norm, plus <H> and the norm."
+"""
+S^z profile and bond currents of an MPS, each divided by the MPS norm, plus <H> and the norm.
+
+The current is `-mpo_energy(psi, spin_current_mpo(...))`. Measured (smoke job 17875862, L = 16 Neel):
+`mpo_energy` of `spin_current_mpo` is exactly `-j_b` of the free-fermion `xx_open_current` for TDVP2
+and all 12 BUG arms, while their S^z profiles agree (TDVP2 to 1e-7). The free-fermion sign is the
+physical one: site 1 starts up, so `d<S^z_1>/dt = -j_1 < 0` needs `j_1 > 0`, and `mpo_energy` gives
+`j_1 < 0`. The sign defect is in the QMB current operator or its expectation, not in the integrators.
+"""
 function measured_observables(psi, hamiltonian, current_mpos)
     norm_squared = real(overlap(psi, psi))
     return (
         sz = spin_sz_profile(psi, SPIN_TWICE) ./ norm_squared,
-        current = [real(mpo_energy(psi, current_mpo)) / norm_squared for current_mpo in current_mpos],
+        current = [-real(mpo_energy(psi, current_mpo)) / norm_squared for current_mpo in current_mpos],
         energy = real(mpo_energy(psi, hamiltonian)) / norm_squared,
         norm_squared = norm_squared,
     )

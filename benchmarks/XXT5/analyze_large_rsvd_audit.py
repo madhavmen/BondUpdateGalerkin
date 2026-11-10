@@ -33,6 +33,8 @@ TAIL_FIXED_PARTNER = {
     "RSVD_tail8_factor01": "RSVD_fixed8rank4_Kadapt",
 }
 PROBE_CEILING = 64
+# rank_tail and its fixed partner draw "the same sketch" when their mean per-entry draws agree this well.
+SKETCH_MATCH = 0.10
 # An arm is "no worse" when its worst sampled S^z error is within this factor of the reference arm's;
 # randomised sketches make single-seed errors scatter by about this much.
 ACCURACY_SLACK = 1.5
@@ -146,15 +148,22 @@ def claims_report(summary, bonds):
             if policy not in row or partner_name not in row:
                 continue
             tail, partner = row[policy], row[partner_name]
-            tail_entries = bonds[(bonds.initial == initial) & (bonds.twoS == spin_twice) & (bonds.L == chain_length)
-                                 & (bonds.basis_tol == basis_tol) & (bonds.policy == policy)]
-            sketched = tail_entries[tail_entries.n_probes > 0]
-            single_sketch = bool((sketched.n_probes <= width).all()) and int(tail_entries.n_holdout.sum()) == 0
+            setting_bonds = bonds[(bonds.initial == initial) & (bonds.twoS == spin_twice) & (bonds.L == chain_length)
+                                  & (bonds.basis_tol == basis_tol) & (bonds.n_probes > 0)]
+            tail_entries = setting_bonds[setting_bonds.policy == policy]
+            partner_entries = setting_bonds[setting_bonds.policy == partner_name]
+            # The sector-resolved draw rounds a width-w request up per charge sector (the fixed
+            # arms log up to w + 2 per entry), so "the same sketch as the fixed width" is judged
+            # against the fixed partner's own per-entry draws, not against w itself.
+            sketch_ratio = tail_entries.n_probes.mean() / partner_entries.n_probes.mean()
+            holdout = int(tail_entries.n_holdout.sum())
+            same_sketch = abs(sketch_ratio - 1) <= SKETCH_MATCH and holdout == 0
             fewer_directions = tail["dd_selected"] < partner["dd_selected"]
             error_ratio = tail["sz_error_max"] / partner["sz_error_max"]
             lines.append(
-                f"| C3 one {width}-column sketch, no holdout | {policy} | per-bond probes max {tail['max_entry_probes']:.0f}, "
-                f"holdout {tail_entries.n_holdout.sum():.0f} | {verdict(single_sketch)} |"
+                f"| C3 same {width}-column sketch as {partner_name}, no holdout | {policy} | mean probes per entry "
+                f"x{sketch_ratio:.2f} of the fixed arm (max {tail_entries.n_probes.max():.0f} vs "
+                f"{partner_entries.n_probes.max():.0f}), holdout {holdout} | {verdict(same_sketch)} |"
             )
             lines.append(
                 f"| C3 fewer kept directions than {partner_name}, accuracy kept | {policy} | selected "
