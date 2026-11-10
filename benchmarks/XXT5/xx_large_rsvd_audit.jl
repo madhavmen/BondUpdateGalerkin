@@ -65,8 +65,55 @@ INITIAL in ("neel", "domain_wall") ||
     error("AUDIT_INITIAL must be neel or domain_wall, got $INITIAL")
 SPIN_TWICE >= 1 || error("AUDIT_TWOS must be positive")
 
+# AUDIT_SET=branch: the branch's own arms (policy_specs). AUDIT_SET=krylov_factorial: each RSVD
+# option of the branch crossed with each adaptive local Krylov solver (USER 11-10: the bond grows
+# far past the exact chi, so look at how the RSVD options behave with Lanczos and Arnoldi).
+const POLICY_SET = get(ENV, "AUDIT_SET", "branch")
+POLICY_SET in ("branch", "krylov_factorial") ||
+    error("AUDIT_SET must be branch or krylov_factorial, got $POLICY_SET")
+
+# The RSVD options exactly as the branch's arms set them (xx_policy_specs.jl, RSVD_* entries).
+const RSVD_OPTIONS = [
+    ("fixed8rank4", (mode = :fixed, fixed_width = 8, fixed_rank = 4)),
+    ("fixed12rank8", (mode = :fixed, fixed_width = 12, fixed_rank = 8)),
+    (
+        "rank_adaptive",
+        (mode = :rank_adaptive, rank_initial_width = 4, holdout_width = 4, acceptance_factor = 0.7),
+    ),
+    (
+        "rank_fast3",
+        (mode = :rank_fast, rank_initial_width = 3, holdout_width = 2, acceptance_factor = 0.6),
+    ),
+    ("rank_tail12", (mode = :rank_tail, fixed_width = 12, tail_factor = 0.10)),
+    ("rank_tail8", (mode = :rank_tail, fixed_width = 8, tail_factor = 0.10)),
+]
+# The adaptive local Krylov solvers: the recurrence stops once the residual weight of the next
+# direction is within its allowance. `ranked` adds krylov_rank_tol = tol_basis, which keeps only
+# the Krylov directions that carry weight (_append_ranked) instead of every accepted vector.
+const KRYLOV_OPTIONS = [
+    ("lanczos", (krylov_mode = :lanczos,), false),
+    ("arnoldi", (krylov_mode = :arnoldi,), false),
+    ("lanczos_ranked", (krylov_mode = :lanczos,), true),
+]
+const FACTORIAL_NAMES =
+    ["$(rsvd_name)+$(krylov_name)" for (rsvd_name, _) in RSVD_OPTIONS for (krylov_name, _, _) in KRYLOV_OPTIONS]
+
+"Every RSVD option x every adaptive Krylov solver, all under the per-bond :bond cap 1.2 d D_b."
+function krylov_factorial_specs(basis_tol)
+    common = (work_ceiling_rule = :bond, bond_ceiling_factor = 1.2)
+    return [
+        (
+            "$(rsvd_name)+$(krylov_name)",
+            DDQRExpansion(; rsvd..., krylov...),
+            ranked ? merge(common, (krylov_rank_tol = basis_tol,)) : common,
+        ) for (rsvd_name, rsvd) in RSVD_OPTIONS for (krylov_name, krylov, ranked) in KRYLOV_OPTIONS
+    ]
+end
+policy_set_specs(basis_tol) =
+    POLICY_SET == "krylov_factorial" ? krylov_factorial_specs(basis_tol) : policy_specs(basis_tol)
+
 # The arms added on oldcap-fast-rsvd-xx and the baselines its workflow compares them with.
-const DEFAULT_POLICIES = [
+const BRANCH_POLICIES = [
     "RSVD_pilot2_Kadapt",
     "RSVD_pilot3_Kadapt",
     "RSVD_pilot4_Kadapt",
@@ -81,6 +128,8 @@ const DEFAULT_POLICIES = [
     "RSVD_tail8_factor01",
     "tdvp2",
 ]
+const DEFAULT_POLICIES =
+    POLICY_SET == "krylov_factorial" ? vcat(FACTORIAL_NAMES, "tdvp2") : BRANCH_POLICIES
 const SELECTED_POLICIES =
     filter(!isempty, strip.(split(get(ENV, "AUDIT_POLICIES", join(DEFAULT_POLICIES, ",")), ",")))
 
@@ -212,6 +261,17 @@ const STEP_HEADER = [
     "current_error",
     "energy_drift",
     "norm_error",
+    # Step time by component (cbe_bug_step!'s own timers): DD sketch-and-select, half-sweep Krylov
+    # frames, frame SVDs, environments, root solve, final truncation, global Krylov closure.
+    "t_cbe",
+    "t_kry",
+    "t_frame",
+    "t_env",
+    "t_root",
+    "t_trunc",
+    "t_closure",
+    # Every bond dimension after the step, ";"-separated, at sampled steps only.
+    "bond_profile",
 ]
 const BOND_HEADER = [
     "initial",
@@ -241,6 +301,7 @@ write_row(io, fields) = (println(io, join(format_field.(fields), ",")); flush(io
 
 const NO_SAMPLE = (sz_error = NaN, current_error = NaN, energy_drift = NaN, norm_error = NaN)
 is_sample_step(step) = step == 1 || step % SAMPLE_EVERY == 0 || step == STEP_COUNT
+bond_profile(psi, step) = is_sample_step(step) ? join(bond_dims(psi), ";") : ""
 
 "The chain's Hamiltonian and its bond-current operators, both as MPOs."
 model_mpos(chain_length) = (
@@ -327,6 +388,14 @@ function run_bug_arm(io; steps_io, bonds_io, chain_length, step_count, name, exp
                 graded.current_error,
                 graded.energy_drift,
                 graded.norm_error,
+                info.t_cbe,
+                info.t_kry,
+                info.t_frame,
+                info.t_env,
+                info.t_root,
+                info.t_trunc,
+                ledger.t_closure,
+                bond_profile(psi, step),
             ),
         )
         for entry in log
@@ -411,6 +480,8 @@ function run_tdvp2_arm(io; steps_io, chain_length, step_count)
                 graded.current_error,
                 graded.energy_drift,
                 graded.norm_error,
+                zeros(7)...,
+                bond_profile(psi, step),
             ),
         )
         @printf(
@@ -482,8 +553,9 @@ function write_reference()
 end
 
 function run_arms()
-    policies =
-        Dict(name => (expansion, extra) for (name, expansion, extra) in policy_specs(BASIS_TOL))
+    policies = Dict(
+        name => (expansion, extra) for (name, expansion, extra) in policy_set_specs(BASIS_TOL)
+    )
     unknown = filter(name -> name != "tdvp2" && !haskey(policies, name), SELECTED_POLICIES)
     isempty(unknown) || error("unknown policies: $unknown")
     for name in SELECTED_POLICIES
