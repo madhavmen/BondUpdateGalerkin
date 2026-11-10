@@ -40,6 +40,12 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    # every local solver at 128x128, to see whether the stiff failure is specific to the
+    # Newton-GMRES stage path or shared by the rational-root paths
+    strategy:
+      fail-fast: false
+      matrix:
+        solver: [rational, gmres, stage]
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
@@ -52,10 +58,10 @@ jobs:
           JULIA_NUM_THREADS: '1'
         run: |
           mkdir -p results/heston-stress
-          julia --project benchmarks/QTTS/heston_bug_stiff_dt01.jl stage 7 50 multimode dirichlet0 results/heston-stress/stage-multimode.csv bond false
+          julia --project benchmarks/QTTS/heston_bug_stiff_dt01.jl ${{ matrix.solver }} 7 50 multimode dirichlet0 results/heston-stress/${{ matrix.solver }}-multimode.csv bond false
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: heston-stiff-rank-stress
+          name: heston-stiff-rank-stress-${{ matrix.solver }}
           path: results/heston-stress/
           if-no-files-found: warn
