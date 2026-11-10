@@ -1,0 +1,97 @@
+name: Higher-order BUG full-cost audited validation
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'benchmarks/XXT5/xx_orderp_full_cost.jl'
+      - '.github/workflows/xx-orderp-full-cost.yml'
+      - 'src/BUG/**'
+jobs:
+  smoke-exact:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.11'
+      - uses: julia-actions/cache@v2
+      - name: Instantiate dependencies
+        run: julia --project -e 'using Pkg; Pkg.instantiate()'
+      - name: Exact state + full-cost independent closure audit (p=2,3,4)
+        env:
+          BUG_ORDERP_MODE: smoke
+          JULIA_NUM_THREADS: '1'
+        run: julia --project benchmarks/XXT5/xx_orderp_full_cost.jl results/orderp-smoke
+      - name: Verify CSV populated
+        run: |
+          python3 - <<'PY'
+          import csv
+          rows=list(csv.DictReader(open('results/orderp-smoke/costs.csv')))
+          assert len(rows)==15, len(rows)
+          for row in rows:
+              assert int(row['p']) in (2,3,4)
+              assert float(row['step_wall_s'])>0
+              assert float(row['full_audited_wall_s'])>=float(row['step_wall_s'])
+              assert float(row['state_error'])>=0
+          print('SMOKE_SUMMARY')
+          for row in rows:
+              print(row['policy'], row['p'], row['status'], row['audit_met'],
+                    'state_error', row['state_error'], 'wall',row['full_audited_wall_s'],
+                    'probes',row['sketch_probes_all'],'closure_sweeps',row['closure_sweeps'])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: orderp-smoke-costs
+          path: results/orderp-smoke/
+          if-no-files-found: warn
+  physical-xx:
+    needs: smoke-exact
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.11'
+      - uses: julia-actions/cache@v2
+      - run: julia --project -e 'using Pkg; Pkg.instantiate()'
+      - name: U1 XX profiles at requested D=100,500 (actual D recorded)
+        env:
+          BUG_ORDERP_MODE: physical
+          JULIA_NUM_THREADS: '1'
+        run: julia --project benchmarks/XXT5/xx_orderp_full_cost.jl results/orderp-physical
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: orderp-physical-costs
+          path: results/orderp-physical/
+          if-no-files-found: warn
+  rank-stress:
+    needs: smoke-exact
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        D: [100, 500]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.11'
+      - uses: julia-actions/cache@v2
+      - run: julia --project -e 'using Pkg; Pkg.instantiate()'
+      - name: Actual initial-rank stress; includes full closure-audit cost
+        env:
+          BUG_ORDERP_MODE: stress
+          BUG_ORDERP_D: ${{ matrix.D }}
+          JULIA_NUM_THREADS: '1'
+        run: julia --project benchmarks/XXT5/xx_orderp_full_cost.jl results/orderp-stress-${{ matrix.D }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: orderp-stress-${{ matrix.D }}-costs
+          path: results/orderp-stress-${{ matrix.D }}/
+          if-no-files-found: warn
