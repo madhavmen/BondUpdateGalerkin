@@ -34,7 +34,7 @@
 #              AUDIT_REF_SUBSTEPS=10 AUDIT_REF_MAXDIM=1024 AUDIT_SET=branch|krylov_factorial
 #              AUDIT_PARALLEL=false|true|full; diagnostics: AUDIT_TRUNC_RATIO=1e-3
 #              AUDIT_CEILING_RULE=bond|maxdim AUDIT_CEILING_FACTOR=1.2 AUDIT_ROOT=<bond>
-#              AUDIT_WARM_TDVP2_STEPS=0
+#              AUDIT_WARM_TDVP2_STEPS=0 AUDIT_KRYLOV_RATIO=<tol_krylov / tol_basis>
 # Arm runs write OUTPUT_DIR/steps.csv (one row per arm and step) and OUTPUT_DIR/bonds.csv (one row
 # per bond-log entry of every BUG step).
 
@@ -69,6 +69,12 @@ const ROOT_BOND = isempty(ROOT_SETTING) ? nothing : parse(Int, ROOT_SETTING)
 # The first AUDIT_WARM_TDVP2_STEPS steps of every BUG arm are TDVP2 steps with the same cut, so the
 # BUG steps start from an accurate entangled state instead of the product state. No rows for them.
 const WARM_TDVP2_STEPS = parse(Int, get(ENV, "AUDIT_WARM_TDVP2_STEPS", "0"))
+# tol_krylov / tol_basis: the half-sweep Krylov stage's own tolerance (its per-bond stopping
+# allowance). Empty = cbe_bug_step!'s default, tol_krylov = tol_basis. USER 11-10: the Krylov
+# tolerance may be too loose to add enough basis in the half sweeps when entanglement grows fast.
+const KRYLOV_RATIO_SETTING = get(ENV, "AUDIT_KRYLOV_RATIO", "")
+const KRYLOV_TOL =
+    isempty(KRYLOV_RATIO_SETTING) ? nothing : parse(Float64, KRYLOV_RATIO_SETTING) * BASIS_TOL
 const SEED = parse(Int, get(ENV, "AUDIT_SEED", "0"))
 const STEP_COUNT = parse(Int, get(ENV, "AUDIT_STEPS", "50"))
 const TIME_STEP = parse(Float64, get(ENV, "AUDIT_DT", "0.1"))
@@ -329,6 +335,7 @@ const STEP_HEADER = [
     "trunc_ratio",
     "root_setting",
     "warm_tdvp2_steps",
+    "krylov_ratio",
 ]
 const DIAGNOSTIC_FIELDS = (
     CEILING_RULE,
@@ -336,6 +343,7 @@ const DIAGNOSTIC_FIELDS = (
     TRUNC_RATIO,
     isempty(ROOT_SETTING) ? "centre" : ROOT_SETTING,
     WARM_TDVP2_STEPS,
+    isempty(KRYLOV_RATIO_SETTING) ? "default" : KRYLOV_RATIO_SETTING,
 )
 const BOND_HEADER = [
     "initial",
@@ -394,6 +402,7 @@ function run_bug_arm(io; steps_io, bonds_io, chain_length, step_count, name, exp
     ROOT_BOND !== nothing &&
         chain_length == CHAIN_LENGTH &&
         (keywords = merge(keywords, (root = ROOT_BOND,)))
+    KRYLOV_TOL === nothing || (keywords = merge(keywords, (tol_krylov = KRYLOV_TOL,)))
     for step = 1:step_count
         if io !== nothing && step <= WARM_TDVP2_STEPS
             tdvp2_step!(
