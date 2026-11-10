@@ -170,7 +170,8 @@ function run_case(io; mode, name, policy, checks, frontier_tol, rank_tol,
                 "s=$s status=$(budget_status(l)) stage=$(info.record.D_stage) " *
                 "final=$(info.record.D_final) step=$(round(info.t_step,digits=3)) " *
                 "audit=$(round(summed_audit,digits=3)) closure_sweeps=$(l.n_closure_sweeps) " *
-                "audit_met=$(audit.met && audit.met0)"; flush=true)
+                "audit_met=$(audit.met && audit.met0)")
+        flush(stdout)
     end
     errstate = NaN
     errprofile = NaN
