@@ -12,7 +12,7 @@ _kconc(vector::Vector{<:Number}) = vector
     _krylov_basis(seed, applyH, tau, allowance, score; maxdepth, amp, state_seed)
         -> (basis, weights, n_h1, closed, capped)
 
-The local Krylov recurrence of the frame stages: Arnoldi from `seed / ||seed||`
+The local Krylov recurrence of the frame steps: Arnoldi from `seed / ||seed||`
 ([`_arnoldi_chain`](@ref)). `score(direction, weight, first) -> fits` takes each direction to the
 frame (`first` = Test C's direction), `false` stopping the search as capped. `basis[1]` is the
 solve's input `seed / ||seed||`, the last vector the active frontier.

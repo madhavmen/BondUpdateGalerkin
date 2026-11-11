@@ -1,13 +1,6 @@
-# Matrix-free exp(tau*A)*x for Telum tensors, ported from Alice's tensor_lanczos_expv for
-# trace-by-trace parity. Arnoldi serves the non-Hermitian K and L generators, where P_perp breaks
-# Hermiticity. The breakdown-only exit is not a convergence test: a generic A never breaks down, so
-# a large tau silently truncates the series at maxiter. `conv_tol` (Saad's estimate) and `substeps`
-# (split tau, which also keeps imaginary-time exponents finite) fix it.
+# Matrix-free exp(tau*A)*x for Telum tensors,  Arnoldi serves the non-Hermitian K and L generators, where P_perp breaks
+# Hermiticity.
 
-# Opt-in Krylov-depth instrumentation, mirroring krylov.py's KRYLOV_LOG /
-# enable_krylov_log / disable_krylov_log / get_krylov_log. Off by default, so
-# zero overhead. Every expv call appends its Krylov dimension (the number of
-# matrix-free applications it actually performed).
 const KRYLOV_LOG = Int[]
 const _KRYLOV_RECORD = Ref(false)
 # The parallel K/L/S step runs three `expv` solves at once; a racy `push!` would
@@ -47,6 +40,7 @@ exponent `Re(tau*lambda)` is largest, so every shifted exponent is `<= 0`.
 Returns `0.0` while the largest exponent is below [`_EXPV_SHIFT_TRIGGER`], so ordinary short
 steps are untouched and stay bit-identical to the unshifted code.
 """
+# this is for imaginary time evolution
 function _shift(vals::AbstractVector, tau::ComplexF64)
     isempty(vals) && return 0.0
     # an explicit vector, not a generator: `argmax` over a generator has no well-defined index

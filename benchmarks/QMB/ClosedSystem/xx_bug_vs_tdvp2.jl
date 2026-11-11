@@ -1,6 +1,4 @@
-# Same-problem comparison of the second-order BUG step and two-site TDVP.
-#
-# Parity: one XX chain (U(1), open boundaries, J = 1), one Neel start, one time step, one rank cap,
+#  XX chain (U(1), open boundaries, J = 1), one Neel start, one time step, one rank cap,
 # and one per-cut truncation rule (`weight_tol` for TDVP2 is the BUG's own `tol_trunc` budget,
 # applied at every two-site cut). Both are second order in dt. The reference is the exact free-
 # fermion S^z profile. Compilation is excluded by a warm-up run of each method on a short chain;
@@ -59,6 +57,7 @@ function run_method(step!, chain_length, steps)
     seconds = (time_ns() - start) / 1e9
     exact =
         xx_free_fermion_sz(chain_length, steps * TIME_STEP; J = 1.0, occupied = 1:2:chain_length)
+    # exact solution for comparison
     return (
         error = maximum(abs.(sz_profile(psi) .- exact)),
         max_bond = maximum(bond_dims(psi)),

@@ -1,6 +1,7 @@
 # One frontier bond of a closure sweep -- prescribed-isometry frames,
 # leaks, the bond action, concurrent bond measurements, and the frontier CBE.
 
+# this is specific to the BUG half-sweep Krylov step
 """
     _frame_onto_left(left_isometry, carry, right) -> BondFrame
 

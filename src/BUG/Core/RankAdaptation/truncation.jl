@@ -2,7 +2,7 @@
 # sweeps share with `BUG/Randomised` (preselection, Test A tail, per-sector room,
 # reorthonormalisation).
 
-# ── truncation sweep (Sulz algorithm 1) ──────────────────────────────────────
+# ── truncation sweep (Sulz algorithm 1 for BUG) ──────────────────────────────────────
 
 """
     truncate_sweep!(psi; maxdim, cutoff) -> psi
