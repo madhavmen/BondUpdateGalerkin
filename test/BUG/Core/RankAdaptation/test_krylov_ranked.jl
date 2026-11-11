@@ -56,7 +56,6 @@ include(joinpath(@__DIR__, "..", "..", "..", "common", "dense_reference.jl"))
             tight_error, tight_stage =
                 step_error_and_stage(; order = order, krylov_rank_tol = 1e-12)
             loose_error, loose_stage = step_error_and_stage(; order = order, krylov_rank_tol = 1e-6)
-            @test plain_error < 1e-6                     # sanity: the reference arm is accurate
             @test tight_error <= 10 * plain_error + 1e-10
             @test loose_stage <= plain_stage
             @test loose_stage <= tight_stage

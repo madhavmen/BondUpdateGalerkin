@@ -43,10 +43,8 @@ function _dd_controller(
     trace::Union{Nothing,Vector} = nothing,
     acceptance_factor::Float64 = 1.0,
 )
-    0 < acceptance_factor <= 1 ||
-        throw(ArgumentError("acceptance_factor must lie in (0,1]"))
-    1 <= batch_blocks <= 8 ||
-        throw(ArgumentError("batch_blocks must lie in 1:8"))
+    0 < acceptance_factor <= 1 || throw(ArgumentError("acceptance_factor must lie in (0,1]"))
+    1 <= batch_blocks <= 8 || throw(ArgumentError("batch_blocks must lie in 1:8"))
     cap_selection in (:storage, :svd) ||
         throw(ArgumentError("cap_selection must be :storage or :svd"))
     left = side === :left
@@ -74,18 +72,27 @@ function _dd_controller(
                 # globally strongest sampled directions across U(1) sectors,
                 # rather than the first sectors in storage order. Charge
                 # symmetry is preserved by Telum's block-SVD.
-                (svd_basis, dt, db) = _measure(() -> begin
-                    off = TLArray(left ? perp_component(aug, sketched) :
-                                        perp_component_right(aug, sketched))
-                    legs = left ? (1, 2) : (2, 3)
-                    result = svd(off, legs, _TAG_K, _TAG_KR;
-                        Nkeep = room,
-                        cutoff = _rank_cut(0.0, off, norm(off)),
-                        get_lists = true)
-                    isempty(result.kept_list) ? nothing :
+                (svd_basis, dt, db) = _measure(
+                    () -> begin
+                        off = TLArray(
+                            left ? perp_component(aug, sketched) :
+                            perp_component_right(aug, sketched),
+                        )
+                        legs = left ? (1, 2) : (2, 3)
+                        result = svd(
+                            off,
+                            legs,
+                            _TAG_K,
+                            _TAG_KR;
+                            Nkeep = room,
+                            cutoff = _rank_cut(0.0, off, norm(off)),
+                            get_lists = true,
+                        )
+                        isempty(result.kept_list) ? nothing :
                         left ? _reortho_left(aug, TLArray(result.U)) :
-                               _reortho_right(aug, TLArray(permutedims(result.U, (3, 1, 2))))
-                end)
+                        _reortho_right(aug, TLArray(permutedims(result.U, (3, 1, 2))))
+                    end,
+                )
                 kc.t_qr += dt
                 kc.b_qr += db
                 new_basis = svd_basis
@@ -125,8 +132,8 @@ function _dd_controller(
     # direction gives a single QR vector and the SVD never gets to rank the
     # competing charge sectors. Keep only a tiny <=4-column extra pool, drawn
     # through the same matrix-free MPO streaming path.
-    width = cap_selection === :svd ?
-        clamp(max(initial_width, ncap + min(4, ncap)), 1, max(wcap, 1)) :
+    width =
+        cap_selection === :svd ? clamp(max(initial_width, ncap + min(4, ncap)), 1, max(wcap, 1)) :
         clamp(initial_width, 1, max(min(wcap, ncap), 1))
     last = draw(width, nothing)
     last === nothing && return (nothing, :empty)
@@ -169,8 +176,7 @@ function _dd_controller(
             # Once ncap is reached there is no reason to stream another block.
             remaining = ncap - (dd_basis === nothing ? 0 : leg_dim(dd_basis, fl))
             if remaining > 0
-                blk = draw(min(width, max(remaining + 2, 1)),
-                    isempty(boost) ? nothing : boost)
+                blk = draw(min(width, max(remaining + 2, 1)), isempty(boost) ? nothing : boost)
                 if blk !== nothing
                     last = blk
                     added += absorb!(stream(blk, :n_probes))
@@ -184,12 +190,11 @@ function _dd_controller(
             # The validation probes are NEVER used for the candidate basis
             # they validate: a new holdout is drawn only after the batch ends.
             added = absorb!(check[2])
-            for _ in 1:batch_blocks
+            for _ = 1:batch_blocks
                 remaining = ncap - (dd_basis === nothing ? 0 : leg_dim(dd_basis, fl))
                 remaining <= 0 && break
                 nt == 0 && (width = min(2 * width, wcap))
-                blk = draw(min(width, max(remaining + 2, 1)),
-                    isempty(boost) ? nothing : boost)
+                blk = draw(min(width, max(remaining + 2, 1)), isempty(boost) ? nothing : boost)
                 blk === nothing && break
                 last = blk
                 added += absorb!(stream(blk, :n_probes))

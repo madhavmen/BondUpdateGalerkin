@@ -488,7 +488,8 @@ function bond_work_ceilings(
     factor::Real = 0.0,
 )
     ceiling_of(bond_rank) =
-        factor > 0 ? ceil(Int, round(factor * site_dim * bond_rank; digits = 9)) : 2 * site_dim * bond_rank
+        factor > 0 ? ceil(Int, round(factor * site_dim * bond_rank; digits = 9)) :
+        2 * site_dim * bond_rank
     return [max(min(ceiling_of(bond_rank), maxdim), 1) for bond_rank in bond_ranks]
 end
 
@@ -507,10 +508,7 @@ function bond_work_ceilings_strict(
     factor::Real = 1.2,
 )
     factor > 1 || throw(ArgumentError("strict bond factor must exceed 1"))
-    return [
-        max(1, min(maxdim, ceil(Int, round(factor * r; digits=9))))
-        for r in bond_ranks
-    ]
+    return [max(1, min(maxdim, ceil(Int, round(factor * r; digits = 9)))) for r in bond_ranks]
 end
 
 """
@@ -532,18 +530,22 @@ function bond_frame_root_ceilings(
     frame_factor::Real = 2.0,
     root_factor::Real = 1.2,
 )
-    1 <= root_bond <= length(old_bonds) ||
-        throw(BoundsError(old_bonds, root_bond))
+    1 <= root_bond <= length(old_bonds) || throw(BoundsError(old_bonds, root_bond))
     frame_factor > 1 || throw(ArgumentError("frame_factor must exceed 1"))
     root_factor > 1 || throw(ArgumentError("root_factor must exceed 1"))
-    root_factor <= frame_factor ||
-        throw(ArgumentError("root_factor cannot exceed frame_factor"))
+    root_factor <= frame_factor || throw(ArgumentError("root_factor cannot exceed frame_factor"))
     maxdim >= 1 || throw(ArgumentError("maxdim must be positive"))
     return [
-        max(1, min(maxdim, ceil(Int, round(
-            (b == root_bond ? root_factor : frame_factor) * old_bonds[b];
-            digits=9,
-        )))) for b in eachindex(old_bonds)
+        max(
+            1,
+            min(
+                maxdim,
+                ceil(
+                    Int,
+                    round((b == root_bond ? root_factor : frame_factor) * old_bonds[b]; digits = 9),
+                ),
+            ),
+        ) for b in eachindex(old_bonds)
     ]
 end
 

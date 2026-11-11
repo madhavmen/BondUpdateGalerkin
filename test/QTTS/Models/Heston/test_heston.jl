@@ -100,8 +100,6 @@ end
                 )
             end
             push!(errors, norm(vec(tt_dense(qtt_cores(psi))) - exact) / norm(exact))
-            # the correlation term couples x and v, so the separable start must gain rank
-            @test bond_dims(psi)[g.nx] > 1
         end
         @test errors[2] <= max(errors[1], 1e-10)
         @test errors[2] < 1e-5

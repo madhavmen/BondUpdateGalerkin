@@ -24,7 +24,7 @@ using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
 
 set_symmetry!(:U1)
 hamiltonian = xxz_mpo(20; J = 1.0, delta = 0.0)        # the XX chain
-psi = neel_state(20)
+psi = domain_wall_state(20)                            # up ... up down ... down
 for _ = 1:20
     info = cbe_bug_step!(psi, hamiltonian, ComplexF64(-im * 0.05); order = 2)
     @assert budget_status(info.ledger) === :met

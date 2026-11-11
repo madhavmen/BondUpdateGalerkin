@@ -34,7 +34,10 @@ include(joinpath(@__DIR__, "..", "..", "..", "common", "dense_reference.jl"))
         # every other field survives the resolution
         resolved = resolve_krylov_recurrence(DDQRExpansion(mode = :fixed, fixed_rank = 3), true)
         @test (resolved.mode, resolved.fixed_width, resolved.fixed_rank) == (:fixed, 8, 3)
-        @test_throws ArgumentError resolve_krylov_recurrence(DDQRExpansion(krylov_mode = :gmres), true)
+        @test_throws ArgumentError resolve_krylov_recurrence(
+            DDQRExpansion(krylov_mode = :gmres),
+            true,
+        )
     end
 
     @testset "_krylov_stop" begin
@@ -75,11 +78,15 @@ include(joinpath(@__DIR__, "..", "..", "..", "common", "dense_reference.jl"))
         non_hermitian_default = one_step(hermitian = false)
         non_hermitian_arnoldi =
             one_step(hermitian = false, expansion = DDQRExpansion(krylov_mode = :arnoldi))
-        @test norm(dense_state(non_hermitian_default.state) - dense_state(non_hermitian_arnoldi.state)) == 0
+        @test norm(
+            dense_state(non_hermitian_default.state) - dense_state(non_hermitian_arnoldi.state),
+        ) == 0
         # the default per-bond ceiling: every frame within min(ceil(1.2 d D_b), maxdim)
         ceilings = bond_work_ceilings(bond_dims(start_state), site_dim, 128; factor = 1.2)
         @test all(default_step.info.expanded .<= ceilings)
-        @test all(entry.width <= ceilings[entry.bond] for entry in default_step.info.ledger.bond_log)
+        @test all(
+            entry.width <= ceilings[entry.bond] for entry in default_step.info.ledger.bond_log
+        )
         @test all(bond_dims(default_step.state) .<= ceilings)
     end
 end

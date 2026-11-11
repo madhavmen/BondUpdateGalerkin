@@ -317,7 +317,12 @@ expand_frame(
     side::Symbol;
     kwargs...,
 ) = dd_cbe_expand(
-    frames, mpo, site, lch, rch, side;
+    frames,
+    mpo,
+    site,
+    lch,
+    rch,
+    side;
     kwargs...,
     mode = strategy.mode,
     fixed_width = strategy.fixed_width,

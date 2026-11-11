@@ -66,8 +66,11 @@ function _resolve_step_options(
     )
     fold_omega = something(fold_omega, order > 1 && !exact)
     frontier_tol >= 0 || throw(ArgumentError("frontier_tol must be >= 0, got $frontier_tol"))
-    work_ceiling_rule in (:maxdim, :bond, :bond_strict, :frame_root) ||
-        throw(ArgumentError("work_ceiling_rule must be :maxdim, :bond, :bond_strict or :frame_root, got $work_ceiling_rule"))
+    work_ceiling_rule in (:maxdim, :bond, :bond_strict, :frame_root) || throw(
+        ArgumentError(
+            "work_ceiling_rule must be :maxdim, :bond, :bond_strict or :frame_root, got $work_ceiling_rule",
+        ),
+    )
     bond_ceiling_factor == 0 ||
         (bond_ceiling_factor > 1 && work_ceiling_rule in (:bond, :bond_strict, :frame_root)) ||
         throw(
@@ -76,8 +79,7 @@ function _resolve_step_options(
                 "$bond_ceiling_factor with :$work_ceiling_rule",
             ),
         )
-    root_ceiling_factor > 1 ||
-        throw(ArgumentError("root_ceiling_factor must exceed one"))
+    root_ceiling_factor > 1 || throw(ArgumentError("root_ceiling_factor must exceed one"))
     work_ceiling_rule === :frame_root &&
         root_ceiling_factor > (bond_ceiling_factor == 0 ? 2.0 : bond_ceiling_factor) &&
         throw(ArgumentError("root_ceiling_factor must not exceed frame factor"))
@@ -118,10 +120,13 @@ function _resolve_step_options(
         work_ceiling_rule === :bond_strict ?
         bond_work_ceilings_strict(bond_ranks, maxdim; factor = bond_ceiling_factor) :
         work_ceiling_rule === :frame_root ?
-        bond_frame_root_ceilings(bond_ranks, maxdim, root_link;
+        bond_frame_root_ceilings(
+            bond_ranks,
+            maxdim,
+            root_link;
             frame_factor = bond_ceiling_factor == 0 ? 2.0 : bond_ceiling_factor,
-            root_factor = root_ceiling_factor) :
-        work_ceiling(maxdim, maximum(bond_ranks; init = 0), local_dim(psi))
+            root_factor = root_ceiling_factor,
+        ) : work_ceiling(maxdim, maximum(bond_ranks; init = 0), local_dim(psi))
     return (
         site_count = site_count,
         root_link = root_link,

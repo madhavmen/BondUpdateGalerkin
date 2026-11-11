@@ -132,8 +132,10 @@ const KRYLOV_OPTIONS = [
     ("arnoldi", (krylov_mode = :arnoldi,), false),
     ("lanczos_ranked", (krylov_mode = :lanczos,), true),
 ]
-const FACTORIAL_NAMES =
-    ["$(rsvd_name)+$(krylov_name)" for (rsvd_name, _) in RSVD_OPTIONS for (krylov_name, _, _) in KRYLOV_OPTIONS]
+const FACTORIAL_NAMES = [
+    "$(rsvd_name)+$(krylov_name)" for (rsvd_name, _) in RSVD_OPTIONS for
+    (krylov_name, _, _) in KRYLOV_OPTIONS
+]
 # Opt-in through AUDIT_POLICIES only (USER 11-10: is the adaptive RSVD drawing too few columns?):
 # a wide fixed sketch, a wide rank_adaptive start, and the exact DD probe (`exact = true`, the
 # complete projected basis with a certified numerical rank: the RSVD's all-columns limit).
@@ -141,7 +143,12 @@ const WIDE_RSVD_OPTIONS = [
     ("fixed32rank16", (mode = :fixed, fixed_width = 32, fixed_rank = 16), (;)),
     (
         "rank_adaptive_wide",
-        (mode = :rank_adaptive, rank_initial_width = 16, holdout_width = 8, acceptance_factor = 0.7),
+        (
+            mode = :rank_adaptive,
+            rank_initial_width = 16,
+            holdout_width = 8,
+            acceptance_factor = 0.7,
+        ),
         (;),
     ),
     ("exact_probe", (mode = :fixed, fixed_width = 8, fixed_rank = 4), (exact = true,)),
@@ -150,8 +157,7 @@ const WIDE_RSVD_OPTIONS = [
 "Every RSVD option x every adaptive Krylov solver, all under the per-bond :bond cap 1.2 d D_b."
 function krylov_factorial_specs(basis_tol)
     common =
-        CEILING_RULE === :bond ?
-        (work_ceiling_rule = :bond, bond_ceiling_factor = CEILING_FACTOR) :
+        CEILING_RULE === :bond ? (work_ceiling_rule = :bond, bond_ceiling_factor = CEILING_FACTOR) :
         (work_ceiling_rule = :maxdim, bond_ceiling_factor = 0.0)
     rsvd_options = vcat([(name, rsvd, (;)) for (name, rsvd) in RSVD_OPTIONS], WIDE_RSVD_OPTIONS)
     return [
@@ -649,9 +655,8 @@ function write_reference()
 end
 
 function run_arms()
-    policies = Dict(
-        name => (expansion, extra) for (name, expansion, extra) in policy_set_specs(BASIS_TOL)
-    )
+    policies =
+        Dict(name => (expansion, extra) for (name, expansion, extra) in policy_set_specs(BASIS_TOL))
     unknown = filter(name -> name != "tdvp2" && !haskey(policies, name), SELECTED_POLICIES)
     isempty(unknown) || error("unknown policies: $unknown")
     for name in SELECTED_POLICIES

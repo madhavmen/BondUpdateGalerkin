@@ -55,28 +55,18 @@ function cbe_bug_coupled_step(
     original = deepcopy(psi)
     old = bond_dims(original)
     root_bond = _bug_root_link(length(original))
-    caps = bond_frame_root_ceilings(
-        old, maxdim, root_bond;
-        frame_factor = 2.0,
-        root_factor = 1.2,
-    )
+    caps = bond_frame_root_ceilings(old, maxdim, root_bond; frame_factor = 2.0, root_factor = 1.2)
     maxroom = maximum(caps .- old; init = 0)
     base_seed = rand(rng, UInt64)
     history = Any[]
-    cumulative = (
-        DD_discovery = 0,
-        DD_holdouts = 0,
-        K_L_H = 0,
-        closure_H = 0,
-        root_H = 0,
-        wall_s = 0.0,
-    )
+    cumulative =
+        (DD_discovery = 0, DD_holdouts = 0, K_L_H = 0, closure_H = 0, root_H = 0, wall_s = 0.0)
     last = nothing
     last_floor = -1
     for attempt = 1:max_retries
         # The first pass is the ordinary minimal-rank DD selection. Later
         # passes enforce rank floors 1,2,4,..., bounded by physical cap room.
-        floor = attempt == 1 ? 0 : min(maxroom, 2^(attempt-2))
+        floor = attempt == 1 ? 0 : min(maxroom, 2^(attempt - 2))
         floor == last_floor && break
         last_floor = floor
         candidate = deepcopy(original)
@@ -90,7 +80,9 @@ function cbe_bug_coupled_step(
         )
         t0 = time_ns()
         info = cbe_bug_step!(
-            candidate, mpo, ComplexF64(tau);
+            candidate,
+            mpo,
+            ComplexF64(tau);
             order = 2,
             closure_checks = true,
             tol_basis = tol_basis,
@@ -103,12 +95,10 @@ function cbe_bug_coupled_step(
             root_ceiling_factor = 1.2,
             rng = MersenneTwister(base_seed),
         )
-        wall_s = (time_ns()-t0)/1e9
+        wall_s = (time_ns() - t0) / 1e9
         # Work caps are checked against the dimensions BEFORE any trial.
-        all(info.expanded .<= caps) ||
-            error("DD/KL frame exceeded per-bond 2*D or root 1.2*D cap")
-        info.root_right <= caps[info.root] ||
-            error("right root input exceeded root 1.2*D cap")
+        all(info.expanded .<= caps) || error("DD/KL frame exceeded per-bond 2*D or root 1.2*D cap")
+        info.root_right <= caps[info.root] || error("right root input exceeded root 1.2*D cap")
         all(bond_dims(candidate) .<= caps) ||
             error("final bond exceeded per-bond 2*D or root 1.2*D cap")
         for bl in info.ledger.bond_log
@@ -132,7 +122,7 @@ function cbe_bug_coupled_step(
             max_stage_frame = info.record.D_stage,
             root_left = info.expanded[info.root],
             root_right = info.root_right,
-            root_core_elements = info.expanded[info.root]*info.root_right,
+            root_core_elements = info.expanded[info.root] * info.root_right,
             final_bond = maximum(bond_dims(candidate)),
             wall_s = wall_s,
         )
@@ -156,8 +146,8 @@ function cbe_bug_coupled_step(
         )
         # Increasing DD rank cannot cure a failing root integration or
         # compression tolerance; stop rather than burning unnecessary probes.
-        possible = all(reason in (:sample, :krylov, :closure, :tail, :projection)
-                       for reason in lg.unmet)
+        possible =
+            all(reason in (:sample, :krylov, :closure, :tail, :projection) for reason in lg.unmet)
         possible || break
         floor >= maxroom && break
     end

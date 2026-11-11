@@ -49,15 +49,16 @@ function dd_cbe_expand(
     rank_initial_width >= 1 || throw(ArgumentError("rank_initial_width must be positive"))
     rank_floor >= 0 || throw(ArgumentError("rank_floor must be nonnegative"))
     0 < tail_factor <= 1 || throw(ArgumentError("tail_factor must lie in (0,1]"))
-    mode === :rank_tail && fixed_width < 1 &&
+    mode === :rank_tail &&
+        fixed_width < 1 &&
         throw(ArgumentError("rank_tail requires positive fixed_width"))
     1 <= batch_blocks <= 8 || throw(ArgumentError("batch_blocks must be in 1:8"))
     cap_selection in (:storage, :svd) ||
         throw(ArgumentError("cap_selection must be :storage or :svd"))
-    mode === :fixed && (fixed_width < 1 || fixed_rank < 1) &&
+    mode === :fixed &&
+        (fixed_width < 1 || fixed_rank < 1) &&
         throw(ArgumentError("fixed mode requires positive fixed_width and fixed_rank"))
-    0 < acceptance_factor <= 1 ||
-        throw(ArgumentError("acceptance_factor must be in (0,1]"))
+    0 < acceptance_factor <= 1 || throw(ArgumentError("acceptance_factor must be in (0,1]"))
     left = side === :left
     left_basis, right_basis = frame_pair.U0, frame_pair.V0
     old_rank = frame_pair.old_rank
@@ -125,19 +126,18 @@ function dd_cbe_expand(
         # we never expand a single U(1) DD discovery sketch without limit.
         # A failed independently checked residual is reported as UNMET rather
         # than allowing validation cost to scale with the entire bond space.
-        maxprobe = mode === :rank_fast ?
-            min(full_opp, wcap, max(rank_initial_width, 64)) :
+        maxprobe =
+            mode === :rank_fast ? min(full_opp, wcap, max(rank_initial_width, 64)) :
             min(full_opp, max(wcap, cap + 4))
         width = min(maxprobe, max(rank_initial_width, rank_floor + 2))
         width <= 0 && return (nothing, 0)
         best = nothing
-        for _attempt in 1:12
+        for _attempt = 1:12
             Om = draw(width, nothing)
             Om === nothing && return (best, best === nothing ? 0 : leg_dim(best, fl))
             ledger === nothing || (ledger.n_probes += leg_dim(Om, wleg))
             Y = TLArray(project(sketch(Om)))
-            norm(Y) <= _CBE_EPS &&
-                return (nothing, 0)
+            norm(Y) <= _CBE_EPS && return (nothing, 0)
             # The full discarded-space matrix is never formed. Reuse this same
             # MPO sketch for EVERY candidate DD rank during binary search.
             legs = left ? (1, 2) : (2, 3)
@@ -150,13 +150,19 @@ function dd_cbe_expand(
             function selected(k)
                 k == 0 && return nothing
                 haskey(rank_cache, k) && return rank_cache[k]
-                fac = svd(Y, legs, _TAG_K, _TAG_KR;
+                fac = svd(
+                    Y,
+                    legs,
+                    _TAG_K,
+                    _TAG_KR;
                     Nkeep = k,
                     cutoff = _rank_cut(0.0, Y, norm(Y)),
-                    get_lists = true)
-                result = isempty(fac.kept_list) ? nothing :
-                         left ? _reortho_left(frame, TLArray(fac.U)) :
-                                _reortho_right(frame, TLArray(permutedims(fac.U, (3, 1, 2))))
+                    get_lists = true,
+                )
+                result =
+                    isempty(fac.kept_list) ? nothing :
+                    left ? _reortho_left(frame, TLArray(fac.U)) :
+                    _reortho_right(frame, TLArray(permutedims(fac.U, (3, 1, 2))))
                 rank_cache[k] = result
                 return result
             end
@@ -167,16 +173,14 @@ function dd_cbe_expand(
             ledger === nothing || (ledger.n_holdout += leg_dim(Ho, wleg))
             HY = sketch(Ho)
             test_on = function (candidate, X, OM)
-                est, _, _ = _sample_residual(candidate, project,
-                    _ -> X, _ -> OM, 1, wleg, side)
+                est, _, _ = _sample_residual(candidate, project, _ -> X, _ -> OM, 1, wleg, side)
                 return indicator(alloc, est)
             end
             record_test = function (candidate, X, OM)
                 ledger === nothing && return nothing
-                est, per, hc = _sample_residual(candidate, project,
-                    _ -> X, _ -> OM, 1, wleg, side)
-                _record_sample!(ledger, side, indicator(alloc, est),
-                    per, hc, OM, wleg, alloc)
+                est, per, hc =
+                    _sample_residual(candidate, project, _ -> X, _ -> OM, 1, wleg, side)
+                _record_sample!(ledger, side, indicator(alloc, est), per, hc, OM, wleg, alloc)
                 return nothing
             end
             threshold = acceptance_factor * alloc.sample
@@ -257,13 +261,19 @@ function dd_cbe_expand(
         function candidate(k)
             k <= 0 && return nothing
             haskey(cache, k) && return cache[k]
-            fac = svd(Y, legs, _TAG_K, _TAG_KR;
+            fac = svd(
+                Y,
+                legs,
+                _TAG_K,
+                _TAG_KR;
                 Nkeep = k,
                 cutoff = _rank_cut(0.0, Y, norm(Y)),
-                get_lists = true)
-            B = isempty(fac.kept_list) ? nothing :
+                get_lists = true,
+            )
+            B =
+                isempty(fac.kept_list) ? nothing :
                 left ? _reortho_left(frame, TLArray(fac.U)) :
-                       _reortho_right(frame, TLArray(permutedims(fac.U, (3, 1, 2))))
+                _reortho_right(frame, TLArray(permutedims(fac.U, (3, 1, 2))))
             cache[k] = B
             return B
         end
@@ -271,8 +281,7 @@ function dd_cbe_expand(
         # sides. Do not replace it with an arbitrary relative threshold.
         limit = tail_factor * alloc.sample
         metric(k) = begin
-            est, _, _ = _sample_residual(candidate(k), project,
-                _ -> Y, _ -> Om, 1, wleg, side)
+            est, _, _ = _sample_residual(candidate(k), project, _ -> Y, _ -> Om, 1, wleg, side)
             indicator(alloc, est)
         end
         metric(0) <= limit && return (nothing, 0)
@@ -280,7 +289,7 @@ function dd_cbe_expand(
         metric(hi) > limit && return (candidate(hi), hi)
         lo = 0
         while hi - lo > 1
-            k = (hi+lo) ÷ 2
+            k = (hi + lo) ÷ 2
             if metric(k) <= limit
                 hi = k
             else
@@ -315,10 +324,15 @@ function dd_cbe_expand(
                 nothing
             else
                 legs = left ? (1, 2) : (2, 3)
-                out = svd(Y, legs, _TAG_K, _TAG_KR;
+                out = svd(
+                    Y,
+                    legs,
+                    _TAG_K,
+                    _TAG_KR;
                     Nkeep = min(fixed_rank, cap),
                     cutoff = _rank_cut(0.0, Y, norm(Y)),
-                    get_lists = true)
+                    get_lists = true,
+                )
                 if isempty(out.kept_list)
                     nothing
                 elseif left
