@@ -5,6 +5,30 @@ minor version may change the public API.
 
 ## Unreleased
 
+### Changed (numerical behaviour: XX-tuned defaults of `cbe_bug_step!`)
+
+- `DDQRExpansion()` is `mode = :rank_tail`, `fixed_width = 8` (was `:adaptive`): one 8-column DD
+  sketch, rank bisected on its own tail, no holdout. Accuracy rests on the order-2 closure.
+- `DDQRExpansion(krylov_mode = :auto)` (was `:arnoldi`): the local K/L and frontier Krylov
+  enrichment uses adaptive Lanczos on a Hermitian step and Arnoldi with `hermitian = false`
+  (`resolve_krylov_recurrence`).
+- `cbe_bug_step!`'s `work_ceiling_rule = :bond` with `bond_ceiling_factor = 1.2` (was `:maxdim`):
+  working frames up to `min(ceil(1.2 d D_b), maxdim)`. An explicit `bond_ceiling_factor = 0` under
+  `:bond` is the former `min(2 d D_b, maxdim)`.
+- Measured on the U(1) XX domain wall, L = 64 (`benchmarks/XXT5/results/dw_L64`,
+  `dw_branch_claims`). The b155550 regression replays its runs with the former settings named.
+- The local Krylov recurrences are split into `krylov_lanczos.jl` and `krylov_arnoldi.jl`, with the
+  shared dispatcher and stopping rule (`_krylov_stop`) in `krylov_recurrence.jl`; no numerical change.
+
+### Added (experiments/oldcap-fast-rsvd-xx)
+
+- `DDQRExpansion` modes `:rank_adaptive`, `:rank_fast` and `:rank_tail`; `batch_blocks`,
+  `cap_selection`, `rank_floor`, `tail_factor`, `krylov_mode`, `krylov_fixed_depth`.
+- Local Lanczos for the K/L frame enrichment, with periodic reorthogonalisation past depth 20.
+- `work_ceiling_rule = :bond_strict` and `:frame_root` (`bond_work_ceilings_strict`,
+  `bond_frame_root_ceilings`); the transactional coupled DD/Krylov step (`coupled_dd_krylov.jl`).
+- `benchmarks/XXT5`: the large-system RSVD audit (`xx_large_rsvd_audit.jl`) and its analyses.
+
 ### Changed (numerical behaviour; methods and fixes from BUG-Julia's dissipative and QTT plans)
 
 - Local Krylov stopping weight: the residual integral

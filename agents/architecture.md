@@ -29,3 +29,9 @@ The algorithm appears **once** under `src/BUG/`. QMB and QTTS supply the represe
 Before introducing new abstract types, enumerate the minimal needed methods for site access, canonicalization, local action, environments, projection, rank updates, inner product and diagnostics. Use Julia multiple dispatch/traits with thin adapters; favor code generation-free, type-stable specialization. No type piracy; no domain-name conditionals in the inner BUG sweep.
 
 Document whether a projected tensor uses Euclidean or quadrature-weighted metric, whether QR/SVD preserves U(1)/Z2 sectors, and whether nonlinear RHS is evaluated at each required stage. Avoid assuming that Heston's non-Hermitian operator may be treated with Hermitian Lanczos or that nonlinear GPE is a constant linear MPO.
+
+## Krylov recurrences
+
+- One recurrence per file: the local frame enrichment's Lanczos (`Core/RankAdaptation/krylov_lanczos.jl`) and Arnoldi (`krylov_arnoldi.jl`) chains share only the dispatcher, the stopping rule and the inner products (`krylov_recurrence.jl`). A new recurrence gets its own file and an entry in `KRYLOV_RECURRENCES`.
+- Lanczos is valid only for a Hermitian generator. The choice follows `cbe_bug_step!`'s `hermitian` keyword (`krylov_mode = :auto`, the default): every non-Hermitian step (Lindbladian, Heston, any non-Hermitian `H_eff`) must pass `hermitian = false`, which also switches the root solve to Arnoldi. Never hard-code `:lanczos` in a path that can see a non-Hermitian generator.
+- Defaults are set from measured evidence and say where it is (`DDQRExpansion`'s docstring, `DEFAULT_BOND_CEILING_FACTOR`); a regression test that replays frozen runs names the settings it was frozen with instead of relying on the defaults.

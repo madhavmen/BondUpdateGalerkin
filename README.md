@@ -57,6 +57,24 @@ end
 | nonlinear PDE | `qtt_bug_step!(psi, GPFlow(model), t, h; order)` |
 | comparison | `Baselines`: `tdvp2_step!`, `qtt_tdvp2_step!`, `qtt_split_tdvp_step!` |
 
+## Defaults of `cbe_bug_step!`
+
+The defaults are the most efficient settings measured on the U(1) XX chain (domain wall, L = 64,
+`tol_basis` 1e-2 to 1e-4, against the exact free-fermion solution and TDVP2;
+`benchmarks/XXT5/results/dw_L64`, `dw_branch_claims`):
+
+| setting | default | alternative |
+|---|---|---|
+| bond expansion | `DDQRExpansion(mode = :rank_tail, fixed_width = 8)`: one 8-column DD sketch, rank from its own tail | `mode = :adaptive` (holdout-certified), `:rank_adaptive`, `:rank_fast`, `:fixed` |
+| local Krylov recurrence | `krylov_mode = :auto`: adaptive Lanczos on a Hermitian step, Arnoldi with `hermitian = false` | `:lanczos`, `:arnoldi` |
+| work ceiling | `work_ceiling_rule = :bond`, `bond_ceiling_factor = 1.2`: frames up to `min(ceil(1.2 d D_b), maxdim)` | `:maxdim` (one ceiling `d*maxdim`), `:bond_strict`, `:frame_root` |
+
+On that benchmark every BUG setting beat TDVP2 (1.3-25x lower error, 2.5-2.9x faster) without
+bond-dimension bloat. `:rank_tail` has no independent certificate, so run it with `order >= 2`.
+Pass `hermitian = false` for every non-Hermitian generator (it selects Arnoldi in both the frames
+and the root). The per-bond cap starves the first step from a product state on a bulk quench (a
+Neel state) and leaves a bond at `maxdim` no room; use `work_ceiling_rule = :maxdim` there.
+
 ## Diagnostics
 
 Every `cbe_bug_step!` returns an info record whose `ledger` holds the step's verdict

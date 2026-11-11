@@ -22,7 +22,9 @@ never against the code under test.
 | `BUG/Core/LocalSolvers/` | `test_krylov.jl` | The Krylov exponential and the root methods' stability functions. |
 | | `test_krylov_weights.jl` | The Krylov stopping weights against a dense exponential; the root's guarded tail; `_tridiag_eigen`. |
 | `BUG/Core/RankAdaptation/` | `test_basis_budget.jl` | The budget object, the allocation, the work ceiling, the ledger, and refusal of retired keywords. |
-| | `test_bond_work_ceiling.jl` | `work_ceiling_rule = :bond` and `bond_ceiling_factor`. |
+| | `test_bond_work_ceiling.jl` | `work_ceiling_rule = :bond` (default, factor 1.2), the former 2 d D_b and `:maxdim`, and `bond_ceiling_factor`. |
+| | `test_local_lanczos.jl` | The Lanczos and Arnoldi chains against a dense exponential; a fixed depth never claims a missed tolerance. |
+| | `test_krylov_defaults.jl` | `DDQRExpansion`'s defaults, `krylov_mode = :auto` resolved from `hermitian`, `_krylov_stop`, and the defaults reaching the step. |
 | | `test_krylov_ranked.jl` | `krylov_rank_tol`: ranked against sequential Krylov directions at order 2 and 3. |
 | `BUG/Randomised/` | `test_expansion.jl` | Test A on singular-value lists, and the DD-QR expansion on a two-spin entangling step. |
 | `BUG/TimeEvolution/` | `test_step_keep_states.jl` | Kept states (`keep_states`, `keep_tols`) and frames-only builds. |

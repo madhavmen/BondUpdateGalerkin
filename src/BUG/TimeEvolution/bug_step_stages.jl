@@ -59,6 +59,11 @@ function _resolve_step_options(
         something(tol_expv, TOL_DEFAULTS.expv),
     )
     order >= 1 || throw(ArgumentError("order must be >= 1, got $order"))
+    # `nothing`: 1.2 under the default `:bond` rule, 0 (each rule's own default) under the others.
+    bond_ceiling_factor = something(
+        bond_ceiling_factor,
+        work_ceiling_rule === :bond ? DEFAULT_BOND_CEILING_FACTOR : 0.0,
+    )
     fold_omega = something(fold_omega, order > 1 && !exact)
     frontier_tol >= 0 || throw(ArgumentError("frontier_tol must be >= 0, got $frontier_tol"))
     work_ceiling_rule in (:maxdim, :bond, :bond_strict, :frame_root) ||

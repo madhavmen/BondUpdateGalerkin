@@ -15,9 +15,18 @@ A basis-selection (enrichment) strategy for the bond frames of a BUG sweep. A su
 """
 abstract type BasisExpansion end
 
-# Local Krylov recurrence is orthogonal to the DD expansion policy. The default keeps
-# the historically validated full Arnoldi chain; Hermitian models may opt in to Lanczos.
+# The local Krylov recurrence (`krylov_recurrence.jl`) is orthogonal to the basis-selection policy.
+# A strategy that names none gets full Arnoldi, valid for any generator.
 krylov_controls(::BasisExpansion) = (recurrence = :arnoldi, fixed_depth = 0)
+
+"""
+    resolve_krylov_recurrence(strategy, hermitian) -> BasisExpansion
+
+`strategy` with its local Krylov recurrence fixed for one step: a strategy whose recurrence is
+`:auto` (the `DDQRExpansion` default) takes Lanczos when the step is Hermitian and Arnoldi when it
+is not. `cbe_bug_step!` calls it once, from its `hermitian` keyword, before any sweep.
+"""
+resolve_krylov_recurrence(strategy::BasisExpansion, ::Bool) = strategy
 
 """
     expand_frame(strategy, frame, mpo, bond, lch, rch, side; kwargs...) -> CBEExpansion

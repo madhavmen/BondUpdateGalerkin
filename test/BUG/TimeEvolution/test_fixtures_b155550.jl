@@ -28,6 +28,14 @@ sz_profile(psi) = real.(magnetisation(copy(psi))) ./ real(overlap(psi, psi))
 "The budget status of a step's info, as the fixture script records it."
 step_status(info) = hasproperty(info, :ledger) ? String(budget_status(info.ledger)) : nothing
 
+# The engine defaults the fixtures were made with, before the XX defaults (`:rank_tail` DD with an
+# 8-column sketch, `:auto` Lanczos, the per-bond 1.2 d D_b cap) replaced them: the frozen runs are
+# a regression of THIS method, so it is named explicitly.
+const FROZEN_DEFAULTS = (
+    expansion = DDQRExpansion(mode = :adaptive, fixed_width = 0, krylov_mode = :arnoldi),
+    work_ceiling_rule = :maxdim,
+)
+
 @testset "XX chain under U(1) against b155550: $name" for (name, order) in (
     ("xx_u1_bug_order1", 1),
     ("xx_u1_bug_order2", 2),
@@ -40,7 +48,13 @@ step_status(info) = hasproperty(info, :ledger) ? String(budget_status(info.ledge
     hamiltonian = xxz_mpo(chain_length; J = 1.0, delta = 0.0)
     psi = neel_state(chain_length)
     for (step, frozen_row) in enumerate(first(frozen["trajectory"], COMPARED_STEPS))
-        info = cbe_bug_step!(psi, hamiltonian, ComplexF64(-im * time_step); order = order)
+        info = cbe_bug_step!(
+            psi,
+            hamiltonian,
+            ComplexF64(-im * time_step);
+            order = order,
+            FROZEN_DEFAULTS...,
+        )
         exact_sz =
             xx_free_fermion_sz(chain_length, step * time_step; J = 1.0, occupied = 1:2:chain_length)
         sz = sz_profile(psi)
@@ -59,7 +73,7 @@ end
     hamiltonian = xxz_mpo(chain_length; J = 1.0, delta = 0.0)
     psi = neel_state(chain_length)
     for frozen_row in first(frozen["trajectory"], COMPARED_STEPS)
-        info = cbe_bug_step!(psi, hamiltonian, ComplexF64(-im * time_step); order = 2)
+        info = cbe_bug_step!(psi, hamiltonian, ComplexF64(-im * time_step); order = 2, FROZEN_DEFAULTS...)
         @test step_status(info) == frozen_row["status"]
         @test sqrt(real(overlap(psi, psi))) ≈ frozen_row["norm"] atol = 1e-8
     end

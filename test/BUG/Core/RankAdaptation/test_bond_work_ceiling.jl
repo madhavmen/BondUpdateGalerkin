@@ -1,14 +1,16 @@
-# `cbe_bug_step!`'s `work_ceiling_rule = :bond`: every bond's DD-QR CBE and local Krylov stage is
-# capped at `min(2*d*D_b, maxdim)` of that bond, its dimension at the start of the step, instead of
-# one `max(d*maxdim, d*D_max)` for every bond; `bond_ceiling_factor = f` replaces `2*d*D_b` by
-# `ceil(f*d*D_b)`. Sized to run in seconds (Heisenberg, L = 8, U(1), exact selection).
+# `cbe_bug_step!`'s `work_ceiling_rule = :bond` (the default): every bond's DD-QR CBE and local
+# Krylov stage is capped at `min(ceil(f*d*D_b), maxdim)` of that bond, its dimension at the start of
+# the step, with `f = bond_ceiling_factor` (default 1.2); an explicit `f = 0` is `min(2*d*D_b,
+# maxdim)`. `:maxdim` is one `max(d*maxdim, d*D_max)` for every bond. Sized to run in seconds
+# (Heisenberg, L = 8, U(1), exact selection).
 #
 #   - `bond_work_ceilings` values, never 0; `_cap_at` reads one bond's ceiling from either form;
-#   - from a product state the frames and bonds stay within 2d, and D_work is the largest ceiling;
-#   - from an entangled state, orders 2 and 3: every frame within its bond's ceiling, a stage no
-#     wider than under the global rule, the global rule bitwise the default;
-#   - the maxdim side binding, and the factor 1.2;
-#   - an unknown rule, and a factor without the per-bond rule or not above 1, are refused.
+#   - from a product state the frames and bonds stay within ceil(1.2 d) by default, 2d at f = 0,
+#     and D_work is the largest ceiling;
+#   - from an entangled state, orders 2 and 3: the default is `:bond` at 1.2 bitwise, every frame
+#     within its bond's ceiling, a stage no wider than under the global rule;
+#   - the maxdim side binding, and the factor 1.2 against 2d;
+#   - an unknown rule, and a factor without a per-bond rule or not above 1, are refused.
 
 using Test, LinearAlgebra
 using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
@@ -38,19 +40,15 @@ include(joinpath(@__DIR__, "..", "..", "..", "common", "dense_reference.jl"))
     step_settings =
         (tol_basis = 1e-8, tol_root = 1e-12, tol_trunc = 1e-12, maxdim = 64, exact = true)
 
-    @testset "from a product state every bond stays within 2d" begin
+    @testset "from a product state every bond stays within its ceiling (factor $factor)" for (
+        factor,
+        rule_keywords,
+    ) in ((1.2, (;)), (0.0, (work_ceiling_rule = :bond, bond_ceiling_factor = 0.0)))
         state = neel_state(chain_length)
         start_bonds = bond_dims(state)
         @test all(==(1), start_bonds)                         # fixture guard: a product state
-        info = cbe_bug_step!(
-            state,
-            hamiltonian,
-            time_step;
-            step_settings...,
-            order = 2,
-            work_ceiling_rule = :bond,
-        )
-        ceilings = bond_work_ceilings(start_bonds, site_dim, 64)
+        info = cbe_bug_step!(state, hamiltonian, time_step; step_settings..., order = 2, rule_keywords...)
+        ceilings = bond_work_ceilings(start_bonds, site_dim, 64; factor = factor)
         @test all(info.expanded .<= ceilings)
         @test all(bond_dims(state) .<= ceilings)
         @test info.record.D_work == maximum(ceilings)
@@ -71,13 +69,17 @@ include(joinpath(@__DIR__, "..", "..", "..", "common", "dense_reference.jl"))
         return (widths = info.expanded, stage = info.record.D_stage, state = state)
     end
 
+    # the older per-bond rule, 2*d*D_b
+    twice_site = (work_ceiling_rule = :bond, bond_ceiling_factor = 0.0)
     for order in (2, 3)
         @testset "order $order: per-bond vs global ceiling" begin
-            global_rule = ceiling_step(; order = order)
-            explicit_global = ceiling_step(; order = order, work_ceiling_rule = :maxdim)
-            per_bond = ceiling_step(; order = order, work_ceiling_rule = :bond)
-            # the global rule is the default, bitwise
-            @test norm(dense_state(explicit_global.state) - dense_state(global_rule.state)) == 0
+            default_rule = ceiling_step(; order = order)
+            explicit_default =
+                ceiling_step(; order = order, work_ceiling_rule = :bond, bond_ceiling_factor = 1.2)
+            global_rule = ceiling_step(; order = order, work_ceiling_rule = :maxdim)
+            per_bond = ceiling_step(; order = order, twice_site...)
+            # `:bond` at 1.2 is the default, bitwise
+            @test norm(dense_state(explicit_default.state) - dense_state(default_rule.state)) == 0
             @test all(per_bond.widths .<= ceilings)
             @test all(bond_dims(per_bond.state) .<= ceilings)
             @test per_bond.stage <= global_rule.stage
@@ -88,7 +90,7 @@ include(joinpath(@__DIR__, "..", "..", "..", "common", "dense_reference.jl"))
         small_maxdim = max(maximum(start_bonds), 2)
         capped_ceilings = bond_work_ceilings(start_bonds, site_dim, small_maxdim)
         @test any(capped_ceilings .< ceilings)                # fixture guard: the cap binds
-        capped = ceiling_step(; order = 2, maxdim = small_maxdim, work_ceiling_rule = :bond)
+        capped = ceiling_step(; order = 2, maxdim = small_maxdim, twice_site...)
         @test all(capped.widths .<= capped_ceilings)
         @test all(bond_dims(capped.state) .<= small_maxdim)
     end
@@ -97,7 +99,7 @@ include(joinpath(@__DIR__, "..", "..", "..", "common", "dense_reference.jl"))
         tight_ceilings = bond_work_ceilings(start_bonds, site_dim, 64; factor = 1.2)
         @test all(tight_ceilings .< ceilings)                 # fixture guard: tighter everywhere
         for order in (2, 3)
-            per_bond = ceiling_step(; order = order, work_ceiling_rule = :bond)
+            per_bond = ceiling_step(; order = order, twice_site...)
             tight =
                 ceiling_step(; order = order, work_ceiling_rule = :bond, bond_ceiling_factor = 1.2)
             @test all(tight.widths .<= tight_ceilings)
@@ -152,8 +154,8 @@ include(joinpath(@__DIR__, "..", "..", "..", "common", "dense_reference.jl"))
             keywords...,
         )
         @test_throws ArgumentError refused(; work_ceiling_rule = :site)
-        # a factor needs the per-bond rule to scale, and must widen the bond
-        @test_throws ArgumentError refused(; bond_ceiling_factor = 1.2)
+        # a factor needs a per-bond rule to scale, and must widen the bond
+        @test_throws ArgumentError refused(; work_ceiling_rule = :maxdim, bond_ceiling_factor = 1.2)
         @test_throws ArgumentError refused(; work_ceiling_rule = :bond, bond_ceiling_factor = 1.0)
     end
 end

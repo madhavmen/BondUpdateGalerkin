@@ -238,17 +238,30 @@ end
 # ── the strategy the Core sweeps call (Core/RankAdaptation/basis_expansion.jl) ──
 
 """
-    DDQRExpansion()
+    DDQRExpansion(; mode = :rank_tail, fixed_width = 8, krylov_mode = :auto, ...)
 
 The default [`BasisExpansion`](@ref) of `cbe_bug_step!`: each frame grows by the DD-projected,
 MPO-streamed, QR-only CBE ([`dd_cbe_expand`](@ref)), and the frontier sweeps sketch and estimate
 their outside-space action with the sector-graded Gaussian probes of this file.
+
+The defaults are the most efficient settings measured on the U(1) XX chain (domain wall, L = 64,
+`tol_basis` 1e-2 to 1e-4; `benchmarks/XXT5/results/dw_L64`, `dw_branch_claims`): the single-sketch
+`:rank_tail` selection with an 8-column sketch, and the adaptive local Lanczos recurrence on every
+Hermitian step (`krylov_mode = :auto`). `:rank_tail` has no independent holdout; its accuracy rests
+on the order-2 global Krylov closure, so run it with `order >= 2` (and `closure_checks = true` where
+the accuracy must be certified). `mode = :adaptive` is the holdout-certified sequential controller.
 """
 Base.@kwdef struct DDQRExpansion <: BasisExpansion
-    # :adaptive uses residual-certified incremental sketches. :fixed deliberately
-    # skips validation to provide the fixed oversampling/retention baseline.
-    mode::Symbol = :adaptive
-    fixed_width::Int = 0
+    # The DD rank selection. :rank_tail (default): one sketch of `fixed_width` columns, the rank
+    # bisected on that sketch's own tail (<= tail_factor of the bond's sample share), no holdout --
+    # an UNcertified heuristic whose state accuracy the global Krylov closure checks. :adaptive:
+    # residual-certified incremental sketches with an independent holdout. :rank_adaptive /
+    # :rank_fast: minimal rank per sector, confirmed on an independent holdout (:rank_fast with a
+    # smaller pilot and holdout and at most 64 columns per draw). :fixed: `fixed_width` columns,
+    # `fixed_rank` kept, no validation (the fixed baseline).
+    mode::Symbol = :rank_tail
+    # Sketch width of :rank_tail and :fixed; ignored by the other modes.
+    fixed_width::Int = 8
     fixed_rank::Int = 0
     # For :rank_adaptive or :rank_fast: initial rank-selection pilot width.
     # :rank_fast uses a minimal pilot + same-width independent confirmation,
@@ -257,10 +270,8 @@ Base.@kwdef struct DDQRExpansion <: BasisExpansion
     # Force a minimum number of DD directions on a trial after the combined
     # K/L + global closure failed (the independent DD residual alone can pass).
     rank_floor::Int = 0
-    # Single-pass tail-selection :rank_tail uses NO independent holdout.
-    # This is an explicitly UNcertified sketch heuristic, whose physical
-    # state accuracy must be checked by the existing global Krylov closure.
-    # It uses the same 12-column sketch as the fixed-width control.
+    # :rank_tail's acceptance: the sketch tail may keep at most this share of the bond's sample
+    # allowance.
     tail_factor::Float64 = 0.10
     holdout_width::Int = 4
     # 1 = existing sequential controller; >1 adds multiple charge-targeted
@@ -270,14 +281,30 @@ Base.@kwdef struct DDQRExpansion <: BasisExpansion
     # vectors of the THIN projected DD sketch if the 1.2*chi_b rank cap binds.
     cap_selection::Symbol = :storage
     acceptance_factor::Float64 = 1.0
-    # The K/L one-site generator must be Hermitian to use :lanczos.
-    krylov_mode::Symbol = :arnoldi
+    # The local Krylov recurrence of the K/L frames and the frontier sweeps: :auto (Lanczos on a
+    # Hermitian step, Arnoldi otherwise; resolved by `cbe_bug_step!` from `hermitian`), :lanczos
+    # (Hermitian one-site generators only) or :arnoldi (any generator).
+    krylov_mode::Symbol = :auto
     # 0: residual-controlled stop; >0: fixed depth (experimental baseline).
     krylov_fixed_depth::Int = 0
 end
 
-krylov_controls(policy::DDQRExpansion) =
-    (recurrence = policy.krylov_mode, fixed_depth = policy.krylov_fixed_depth)
+# An unresolved `:auto` (a strategy used outside `cbe_bug_step!`) runs Arnoldi, valid for any
+# generator.
+krylov_controls(policy::DDQRExpansion) = (
+    recurrence = policy.krylov_mode === :auto ? :arnoldi : policy.krylov_mode,
+    fixed_depth = policy.krylov_fixed_depth,
+)
+
+function resolve_krylov_recurrence(policy::DDQRExpansion, hermitian::Bool)
+    policy.krylov_mode in (:auto, KRYLOV_RECURRENCES...) || throw(
+        ArgumentError("krylov_mode must be :auto, :lanczos or :arnoldi, got $(policy.krylov_mode)"),
+    )
+    policy.krylov_mode === :auto || return policy
+    fields = Dict(name => getfield(policy, name) for name in fieldnames(DDQRExpansion))
+    fields[:krylov_mode] = hermitian ? :lanczos : :arnoldi
+    return DDQRExpansion(; fields...)
+end
 
 # Grow one frame of the bond `(site, site+1)` by the DD-QR CBE; returns `dd_cbe_expand`'s result.
 expand_frame(

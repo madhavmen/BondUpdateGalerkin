@@ -455,6 +455,13 @@ work_ceiling(maxdim::Int, bond_rank::Int, site_dim::Int = 2) =
     max(site_dim * maxdim, site_dim * bond_rank, 1)
 
 """
+`cbe_bug_step!`'s `bond_ceiling_factor` under its default `work_ceiling_rule = :bond`: frames up
+to `min(ceil(1.2*d*D_b), maxdim)`. The most efficient cap measured on the U(1) XX domain wall
+(`benchmarks/XXT5/results/dw_L64`: no cap violations, no chi bloat).
+"""
+const DEFAULT_BOND_CEILING_FACTOR = 1.2
+
+"""
     bond_work_ceilings(bond_ranks, site_dim, maxdim; factor = 0) -> Vector{Int}
 
 The per-bond alternative to [`work_ceiling`](@ref) (`cbe_bug_step!`'s `work_ceiling_rule =

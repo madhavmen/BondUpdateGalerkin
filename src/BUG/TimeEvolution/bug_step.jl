@@ -56,19 +56,21 @@ function cbe_bug_step!(
     # `_append_ranked`); `0` appends them in chain order until the work ceiling. A cost setting on
     # the stage width.
     krylov_rank_tol::Float64 = 0.0,
-    # The working-rank ceiling of every DD-QR CBE and local Krylov stage. `:maxdim`: one ceiling
-    # `max(d*maxdim, d*D_max)` for every bond (`work_ceiling`). `:bond`: `min(2*d*D_b, maxdim)` at
-    # bond `b`, from its dimension at the start of the step (`bond_work_ceilings`); with
-    # `bond_ceiling_factor = f > 1`, `min(ceil(f*d*D_b), maxdim)` instead;
-    # `f = 1.2` allows up to 1.2 times the local one-site physical space.
+    # The working-rank ceiling of every DD-QR CBE and local Krylov stage. `:bond` (default):
+    # `min(ceil(f*d*D_b), maxdim)` at bond `b`, from its dimension at the start of the step
+    # (`bond_work_ceilings`), `f = bond_ceiling_factor`; `nothing` is `f = 1.2` (the XX default,
+    # `benchmarks/XXT5/results/dw_L64`), an explicit `0` is the older `min(2*d*D_b, maxdim)`.
+    # `:maxdim`: one ceiling `max(d*maxdim, d*D_max)` for every bond (`work_ceiling`).
     # This cap is on DD/Krylov/closure working frames, not a truncation accuracy target.
     # `:bond_strict` enforces min(ceil(f*D_b), maxdim), WITHOUT the physical d.
     # `:frame_root` distinguishes K/L frame growth (default 2*D_b) from
     # the *two input frames* of the root Galerkin solve (1.2*D_root).
     # A root cap is NOT merely a cap on the final root SVD rank.
-    # A bond already at `maxdim` cannot enlarge its frame that step.
-    work_ceiling_rule::Symbol = :maxdim,
-    bond_ceiling_factor::Real = 0.0,
+    # A bond already at `maxdim` cannot enlarge its frame that step (measured on a Neel quench:
+    # the error then grows; `:maxdim` keeps frames up to d*maxdim). A product state's first step
+    # gets `ceil(f*d)` per bond, which can be below what a bulk quench needs.
+    work_ceiling_rule::Symbol = :bond,
+    bond_ceiling_factor::Union{Nothing,Real} = nothing,
     root_ceiling_factor::Real = 1.2,
     # ── imaginary time ──
     # The root integrator (`ROOT_METHODS`): `:exp` is the Saad-converged
@@ -175,6 +177,9 @@ function cbe_bug_step!(
     site_count, root_link, budget = options.site_count, options.root_link, options.budget
     parallel_sym, parallel, kls = options.parallel_mode, options.run_parallel, options.kls
     fold_omega, maxdim = options.fold_omega, options.maxdim
+    # The local Krylov recurrence of every sweep of the step: `:auto` becomes Lanczos on a
+    # Hermitian step and Arnoldi otherwise (`resolve_krylov_recurrence`).
+    expansion = resolve_krylov_recurrence(expansion, hermitian)
 
     # The per-bond, per-test allowances `tol_basis` buys, and the `|tau|/||psi||` scale every
     # residual is measured in. The norm comes from the centre tensor, which carries the whole norm
