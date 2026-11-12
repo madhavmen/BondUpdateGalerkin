@@ -193,6 +193,26 @@ function _append_ranked(frame, candidates, side::Symbol, allowance::Float64, wor
     return _extend_frame(frame, block, block, side, 1.0, allowance; room = room)
 end
 
+
+"""
+    _dd_krylov_importance(projected, j, tau)
+
+Average absolute coefficient of the j-th Krylov basis vector over one
+step, from the small projected generator. No additional MPO actions.
+This is a DD rank-selection weight, NOT the integrated Lanczos residual.
+"""
+function _dd_krylov_importance(projected, j::Int, tau::ComplexF64)
+    1 <= j <= size(projected, 1) || return 0.0
+    abs(tau) == 0 && return 0.0
+    samples = Float64[]
+    for k in 0:8
+        z = exp((k / 8) * tau .* projected)
+        push!(samples, abs(z[j, 1]))
+    end
+    return (samples[1] + samples[end] +
+        4 * sum(samples[2:2:8]) + 2 * sum(samples[3:2:7])) / 24
+end
+
 """
     _krylov_enrich(seed, applyH, start_frame, side, tau, alloc; workcap = 0,
                    maxdepth = _KRY_MAXDEPTH, amp = 1.0, state_seed = true)
@@ -223,6 +243,10 @@ function _krylov_enrich(
     state_seed::Bool = true,
     recurrence::Symbol = :arnoldi,
     fixed_depth::Int = 0,
+    extra_dd_mode::Symbol = :none,
+    extra_dd_probe = nothing,
+    extra_dd_max_checks::Int = 2,
+    extra_dd_holdout = nothing,
 )
     side in (:left, :right) || throw(ArgumentError("side must be :left or :right"))
     perp = side === :left ? perp_component : perp_component_right
@@ -233,6 +257,48 @@ function _krylov_enrich(
     candidates, n_test_d_candidates = Any[], 0
     frame = start_frame
     eta_c, eta_d, added, added_d = 0.0, 0.0, 0, 0
+    extra_added, extra_checks, extra_cols, extra_holdout_cols = 0, 0, 0, 0
+    extra_unmet = false
+    last_projection = Ref{Any}(nothing)
+    extra_dd_mode in (:none, :interleaved, :post) ||
+        throw(ArgumentError("extra_dd_mode must be :none, :interleaved or :post"))
+    # Reuse the existing work ceiling: extra DD cannot enlarge the root input
+    # or a half-sweep frame past the same cap used by standard CBE/Krylov.
+    remaining() = workcap > 0 ? max(0, workcap - leg_dim(frame, fl)) : typemax(Int)
+    function dd_step!(direction, projected, j::Int)
+        extra_dd_probe === nothing && return
+        extra_checks >= extra_dd_max_checks && return
+        room = min(2, remaining())
+        room <= 0 && return
+        average = _dd_krylov_importance(projected, j, tau)
+        average <= 1e-14 && return
+        weighted = alloc.scale * amp * norm(seed) * average
+        yy, cols = extra_dd_probe(direction, frame, false)
+        extra_checks += 1
+        extra_cols += cols
+        yy === nothing && return
+        frame, nadd, fits = _extend_frame(
+            frame, yy, yy, side, weighted, alloc.sample; room = room,
+        )
+        extra_added += nadd
+        extra_unmet |= !fits
+        if extra_dd_holdout !== nothing
+            hv, hcols = extra_dd_holdout(direction, frame, true)
+            extra_holdout_cols += hcols
+            if hv !== nothing
+                # The heldout *sampled* norm monitors residual leakage. It is
+                # not a rigorous statistical confidence bound.
+                extra_unmet |= weighted * norm(hv) > alloc.sample
+            end
+        end
+    end
+    function on_iteration(step, vectors, projected)
+        last_projection[] = (vectors = vectors, projected = projected)
+        if extra_dd_mode === :interleaved && step >= 2 && iseven(step)
+            # T_step spans vectors 1:step; v_step is a valid candidate.
+            dd_step!(vectors[step], projected, step)
+        end
+    end
     # Tests C/D on one direction, growing `frame` in place; false = capped.
     function score(direction, weight, first::Bool)
         residual = TLArray(perp(frame, direction))
@@ -266,6 +332,7 @@ function _krylov_enrich(
         state_seed = state_seed,
         recurrence = recurrence,
         fixed_depth = fixed_depth,
+        on_iteration = extra_dd_mode === :none ? nothing : on_iteration,
     )
     capped = kb.capped
     # increase the frame with augmented state
@@ -275,6 +342,41 @@ function _krylov_enrich(
         added_d = n_test_d_candidates > 0 ? added : 0
         capped |= !fits
     end
+    if extra_dd_mode === :post && last_projection[] !== nothing
+        vs = last_projection[].vectors
+        tm = last_projection[].projected
+        # Give the post scheme the SAME two sketch opportunities, selecting
+        # the significant Krylov basis vectors in descending average weight.
+        candidates = [(j, _dd_krylov_importance(tm, j, tau)) for j in 2:size(tm, 1)]
+        sort!(candidates; by = p -> -p[2])
+        selected = Any[]
+        for (j, importance) in candidates[1:min(extra_dd_max_checks, length(candidates))]
+            room = remaining()
+            room <= 0 && break
+            importance <= 1e-14 && continue
+            yy, cols = extra_dd_probe(vs[j], frame, false)
+            extra_checks += 1
+            extra_cols += cols
+            yy === nothing && continue
+            push!(selected, TLArray(alloc.scale * amp * norm(seed) * importance * yy))
+        end
+        if !isempty(selected) && remaining() > 0
+            frame, nadd, fits =
+                _append_ranked(frame, selected, side, alloc.sample, workcap)
+            extra_added += nadd
+            extra_unmet |= !fits
+        end
+        if extra_dd_holdout !== nothing
+            for (j, importance) in candidates[1:min(extra_dd_max_checks, length(candidates))]
+                importance <= 1e-14 && continue
+                hv, hcols = extra_dd_holdout(vs[j], frame, true)
+                extra_holdout_cols += hcols
+                hv === nothing && continue
+                extra_unmet |=
+                    alloc.scale * amp * norm(seed) * importance * norm(hv) > alloc.sample
+            end
+        end
+    end
     return (
         frame,
         (
@@ -282,6 +384,11 @@ function _krylov_enrich(
             eta_d = eta_d,
             added = added,
             n_h1 = kb.n_h1,
+            extra_dd_added = extra_added,
+            extra_dd_checks = extra_checks,
+            extra_dd_columns = extra_cols,
+            extra_dd_holdout_columns = extra_holdout_cols,
+            extra_dd_unmet = extra_unmet,
             d_after_c = eta_c <= alloc.krylov && added_d > 0,
             capped = capped,
             met = kb.closed && !capped,
@@ -299,6 +406,10 @@ function _record_krylov!(ledger::Union{Nothing,AdaptiveLedger}, st, alloc::Basis
     ledger.max_krylov = max(ledger.max_krylov, st.eta_c, st.eta_d)
     ledger.n_krylov += st.added
     ledger.n_h1 += st.n_h1
+    ledger.n_selected += st.extra_dd_added
+    ledger.n_probes += st.extra_dd_columns
+    ledger.n_holdout += st.extra_dd_holdout_columns
+    st.extra_dd_unmet && _unmet!(ledger, :krylov_dd)
     st.eta_c <= alloc.krylov && (ledger.n_c_pass += 1)
     st.d_after_c && (ledger.n_d_after_c += 1)
     st.capped && (ledger.workcap_reached = true)
