@@ -75,3 +75,39 @@ jobs:
           name: xx-dd-ab-${{ matrix.label }}
           path: results/dd-ab-${{ matrix.label }}/
           if-no-files-found: warn
+
+  l16-pilot:
+    needs: smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {twoS: '2', interaction: 'short', label: 'd3-short'}
+          - {twoS: '2', interaction: 'long', label: 'd3-long'}
+          - {twoS: '3', interaction: 'short', label: 'd4-short'}
+          - {twoS: '3', interaction: 'long', label: 'd4-long'}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.11'
+      - uses: julia-actions/cache@v2
+      - run: julia --project -e 'using Pkg; Pkg.instantiate()'
+      - name: L16 higher-d exact charge conservation and cost pilot
+        env:
+          BUG_DD_AB_L: '16'
+          BUG_DD_AB_TWOS: ${{ matrix.twoS }}
+          BUG_DD_AB_RANGE: ${{ matrix.interaction }}
+          BUG_DD_AB_STEPS: '5'
+          BUG_DD_AB_DT: '0.1'
+          BUG_DD_AB_TOL: '1e-3'
+          BUG_DD_AB_MAXDIM: '96'
+        run: julia --project benchmarks/XXT5/xx_higher_d_large_ab.jl results/dd-ab-L16-${{ matrix.label }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dd-ab-L16-${{ matrix.label }}
+          path: results/dd-ab-L16-${{ matrix.label }}/
+          if-no-files-found: warn
