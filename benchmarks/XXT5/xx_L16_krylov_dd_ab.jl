@@ -3,6 +3,7 @@
 # RUN: BUG_DD_AB_L=16 BUG_DD_AB_STEPS=50 julia --project benchmarks/XXT5/xx_L16_krylov_dd_ab.jl results/krylov-dd-ab
 using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB
 using LinearAlgebra, Random, Telum
+include(joinpath(@__DIR__, "..", "..", "test", "common", "dense_reference.jl"))
 
 set_symmetry!(:U1)
 L = parse(Int, get(ENV, "BUG_DD_AB_L", "16"))
