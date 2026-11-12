@@ -268,17 +268,18 @@ function _half_left!(
         site_operator =
             OneSiteOp(shift_h(one_site_h(mpo, bond, lch, rch1), cx.eshift), bond, acc.kc)
         tk0 = time_ns()
+        extra_rng = MersenneTwister(rand(copy(rng), UInt64) ⊻ UInt64(bond))
         extra_dd_probe = cx.extra_dd_mode === :none ? nothing :
             ((direction, fr, _) -> _krylov_dd_sketch(
                 direction, fr, ex.V_ex, cx.mpo, bond, lch,
                 right_channels(rstack, bond + 2), :left,
-                cx.extra_dd_width, rng, acc.kc,
+                cx.extra_dd_width, extra_rng, acc.kc,
             ))
         extra_dd_holdout = cx.extra_dd_mode === :none ? nothing :
             ((direction, fr, _) -> _krylov_dd_sketch(
                 direction, fr, ex.V_ex, cx.mpo, bond, lch,
                 right_channels(rstack, bond + 2), :left,
-                cx.extra_dd_holdout, rng, acc.kc,
+                cx.extra_dd_holdout, extra_rng, acc.kc,
             ))
         Wkry, kst = _krylov_enrich(
             Kex,
