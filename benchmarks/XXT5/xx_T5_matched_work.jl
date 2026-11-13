@@ -34,6 +34,17 @@ dt = parse(Float64, get(ENV, "BUG_HIGHER_DT", "0.1"))
 sample_every = parse(Int, get(ENV, "BUG_HIGHER_SAMPLE_EVERY", "5"))
 maxdim = parse(Int, get(ENV, "BUG_HIGHER_MAXDIM", "128"))
 selected = parse_list("BUG_HIGHER_POLICIES", "")
+initial_kind = get(ENV, "BUG_XX_INITIAL", "domain_wall")
+initial_kind in ("domain_wall", "neel") || error("BUG_XX_INITIAL must be domain_wall or neel")
+cap_override = get(ENV, "BUG_XX_CAP", "")
+cap_override in ("", "bond", "bulk", "maxdim") ||
+    error("BUG_XX_CAP must be empty, bond, bulk, or maxdim")
+bulk_min_width = parse(Int, get(ENV, "BUG_BULK_MIN_WIDTH", "8"))
+bulk_headroom = parse(Float64, get(ENV, "BUG_BULK_HEADROOM", "0.25"))
+make_initial(L, twoS) =
+    initial_kind == "domain_wall" ? spin_domain_wall_state(L, twoS) :
+    sector_product_state(spin_space(twoS),
+        [((isodd(i) ? twoS : -twoS),) for i=1:L])
 sample_steps = Set(vcat(1, [k for k = 1:nsteps if k % sample_every == 0], nsteps))
 (get(ENV, "BUG_T5_SMOKE", "0") == "1" || isapprox(dt * nsteps, 5.0; atol = 1e-10)) ||
     throw(ArgumentError("T=5 benchmark requires nsteps*dt=5, got $(nsteps*dt)"))
@@ -223,7 +234,9 @@ for (twoS, L) in cases
     d = twoS + 1
     B = sector_basis(L, twoS)
     bras = sector_bras(B, twoS)
-    wall = [j <= div(L, 2) ? 0 : twoS for j = 1:L]
+    wall = initial_kind == "domain_wall" ?
+        [j <= div(L, 2) ? 0 : twoS for j = 1:L] :
+        [isodd(j) ? 0 : twoS for j=1:L]
     index0 = findfirst(b -> b == wall, B)
     index0 === nothing && error("Domain wall absent from S_z=0 basis")
     v0 = zeros(ComplexF64, length(B))
@@ -232,7 +245,7 @@ for (twoS, L) in cases
         J = couplings(L, interaction)
         mpo = xx_mpo(L, twoS, J)
         H = sector_hamiltonian(B, twoS, J)
-        psi0 = spin_domain_wall_state(L, twoS)
+        psi0 = make_initial(L, twoS)
         initial = sector_state(psi0, bras)
         init_error = norm(initial - v0)
         init_error <= 1e-10 || error("U1 basis/configuration ordering mismatch: $init_error")
@@ -267,12 +280,24 @@ for (twoS, L) in cases
             for (method, policy, extra) in policy_specs(basis_tol)
                 (!isempty(selected) && !(method in selected)) && continue
                 for seed = 0:nseeds-1
-                    psi = spin_domain_wall_state(L, twoS)
+                    psi = make_initial(L, twoS)
                     rng = MersenneTwister(seed + 71)
                     for k = 1:nsteps
                         start_bonds = bond_dims(psi)
                         start_ns = time_ns()
                         kw = merge((order = 2, closure_checks = true), extra)
+                        if cap_override != ""
+                            kw = merge(kw, (
+                                work_ceiling_rule = Symbol(cap_override),
+                                bond_ceiling_factor = cap_override == "maxdim" ? 0.0 : 1.2,
+                            ))
+                            if cap_override == "bulk"
+                                kw = merge(kw, (
+                                    bulk_min_width = bulk_min_width,
+                                    bulk_headroom = bulk_headroom,
+                                ))
+                            end
+                        end
                         info = cbe_bug_step!(
                             psi,
                             mpo,
@@ -289,6 +314,12 @@ for (twoS, L) in cases
                         ledger = info.ledger
                         if haskey(kw, :bond_ceiling_factor)
                             ceilings =
+                                kw.work_ceiling_rule === :bulk ?
+                                bulk_work_ceilings(start_bonds, d, maxdim;
+                                    factor = kw.bond_ceiling_factor,
+                                    min_width = bulk_min_width, headroom = bulk_headroom) :
+                                kw.work_ceiling_rule === :maxdim ?
+                                fill(work_ceiling(maxdim, maximum(start_bonds), d), length(start_bonds)) :
                                 kw.work_ceiling_rule === :frame_root ?
                                 bond_frame_root_ceilings(
                                     start_bonds,
@@ -414,7 +445,7 @@ for (twoS, L) in cases
                 end
             end
             if isempty(selected) || "tdvp2" in selected
-                psi = spin_domain_wall_state(L, twoS)
+                psi = make_initial(L, twoS)
                 for k = 1:nsteps
                     start_ns = time_ns()
                     tdvp2_step!(

@@ -59,6 +59,7 @@ include("Randomised/krylov_dd_cbe.jl")
 include("TimeEvolution/bug_step.jl")
 include("TimeEvolution/bug_step_stages.jl")
 include("TimeEvolution/coupled_dd_krylov.jl")
+include("TimeEvolution/neel_bulk_retry.jl")
 include("TimeEvolution/bug_step_variants.jl")
 include("TimeEvolution/flows.jl")
 include("TimeEvolution/stage_gmres.jl")
@@ -100,7 +101,7 @@ export root_stability, hermitian_tridiagonal_exp_coeffs
 export enable_krylov_log, disable_krylov_log, get_krylov_log, KRYLOV_LOG
 # rank adaptation (Core/RankAdaptation)
 export truncate_sweep!, truncate_recursive!, AdaptiveBudget, BasisAllocation, basis_allocation
-export indicator, AdaptiveLedger, merge_ledger!, work_ceiling, bond_work_ceilings
+export indicator, AdaptiveLedger, merge_ledger!, work_ceiling, bond_work_ceilings, bulk_work_ceilings
 export bond_work_ceilings_strict, bond_frame_root_ceilings
 export budget_status, budget_diagnostic
 export BasisExpansion, expand_frame, sketch_closures, folded_sketch_closures, sampled_leak
@@ -111,7 +112,7 @@ export sector_graded_sketch, CBEExpansion
 export DDQRExpansion, dd_cbe_expand, TwoSiteSketchOp, RootOp
 export apply_two_site_sketch!, apply_one_site!, apply_root!
 # real and imaginary time (TimeEvolution, ITE)
-export cbe_bug_step!, cbe_bug_coupled_step
+export cbe_bug_step!, cbe_bug_coupled_step, cbe_bug_bulk_retry_step!
 export ite_step!, ite_evolve!, log_panel_steps, uniform_beta_steps, beta_grid, uniform_schedule
 export geometric_schedule
 # flows and implicit stage equations in the root space (TimeEvolution)

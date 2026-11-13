@@ -1,0 +1,112 @@
+name: Neel U1 XX bulk cap and accepted-step retry validation
+on:
+  pull_request:
+    paths:
+      - 'src/BUG/TimeEvolution/neel_bulk_retry.jl'
+      - 'src/BUG/Core/RankAdaptation/basis_budget.jl'
+      - 'src/BUG/TimeEvolution/bug_step_stages.jl'
+      - 'src/BUG/TimeEvolution/bug_step.jl'
+      - 'src/BUG/BUG.jl'
+      - 'benchmarks/XXT5/xx_neel_recovery.jl'
+      - '.github/workflows/xx-neel-bulk-recovery.yml'
+  workflow_dispatch:
+jobs:
+  exact-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.11'
+      - uses: julia-actions/cache@v2
+      - run: julia --project -e 'using Pkg; Pkg.instantiate()'
+      - name: Verify Neel bulk cap floor and saturated-bond room
+        run: |
+          julia --project -e 'using BondUpdateGalerkin.BUG; @assert bond_work_ceilings(ones(Int,7),2,128;factor=1.2)==fill(3,7); @assert bulk_work_ceilings(ones(Int,7),2,128)==fill(8,7); @assert bulk_work_ceilings([128],2,128)==[160]'
+      - name: Check transactional rollback on a rank-one Neel quench
+        run: julia --project test/BUG/test_neel_bulk_retry.jl
+      - name: Neel L6 short XX physical exact ED smoke plus failed-step rollback
+        env:
+          BUG_NEEL_L: '6'
+          BUG_NEEL_STEPS: '2'
+          BUG_NEEL_SEEDS: '1'
+          BUG_NEEL_RANGE: 'short'
+          BUG_NEEL_START: 'neel'
+          BUG_NEEL_SAMPLE_EVERY: '1'
+          BUG_NEEL_MAXDIM: '64'
+          BUG_NEEL_TOL: '1e-2'
+        run: julia --project benchmarks/XXT5/xx_neel_recovery.jl results/neel-smoke
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: neel-xx-smoke
+          path: results/neel-smoke/
+          if-no-files-found: warn
+  exact-T5:
+    needs: exact-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        start: ['neel','domain_wall']
+        range: ['short','long']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.11'
+      - uses: julia-actions/cache@v2
+      - run: julia --project -e 'using Pkg; Pkg.instantiate()'
+      - name: Compare Neel/domain-wall XX BUG and TDVP2 at T5 exact global-state error
+        env:
+          BUG_NEEL_L: '10'
+          BUG_NEEL_STEPS: '50'
+          BUG_NEEL_SEEDS: '2'
+          BUG_NEEL_DT: '0.1'
+          BUG_NEEL_START: ${{ matrix.start }}
+          BUG_NEEL_RANGE: ${{ matrix.range }}
+          BUG_NEEL_TOL: '1e-3'
+          BUG_NEEL_MAXDIM: '128'
+          BUG_NEEL_SAMPLE_EVERY: '10'
+        run: julia --project benchmarks/XXT5/xx_neel_recovery.jl results/xx-${{ matrix.start }}-${{ matrix.range }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: xx-${{ matrix.start }}-${{ matrix.range }}-neel-recovery
+          path: results/xx-${{ matrix.start }}-${{ matrix.range }}/
+          if-no-files-found: warn
+  neel-L16:
+    needs: exact-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        cap: ['bond','bulk','maxdim']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.11'
+      - uses: julia-actions/cache@v2
+      - run: julia --project -e 'using Pkg; Pkg.instantiate()'
+      - name: Neel L16 T5 exact free-fermion density and full work census
+        env:
+          BUG_XX_INITIAL: 'neel'
+          BUG_XX_CAP: ${{ matrix.cap }}
+          BUG_D2_FACTORIAL: '1'
+          BUG_D2_AB_POLICIES: 'rank_tail__adaptive,rank_tail__interleaved,rank_tail__post,rank_adaptive__adaptive'
+          BUG_DD_AB_L: '16'
+          BUG_DD_AB_STEPS: '50'
+          BUG_DD_AB_SEEDS: '1'
+          BUG_DD_AB_TOLS: '1e-3'
+          BUG_DD_AB_MAXDIM: '128'
+        run: julia --project benchmarks/XXT5/xx_L16_krylov_dd_ab.jl results/neel-L16-${{ matrix.cap }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: neel-L16-${{ matrix.cap }}
+          path: results/neel-L16-${{ matrix.cap }}/
+          if-no-files-found: warn

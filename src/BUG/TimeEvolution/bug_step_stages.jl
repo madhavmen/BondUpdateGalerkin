@@ -32,6 +32,8 @@ function _resolve_step_options(
     work_ceiling_rule,
     bond_ceiling_factor,
     root_ceiling_factor,
+    bulk_min_width,
+    bulk_headroom,
     keep_states,
     keep_tols,
     frames_only,
@@ -66,13 +68,13 @@ function _resolve_step_options(
     )
     fold_omega = something(fold_omega, order > 1 && !exact)
     frontier_tol >= 0 || throw(ArgumentError("frontier_tol must be >= 0, got $frontier_tol"))
-    work_ceiling_rule in (:maxdim, :bond, :bond_strict, :frame_root) || throw(
+    work_ceiling_rule in (:maxdim, :bond, :bond_strict, :frame_root, :bulk) || throw(
         ArgumentError(
-            "work_ceiling_rule must be :maxdim, :bond, :bond_strict or :frame_root, got $work_ceiling_rule",
+            "work_ceiling_rule must be :maxdim, :bond, :bond_strict, :frame_root or :bulk, got $work_ceiling_rule",
         ),
     )
     bond_ceiling_factor == 0 ||
-        (bond_ceiling_factor > 1 && work_ceiling_rule in (:bond, :bond_strict, :frame_root)) ||
+        (bond_ceiling_factor > 1 && work_ceiling_rule in (:bond, :bond_strict, :frame_root, :bulk)) ||
         throw(
             ArgumentError(
                 "bond_ceiling_factor must be 0, or > 1 with work_ceiling_rule = :bond, got " *
@@ -115,6 +117,10 @@ function _resolve_step_options(
     # stand before the step.
     bond_ranks = bond_dims(psi)
     workcap =
+        work_ceiling_rule === :bulk ?
+        bulk_work_ceilings(bond_ranks, local_dim(psi), maxdim;
+                           factor = bond_ceiling_factor == 0 ? 1.2 : bond_ceiling_factor,
+                           min_width = bulk_min_width, headroom = bulk_headroom) :
         work_ceiling_rule === :bond ?
         bond_work_ceilings(bond_ranks, local_dim(psi), maxdim; factor = bond_ceiling_factor) :
         work_ceiling_rule === :bond_strict ?
