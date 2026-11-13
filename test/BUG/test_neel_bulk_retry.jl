@@ -28,4 +28,30 @@ set_symmetry!(:U1)
     @test bond_dims(psi)==bond_dims(before)
     @test abs(overlap(before,psi)-overlap(before,before)) < 1e-12
 end
+
+@testset "Neel: failed bond cap is retried and discarded before bulk success" begin
+    psi = neel_state(6)
+    reference = deepcopy(psi)
+    mpo = xxz_mpo(6; J=1.0, delta=0.0)
+    policy = DDQRExpansion(mode=:rank_tail, fixed_width=8,
+                           tail_factor=0.1, krylov_mode=:lanczos)
+    result = cbe_bug_bulk_retry_step!(
+        psi, mpo, ComplexF64(-0.1im);
+        modes=(:bond,:bulk),
+        order=2, closure_checks=true,
+        tol_basis=1e-2, tol_trunc=1e-5, tol_root=1e-10,
+        maxdim=64, expansion=policy,
+        rng=MersenneTwister(71),
+    )
+    @test result.accepted
+    @test length(result.history) == 2
+    @test result.history[1].cap == :bond
+    @test !result.history[1].accepted
+    @test result.history[2].cap == :bulk
+    @test result.history[2].accepted
+    @test result.h1 == sum(x.h1 for x in result.history)
+    @test result.stream_columns == sum(x.stream_columns for x in result.history)
+    @test norm(psi) > 0
+    @test abs(overlap(reference,psi)) < abs(overlap(reference,reference)) + 1e-10
+end
 println("NEEL_BULK_RETRY_TEST_FINISHED")
