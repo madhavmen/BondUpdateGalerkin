@@ -1,0 +1,45 @@
+name: Heisenberg cylinder BUG RSVD Krylov smoke
+on:
+  pull_request:
+    paths:
+      - "benchmarks/QMB/ClosedSystem/heisenberg_cylinder_factorial.jl"
+      - ".github/workflows/heisenberg-cylinder-smoke.yml"
+  workflow_dispatch:
+
+jobs:
+  cylinder-u1:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1.11"
+      - uses: julia-actions/cache@v2
+      - run: julia --project -e 'using Pkg; Pkg.instantiate()'
+      - name: Run Heisenberg 2x4 U1 smoke and independent reference checks
+        run: julia --project benchmarks/QMB/ClosedSystem/heisenberg_cylinder_factorial.jl results/cylinder-u1 U1 2 4 0.75 smoke
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cylinder-u1-smoke
+          path: results/cylinder-u1/
+          if-no-files-found: warn
+  cylinder-su2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1.11"
+      - uses: julia-actions/cache@v2
+      - run: julia --project -e 'using Pkg; Pkg.instantiate()'
+      - name: Run Heisenberg 2x4 SU2 smoke and independent reference checks
+        run: julia --project benchmarks/QMB/ClosedSystem/heisenberg_cylinder_factorial.jl results/cylinder-su2 SU2 2 4 0.75 smoke
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cylinder-su2-smoke
+          path: results/cylinder-su2/
+          if-no-files-found: warn
