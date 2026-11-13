@@ -81,6 +81,12 @@ for tol in tols, seed in 0:nseeds-1, (method, policy, extra) in arms_for(tol)
     rng = MersenneTwister(seed + 71)
     for k=1:nsteps
         tic = time_ns()
+        kwargs = merge(extra, (
+            work_ceiling_rule = cap_mode,
+            bond_ceiling_factor = cap_mode === :maxdim ? 0.0 : 1.2,
+            bulk_min_width = bulk_min_width,
+            bulk_headroom = bulk_headroom,
+        ))
         info = cbe_bug_step!(
             psi, mpo, ComplexF64(-im * dt);
             order = 2,
@@ -91,11 +97,7 @@ for tol in tols, seed in 0:nseeds-1, (method, policy, extra) in arms_for(tol)
             maxdim = maxdim,
             expansion = policy,
             rng = rng,
-            work_ceiling_rule = cap_mode,
-            bond_ceiling_factor = cap_mode === :maxdim ? 0.0 : 1.2,
-            bulk_min_width = bulk_min_width,
-            bulk_headroom = bulk_headroom,
-            merge(extra, NamedTuple())...,
+            kwargs...,
         )
         tsec = (time_ns()-tic)/1e9
         nrm = norm(psi[psi.center])^2
