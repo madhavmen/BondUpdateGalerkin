@@ -12,20 +12,20 @@ iseven(L) || error("Need even L for U1 zero charge")
 nsteps=parse(Int,get(ENV,"BUG_NEEL_STEPS","2"))
 dt=parse(Float64,get(ENV,"BUG_NEEL_DT","0.1"))
 seeds=parse(Int,get(ENV,"BUG_NEEL_SEEDS","1"))
-range=get(ENV,"BUG_NEEL_RANGE","short")
-start=get(ENV,"BUG_NEEL_START","neel")
+interaction_kind=get(ENV,"BUG_NEEL_RANGE","short")
+initial_kind=get(ENV,"BUG_NEEL_START","neel")
 maxdim=parse(Int,get(ENV,"BUG_NEEL_MAXDIM","64"))
 tol=parse(Float64,get(ENV,"BUG_NEEL_TOL","1e-3"))
 sample_every=parse(Int,get(ENV,"BUG_NEEL_SAMPLE_EVERY","5"))
 mode_filter=filter(!isempty,split(get(ENV,"BUG_NEEL_MODES",""),','))
-range in ("short","long") || error("range short/long")
-start in ("neel","domain_wall") || error("start neel/domain_wall")
+interaction_kind in ("short","long") || error("range short/long")
+initial_kind in ("neel","domain_wall") || error("start neel/domain_wall")
 outdir=isempty(ARGS) ? "results/neel-recovery" : ARGS[1]
 mkpath(outdir)
-make_initial()=start=="neel" ? neel_state(L) : spin_domain_wall_state(L,1)
+make_initial()=initial_kind=="neel" ? neel_state(L) : spin_domain_wall_state(L,1)
 J=zeros(Float64,L,L)
 for i=1:L-1,j=i+1:L
-    J[i,j]=range=="short" ? (j==i+1 ? 1. : 0.) : (j-i)^(-3.)
+    J[i,j]=interaction_kind=="short" ? (j==i+1 ? 1. : 0.) : (j-i)^(-3.)
 end
 sp=spin_space(1)
 mpo=pair_mpo(L,J,[PairVertex(sp.Sp,TLArray(sp.Sp'),1.0),
@@ -47,7 +47,7 @@ function reference_builder()
     end
     # A fixed spin-basis configuration, independent from the MPO constructor.
     v0=zeros(ComplexF64,length(configurations))
-    pattern= start=="neel" ? [isodd(i) ? 0 : 1 for i=1:L] :
+    pattern= initial_kind=="neel" ? [isodd(i) ? 0 : 1 for i=1:L] :
                 [i<=L÷2 ? 0 : 1 for i=1:L]
     initial=sum(pattern[i]<<(L-i) for i=1:L)
     v0[indices[initial]]=1.0
@@ -145,11 +145,11 @@ open(joinpath(outdir,"trajectories.csv"),"w") do io
             else
                 state_error=NaN;sz_error=NaN
             end
-            println(io,join((start,L,range,name,seed,step,step*dt,
+            println(io,join((initial_kind,L,interaction_kind,name,seed,step,step*dt,
                 state_error,state_error,sz_error,elapsed,h1,h1cl,root,
                 sc,calls,D_stage,D,met,unmet,attempts),","))
             flush(io)
-            println("NEEL_XX name=$name range=$range k=$step fid=$state_error sz=$sz_error met=$met t=$elapsed")
+            println("NEEL_XX name=$name range=$interaction_kind k=$step fid=$state_error sz=$sz_error met=$met t=$elapsed")
         end
     end
 end
