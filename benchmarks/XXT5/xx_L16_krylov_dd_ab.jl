@@ -13,6 +13,14 @@ nseeds = parse(Int, get(ENV, "BUG_DD_AB_SEEDS", "3"))
 dt = parse(Float64, get(ENV, "BUG_DD_AB_DT", "0.1"))
 maxdim = parse(Int, get(ENV, "BUG_DD_AB_MAXDIM", "128"))
 tols = parse.(Float64, split(get(ENV, "BUG_DD_AB_TOLS", "1e-3"), ','))
+initial_kind = get(ENV,"BUG_XX_INITIAL","domain_wall")
+initial_kind in ("domain_wall","neel") || error("invalid initial state")
+cap_mode = Symbol(get(ENV,"BUG_XX_CAP","bond"))
+cap_mode in (:bond,:bulk,:maxdim) || error("invalid cap")
+bulk_min_width = parse(Int,get(ENV,"BUG_BULK_MIN_WIDTH","8"))
+bulk_headroom = parse(Float64,get(ENV,"BUG_BULK_HEADROOM","0.25"))
+initial_state() = initial_kind == "neel" ? neel_state(L) : spin_domain_wall_state(L,1)
+occupied = initial_kind == "neel" ? collect(1:2:L) : collect(1:(L÷2))
 outdir = isempty(ARGS) ? "results/krylov-dd-ab" : ARGS[1]
 mkpath(outdir)
 
@@ -34,11 +42,11 @@ end
 H1 = eigen(Symmetric(h))
 propagator(t) = H1.vectors * Diagonal(exp.(-im*t .* H1.values)) * H1.vectors'
 function reference_sz(t)
-    orbitals = propagator(t)[:, 1:(L÷2)]
+    orbitals = propagator(t)[:, occupied]
     return vec(sum(abs2.(orbitals); dims = 2)) .- 0.5
 end
 function slater_vector(t)
-    orbitals = propagator(t)[:, 1:(L÷2)]
+    orbitals = propagator(t)[:, occupied]
     result = zeros(ComplexF64, 2^L)
     for index = 0:(2^L - 1)
         occupied = [j for j=1:L if ((index >> (L-j)) & 1) == 0]
@@ -69,7 +77,7 @@ println(outfile, join((
 ), ","))
 flush(outfile)
 for tol in tols, seed in 0:nseeds-1, (method, policy, extra) in arms_for(tol)
-    psi = spin_domain_wall_state(L, 1)
+    psi = initial_state()
     rng = MersenneTwister(seed + 71)
     for k=1:nsteps
         tic = time_ns()
@@ -83,7 +91,11 @@ for tol in tols, seed in 0:nseeds-1, (method, policy, extra) in arms_for(tol)
             maxdim = maxdim,
             expansion = policy,
             rng = rng,
-            extra...,
+            work_ceiling_rule = cap_mode,
+            bond_ceiling_factor = cap_mode === :maxdim ? 0.0 : 1.2,
+            bulk_min_width = bulk_min_width,
+            bulk_headroom = bulk_headroom,
+            merge(extra, NamedTuple())...,
         )
         tsec = (time_ns()-tic)/1e9
         nrm = norm(psi[psi.center])^2
