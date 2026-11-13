@@ -68,6 +68,7 @@ policies=[
     ("bulk_tail", :rank_tail,:bulk,:none),
     ("maxdim_tail", :rank_tail,:maxdim,:none),
     ("retry_tail", :rank_tail,:retry,:none),
+    ("retry_bond_bulk", :rank_tail,:retry,:none),
     ("warmstart_tail", :rank_tail,:bond,:none),
     ("bulk_rank_adaptive", :rank_adaptive,:bulk,:none),
     ("bulk_A", :rank_tail,:bulk,:interleaved),
@@ -132,7 +133,8 @@ open(joinpath(outdir,"trajectories.csv"),"w") do io
                         extra_dd_max_checks=2)
                 if cap==:retry
                     run=cbe_bug_bulk_retry_step!(psi,mpo,ComplexF64(-im*dt);
-                        modes=(:bulk,:maxdim),bond_ceiling_factor=1.2,
+                        modes=(name == "retry_bond_bulk" ? (:bond,:bulk,:maxdim) : (:bulk,:maxdim)),
+                        bond_ceiling_factor=1.2,
                         bulk_min_width=8,bulk_headroom=0.25,rng=rng,
                         kwargs...)
                     attempts=length(run.history)
