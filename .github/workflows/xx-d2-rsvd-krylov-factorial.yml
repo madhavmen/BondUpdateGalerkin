@@ -1,0 +1,76 @@
+name: XX d2 U1 four Krylov x six RSVD methods
+on:
+  pull_request:
+    paths:
+      - 'benchmarks/XXT5/xx_d2_rsvd_krylov_specs.jl'
+      - 'benchmarks/XXT5/xx_policy_specs.jl'
+      - 'benchmarks/XXT5/xx_T5_matched_work.jl'
+      - '.github/workflows/xx-d2-rsvd-krylov-factorial.yml'
+  workflow_dispatch:
+
+jobs:
+  factorial-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.11'
+      - uses: julia-actions/cache@v2
+      - run: julia --project -e 'using Pkg; Pkg.instantiate()'
+      - name: Check all 24 policy combinations against independent ED at d2 L6
+        env:
+          BUG_D2_FACTORIAL: '1'
+          BUG_T5_SMOKE: '1'
+          BUG_HIGHER_CASES: '1:6'
+          BUG_HIGHER_INTERACTIONS: 'short,long'
+          BUG_HIGHER_STEPS: '2'
+          BUG_HIGHER_DT: '0.1'
+          BUG_HIGHER_SEEDS: '1'
+          BUG_HIGHER_TOLS: '1e-3'
+          BUG_HIGHER_SAMPLE_EVERY: '1'
+          BUG_HIGHER_MAXDIM: '64'
+        run: julia --project benchmarks/XXT5/xx_T5_matched_work.jl results/factorial-smoke
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: d2-factorial-smoke
+          path: results/factorial-smoke/
+          if-no-files-found: warn
+
+  factorial-exact-T5:
+    needs: factorial-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        policy: ['fixed','sequential','batched_svd','rank_adaptive','rank_tail','rank_fast']
+        range: ['short','long']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.11'
+      - uses: julia-actions/cache@v2
+      - run: julia --project -e 'using Pkg; Pkg.instantiate()'
+      - name: Exact U1 L10 T5 matched Krylov RSVD full total-cost comparison
+        env:
+          BUG_D2_FACTORIAL: '1'
+          BUG_HIGHER_CASES: '1:10'
+          BUG_HIGHER_INTERACTIONS: ${{ matrix.range }}
+          BUG_HIGHER_STEPS: '50'
+          BUG_HIGHER_DT: '0.1'
+          BUG_HIGHER_SEEDS: '2'
+          BUG_HIGHER_TOLS: '1e-3'
+          BUG_HIGHER_SAMPLE_EVERY: '10'
+          BUG_HIGHER_MAXDIM: '128'
+          BUG_HIGHER_POLICIES: ${{ format('{0}__fixed8,{0}__adaptive,{0}__interleaved,{0}__post', matrix.policy) }}
+        run: julia --project benchmarks/XXT5/xx_T5_matched_work.jl results/factorial-${{ matrix.policy }}-${{ matrix.range }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: d2-factorial-${{ matrix.policy }}-${{ matrix.range }}
+          path: results/factorial-${{ matrix.policy }}-${{ matrix.range }}/
+          if-no-files-found: warn
