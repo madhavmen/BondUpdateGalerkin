@@ -1,0 +1,65 @@
+name: XX U1 Krylov-directed DD A/B validation
+on:
+  pull_request:
+    paths:
+      - 'src/BUG/Core/RankAdaptation/krylov_*.jl'
+      - 'src/BUG/Core/Sweeps/half_sweeps.jl'
+      - 'src/BUG/Randomised/krylov_dd_cbe.jl'
+      - 'src/BUG/TimeEvolution/bug_step.jl'
+      - 'src/BUG/BUG.jl'
+      - 'benchmarks/XXT5/xx_L16_krylov_dd_ab.jl'
+      - '.github/workflows/xx-krylov-dd-ab.yml'
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.11'
+      - uses: julia-actions/cache@v2
+      - name: Instantiate pinned Julia environment
+        run: julia --project -e 'using Pkg; Pkg.instantiate()'
+      - name: Exact U1 XX L6 smoke A and B
+        env:
+          BUG_DD_AB_L: '6'
+          BUG_DD_AB_STEPS: '2'
+          BUG_DD_AB_SEEDS: '1'
+          BUG_DD_AB_TOLS: '1e-2'
+          BUG_DD_AB_MAXDIM: '32'
+        run: julia --project benchmarks/XXT5/xx_L16_krylov_dd_ab.jl results/xx6-dd-ab-smoke
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: xx6-dd-ab-smoke
+          path: results/xx6-dd-ab-smoke/
+          if-no-files-found: warn
+  physical-L16:
+    runs-on: ubuntu-latest
+    needs: smoke
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.11'
+      - uses: julia-actions/cache@v2
+      - name: Instantiate pinned Julia environment
+        run: julia --project -e 'using Pkg; Pkg.instantiate()'
+      - name: Exact free-fermion density at L16 and T5, A versus B versus baseline
+        env:
+          BUG_DD_AB_L: '16'
+          BUG_DD_AB_STEPS: '50'
+          BUG_DD_AB_SEEDS: '1'
+          BUG_DD_AB_TOLS: '1e-3'
+          BUG_DD_AB_MAXDIM: '128'
+        run: julia --project benchmarks/XXT5/xx_L16_krylov_dd_ab.jl results/xx16-dd-ab
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: xx16-dd-ab
+          path: results/xx16-dd-ab/
+          if-no-files-found: warn

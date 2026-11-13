@@ -2,7 +2,12 @@
 # xx_large_rsvd_audit.jl so both run exactly the same expansion settings.
 # Each entry is (name, DDQRExpansion, extra cbe_bug_step! keywords).
 
+include(joinpath(@__DIR__, "xx_d2_rsvd_krylov_specs.jl"))
+
 function policy_specs(basis_tol)
+    if get(ENV, "BUG_D2_FACTORIAL", "0") == "1"
+        return d2_rsvd_krylov_specs(basis_tol)
+    end
     return [
         (
             "fixed4_depth4",
@@ -238,6 +243,32 @@ function policy_specs(basis_tol)
             "T5_fixed4_adaptK",
             DDQRExpansion(mode = :fixed, fixed_width = 8, fixed_rank = 4, krylov_mode = :lanczos),
             (work_ceiling_rule = :bond, bond_ceiling_factor = 1.2),
+        ),
+        # Fair A/B comparison: exact same initial DD sketch and rank cap as
+        # T5_fixed4_adaptK, only the optional local Krylov-directed DD changes.
+        (
+            "T5_fixed4_adaptK_ddA",
+            DDQRExpansion(mode = :fixed, fixed_width = 8, fixed_rank = 4, krylov_mode = :lanczos),
+            (
+                work_ceiling_rule = :bond,
+                bond_ceiling_factor = 1.2,
+                extra_dd_mode = :interleaved,
+                extra_dd_width = 8,
+                extra_dd_holdout = 4,
+                extra_dd_max_checks = 2,
+            ),
+        ),
+        (
+            "T5_fixed4_adaptK_ddB",
+            DDQRExpansion(mode = :fixed, fixed_width = 8, fixed_rank = 4, krylov_mode = :lanczos),
+            (
+                work_ceiling_rule = :bond,
+                bond_ceiling_factor = 1.2,
+                extra_dd_mode = :post,
+                extra_dd_width = 8,
+                extra_dd_holdout = 4,
+                extra_dd_max_checks = 2,
+            ),
         ),
         (
             "T5_uncapped",

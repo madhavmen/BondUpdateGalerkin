@@ -56,6 +56,10 @@ function cbe_bug_step!(
     # `_append_ranked`); `0` appends them in chain order until the work ceiling. A cost setting on
     # the stage width.
     krylov_rank_tol::Float64 = 0.0,
+    extra_dd_mode::Symbol = :none,
+    extra_dd_width::Int = 8,
+    extra_dd_holdout::Int = 4,
+    extra_dd_max_checks::Int = 2,
     # The working-rank ceiling of every DD-QR CBE and local Krylov stage. `:bond` (default):
     # `min(ceil(f*d*D_b), maxdim)` at bond `b`, from its dimension at the start of the step
     # (`bond_work_ceilings`), `f = bond_ceiling_factor`; `nothing` is `f = 1.2` (the XX default,
@@ -146,6 +150,11 @@ function cbe_bug_step!(
     expansion::BasisExpansion = DDQRExpansion(),
     rng::AbstractRNG = MersenneTwister(0x5EED),
 )
+    extra_dd_mode in (:none, :interleaved, :post) ||
+        throw(ArgumentError("extra_dd_mode must be :none, :interleaved or :post"))
+    extra_dd_width >= 1 || throw(ArgumentError("extra_dd_width must be >=1"))
+    extra_dd_holdout >= 1 || throw(ArgumentError("extra_dd_holdout must be >=1"))
+    extra_dd_max_checks >= 0 || throw(ArgumentError("extra_dd_max_checks must be >=0"))
     # Check the keywords against each other and resolve their `nothing` defaults
     # (`bug_step_stages.jl`).
     options = _resolve_step_options(
@@ -238,6 +247,10 @@ function cbe_bug_step!(
         keep_states,
         options.keep_tols,
         work_ceiling_rule in (:bond, :bond_strict, :frame_root),
+        extra_dd_mode,
+        extra_dd_width,
+        extra_dd_holdout,
+        extra_dd_max_checks,
     )
 
     troot = Ref(0.0)

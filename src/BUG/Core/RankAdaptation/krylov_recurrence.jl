@@ -35,6 +35,7 @@ function _krylov_basis(
     state_seed::Bool = true,
     recurrence::Symbol = :arnoldi,
     fixed_depth::Int = 0,
+    on_iteration = nothing,
 )
     recurrence in KRYLOV_RECURRENCES ||
         throw(ArgumentError("unknown local Krylov recurrence: $recurrence"))
@@ -56,6 +57,7 @@ function _krylov_basis(
         amp = amp,
         state_seed = state_seed,
         fixed_depth = fixed_depth,
+        on_iteration = on_iteration,
     )
 end
 

@@ -25,6 +25,7 @@ function _lanczos_chain(
     amp::Float64 = 1.0,
     state_seed::Bool = true,
     fixed_depth::Int = 0,
+    on_iteration = nothing,
 )
     vs, weights = Any[unit_seed], Float64[amp]
     Hm = zeros(ComplexF64, maxdepth + 1, maxdepth + 1)
@@ -62,6 +63,7 @@ function _lanczos_chain(
         weight = amp * _kry_weight(Hm, lanczos_step, tau; state_seed = state_seed)
         push!(weights, weight)
         score(new_vector, weight, lanczos_step == 1) || (capped = true; break)
+        on_iteration === nothing || on_iteration(lanczos_step, vs, copy(Hm[1:lanczos_step, 1:lanczos_step]))
         stop, closed = _krylov_stop(weight, allowance, lanczos_step, fixed_depth)
         stop && break
         previous_beta = beta

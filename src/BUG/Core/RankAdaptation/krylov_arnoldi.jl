@@ -20,6 +20,7 @@ function _arnoldi_chain(
     amp::Float64 = 1.0,
     state_seed::Bool = true,
     fixed_depth::Int = 0,
+    on_iteration = nothing,
 )
     nh, capped, closed = 0, false, false
     vs, ws = Any[unit_seed], Float64[amp]
@@ -50,6 +51,7 @@ function _arnoldi_chain(
         weight = amp * _kry_weight(Hm, krylov_step, tau; state_seed = state_seed)
         push!(ws, weight)
         score(new_vector, weight, krylov_step == 1) || (capped = true; break)
+        on_iteration === nothing || on_iteration(krylov_step, vs, copy(Hm[1:krylov_step, 1:krylov_step]))
         stop, closed = _krylov_stop(weight, allowance, krylov_step, fixed_depth)
         stop && break
     end

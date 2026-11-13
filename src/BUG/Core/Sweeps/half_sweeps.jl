@@ -64,6 +64,10 @@ struct _HalfSweepCtx{M,E,A,X<:BasisExpansion,K,S}
     keep_states::S
     keep_tols::Vector{Float64}   # per kept state: 0 = contained exactly, > 0 = `_union_fresh`'s tol
     cap_keep::Bool
+    extra_dd_mode::Symbol
+    extra_dd_width::Int
+    extra_dd_holdout::Int
+    extra_dd_max_checks::Int
 end
 
 """
@@ -264,6 +268,19 @@ function _half_left!(
         site_operator =
             OneSiteOp(shift_h(one_site_h(mpo, bond, lch, rch1), cx.eshift), bond, acc.kc)
         tk0 = time_ns()
+        extra_rng = MersenneTwister(rand(copy(rng), UInt64) ⊻ UInt64(bond))
+        extra_dd_probe = cx.extra_dd_mode === :none ? nothing :
+            ((direction, fr, _) -> _krylov_dd_sketch(
+                direction, fr, ex.V_ex, cx.mpo, bond, lch,
+                right_channels(rstack, bond + 2), :left,
+                cx.extra_dd_width, extra_rng, acc.kc,
+            ))
+        extra_dd_holdout = cx.extra_dd_mode === :none ? nothing :
+            ((direction, fr, _) -> _krylov_dd_sketch(
+                direction, fr, ex.V_ex, cx.mpo, bond, lch,
+                right_channels(rstack, bond + 2), :left,
+                cx.extra_dd_holdout, extra_rng, acc.kc,
+            ))
         Wkry, kst = _krylov_enrich(
             Kex,
             vector -> (acc.nmv += 1; apply_one_site(site_operator, vector)),
@@ -272,6 +289,10 @@ function _half_left!(
             cx.tau,
             cx.alloc;
             workcap = _cap_at(cx.wcap, bond),
+            extra_dd_mode = cx.extra_dd_mode,
+            extra_dd_probe = extra_dd_probe,
+            extra_dd_holdout = extra_dd_holdout,
+            extra_dd_max_checks = cx.extra_dd_max_checks,
             krylov_controls(cx.expansion)...,
         )
         acc.tkry += (time_ns() - tk0) / 1e9
@@ -368,6 +389,18 @@ function _half_right!(
         site_operator =
             OneSiteOp(shift_h(one_site_h(mpo, bond + 1, lch1, rch), cx.eshift), bond, acc.kc)
         tk0 = time_ns()
+        extra_dd_probe = cx.extra_dd_mode === :none ? nothing :
+            ((direction, fr, _) -> _krylov_dd_sketch(
+                direction, fr, ex.U_ex, cx.mpo, bond,
+                left_channels(lstack, bond), rch, :right,
+                cx.extra_dd_width, rng, acc.kc,
+            ))
+        extra_dd_holdout = cx.extra_dd_mode === :none ? nothing :
+            ((direction, fr, _) -> _krylov_dd_sketch(
+                direction, fr, ex.U_ex, cx.mpo, bond,
+                left_channels(lstack, bond), rch, :right,
+                cx.extra_dd_holdout, rng, acc.kc,
+            ))
         Zkry, kst = _krylov_enrich(
             Bex,
             vector -> (acc.nmv += 1; apply_one_site(site_operator, vector)),
@@ -376,6 +409,10 @@ function _half_right!(
             cx.tau,
             cx.alloc;
             workcap = _cap_at(cx.wcap, bond),
+            extra_dd_mode = cx.extra_dd_mode,
+            extra_dd_probe = extra_dd_probe,
+            extra_dd_holdout = extra_dd_holdout,
+            extra_dd_max_checks = cx.extra_dd_max_checks,
             krylov_controls(cx.expansion)...,
         )
         acc.tkry += (time_ns() - tk0) / 1e9
