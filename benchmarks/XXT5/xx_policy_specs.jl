@@ -2,7 +2,12 @@
 # xx_large_rsvd_audit.jl so both run exactly the same expansion settings.
 # Each entry is (name, DDQRExpansion, extra cbe_bug_step! keywords).
 
+include(joinpath(@__DIR__, "xx_d2_rsvd_krylov_specs.jl"))
+
 function policy_specs(basis_tol)
+    if get(ENV, "BUG_D2_FACTORIAL", "0") == "1"
+        return d2_rsvd_krylov_specs(basis_tol)
+    end
     return [
         (
             "fixed4_depth4",
