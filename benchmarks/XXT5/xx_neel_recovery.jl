@@ -68,6 +68,7 @@ policies=[
     ("bulk_tail", :rank_tail,:bulk,:none),
     ("maxdim_tail", :rank_tail,:maxdim,:none),
     ("retry_tail", :rank_tail,:retry,:none),
+    ("warmstart_tail", :rank_tail,:bond,:none),
     ("bulk_rank_adaptive", :rank_adaptive,:bulk,:none),
     ("bulk_A", :rank_tail,:bulk,:interleaved),
     ("bulk_B", :rank_tail,:bulk,:post),
@@ -84,7 +85,7 @@ open(joinpath(outdir,"trajectories.csv"),"w") do io
             h1=0;h1cl=0;root=0;sc=0;calls=0
             met=true;unmet=""
             begin_ns=time_ns()
-            if name=="tdvp2"
+            if name=="tdvp2" || (name=="warmstart_tail" && step==1)
                 tdvp2_step!(psi,mpo,ComplexF64(-im*dt);
                             maxdim=maxdim,weight_tol=tol*1e-3)
                 D_stage=maximum(bond_dims(psi))
