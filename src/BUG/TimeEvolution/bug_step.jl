@@ -252,7 +252,7 @@ function cbe_bug_step!(
         wcap_step,
         keep_states,
         options.keep_tols,
-        work_ceiling_rule in (:bond, :bond_strict, :frame_root),
+        work_ceiling_rule in (:bond, :bond_strict, :frame_root, :bulk),
         extra_dd_mode,
         extra_dd_width,
         extra_dd_holdout,
