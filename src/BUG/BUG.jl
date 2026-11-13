@@ -59,6 +59,7 @@ include("Randomised/krylov_dd_cbe.jl")
 include("TimeEvolution/bug_step.jl")
 include("TimeEvolution/bug_step_stages.jl")
 include("TimeEvolution/coupled_dd_krylov.jl")
+include("TimeEvolution/neel_bulk_retry.jl")
 include("TimeEvolution/bug_step_variants.jl")
 include("TimeEvolution/flows.jl")
 include("TimeEvolution/stage_gmres.jl")
@@ -111,7 +112,7 @@ export sector_graded_sketch, CBEExpansion
 export DDQRExpansion, dd_cbe_expand, TwoSiteSketchOp, RootOp
 export apply_two_site_sketch!, apply_one_site!, apply_root!
 # real and imaginary time (TimeEvolution, ITE)
-export cbe_bug_step!, cbe_bug_coupled_step
+export cbe_bug_step!, cbe_bug_coupled_step, cbe_bug_bulk_retry_step!
 export ite_step!, ite_evolve!, log_panel_steps, uniform_beta_steps, beta_grid, uniform_schedule
 export geometric_schedule
 # flows and implicit stage equations in the root space (TimeEvolution)
