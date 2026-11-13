@@ -76,6 +76,10 @@ function cbe_bug_step!(
     work_ceiling_rule::Symbol = :bond,
     bond_ceiling_factor::Union{Nothing,Real} = nothing,
     root_ceiling_factor::Real = 1.2,
+    # Opt-in bulk-quench cap: retain a wider initial frame and leave bounded
+    # transient headroom when a final bond reaches maxdim.
+    bulk_min_width::Int = 8,
+    bulk_headroom::Float64 = 0.25,
     # ── imaginary time ──
     # The root integrator (`ROOT_METHODS`): `:exp` is the Saad-converged
     # exponential (the reference); `:trapezoid`/`:radau2`/`:radau3` apply that
@@ -177,6 +181,8 @@ function cbe_bug_step!(
         work_ceiling_rule = work_ceiling_rule,
         bond_ceiling_factor = bond_ceiling_factor,
         root_ceiling_factor = root_ceiling_factor,
+        bulk_min_width = bulk_min_width,
+        bulk_headroom = bulk_headroom,
         keep_states = keep_states,
         keep_tols = keep_tols,
         frames_only = frames_only,
