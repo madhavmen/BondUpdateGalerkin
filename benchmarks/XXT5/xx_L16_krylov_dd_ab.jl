@@ -48,7 +48,18 @@ function slater_vector(t)
     return result
 end
 
-methods = (:none, :interleaved, :post)
+include(joinpath(@__DIR__, "xx_d2_rsvd_krylov_specs.jl"))
+factorial = get(ENV, "BUG_D2_FACTORIAL", "0") == "1"
+selected = filter(!isempty, strip.(split(get(ENV, "BUG_D2_AB_POLICIES", ""), ',')))
+arms_for(tol) = factorial ?
+    [(name, pol, extra) for (name, pol, extra) in d2_rsvd_krylov_specs(tol)
+       if isempty(selected) || name in selected] :
+    [(string(method),
+      DDQRExpansion(mode = :fixed, fixed_width = 8, fixed_rank = 4,
+                    krylov_mode = :lanczos),
+      (extra_dd_mode = method, extra_dd_width = 8,
+       extra_dd_holdout = 4, extra_dd_max_checks = 2))
+       for method in (:none, :interleaved, :post)]
 outfile = open(joinpath(outdir, "xx16_ab.csv"), "w")
 println(outfile, join((
     "method","seed","step","t","basis_tol","sz_err","state_err",
@@ -57,12 +68,8 @@ println(outfile, join((
     "D_final","root_left","root_right","met","unmet",
 ), ","))
 flush(outfile)
-for tol in tols, seed in 0:nseeds-1, method in methods
+for tol in tols, seed in 0:nseeds-1, (method, policy, extra) in arms_for(tol)
     psi = spin_domain_wall_state(L, 1)
-    policy = DDQRExpansion(
-        mode = :fixed, fixed_width = 8, fixed_rank = 4,
-        krylov_mode = :lanczos,
-    )
     rng = MersenneTwister(seed + 71)
     for k=1:nsteps
         tic = time_ns()
@@ -74,14 +81,9 @@ for tol in tols, seed in 0:nseeds-1, method in methods
             tol_trunc = tol * 1e-3,
             tol_root = 1e-10,
             maxdim = maxdim,
-            work_ceiling_rule = :bond,
-            bond_ceiling_factor = 1.2,
             expansion = policy,
-            extra_dd_mode = method,
-            extra_dd_width = 8,
-            extra_dd_holdout = 4,
-            extra_dd_max_checks = 2,
             rng = rng,
+            extra...,
         )
         tsec = (time_ns()-tic)/1e9
         nrm = norm(psi[psi.center])^2
