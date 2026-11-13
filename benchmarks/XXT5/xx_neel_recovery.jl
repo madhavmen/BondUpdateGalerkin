@@ -75,6 +75,37 @@ policies=[
     ("tdvp2", :none,:none,:none),
 ]
 choose=isempty(mode_filter) ? policies : filter(x->x[1] in mode_filter,policies)
+# Timing is only comparable after JIT warmup. All unique code paths, including
+# the fallback and the TDVP bootstrap, pay their compilation cost off-clock.
+for (name, rsvd, cap, extra) in choose
+    trial = make_initial()
+    p = DDQRExpansion(mode=rsvd == :none ? :rank_tail : rsvd,
+                      fixed_width=8,tail_factor=0.1,
+                      rank_initial_width=4,holdout_width=4,
+                      acceptance_factor=0.7,krylov_mode=:lanczos)
+    kwargs=(order=2,closure_checks=true,tol_basis=tol,
+            tol_trunc=tol*1e-3,tol_root=1e-10,maxdim=maxdim,
+            expansion=p,extra_dd_mode=extra,
+            extra_dd_width=8,extra_dd_holdout=4,
+            extra_dd_max_checks=2)
+    if name == "tdvp2" || name == "warmstart_tail"
+        tdvp2_step!(trial,mpo,ComplexF64(-im*dt);
+                    maxdim=maxdim,weight_tol=tol*1e-3)
+    elseif cap == :retry
+        cbe_bug_bulk_retry_step!(trial,mpo,ComplexF64(-im*dt);
+            modes=(:bulk,:maxdim),bond_ceiling_factor=1.2,
+            bulk_min_width=8,bulk_headroom=0.25,
+            rng=MersenneTwister(901),kwargs...)
+    else
+        cbe_bug_step!(trial,mpo,ComplexF64(-im*dt);
+            work_ceiling_rule=cap,
+            bond_ceiling_factor=cap==:maxdim ? 0.0 : 1.2,
+            bulk_min_width=8,bulk_headroom=0.25,
+            rng=MersenneTwister(901),kwargs...)
+    end
+end
+GC.gc()
+
 open(joinpath(outdir,"trajectories.csv"),"w") do io
     println(io,"initial,L,range,method,seed,step,t,error,state_error,sz_error,wall_s,h1,h1_closure,root_h,stream_cols,stream_calls,frame_dim,bond_dim,met,unmet,attempts")
     for (name,rsvd,cap,extra) in choose,seed=0:seeds-1
