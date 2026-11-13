@@ -24,6 +24,8 @@ jobs:
       - name: Verify Neel bulk cap floor and saturated-bond room
         run: |
           julia --project -e 'using BondUpdateGalerkin.BUG; @assert bond_work_ceilings(ones(Int,7),2,128;factor=1.2)==fill(3,7); @assert bulk_work_ceilings(ones(Int,7),2,128)==fill(8,7); @assert bulk_work_ceilings([128],2,128)==[160]'
+      - name: Check transactional rollback on a rank-one Neel quench
+        run: julia --project test/BUG/test_neel_bulk_retry.jl
       - name: Neel L6 short XX physical exact ED smoke plus failed-step rollback
         env:
           BUG_NEEL_L: '6'
