@@ -494,6 +494,46 @@ function bond_work_ceilings(
 end
 
 """
+    bulk_work_ceilings(bond_ranks, site_dim, maxdim; factor=1.2,
+                       min_width=8, headroom=0.25)
+
+Bulk-quench working-frame budget. Unlike `:bond`, it never forces every
+bond of a product-state Neel quench to a three-dimensional trial frame.
+The small fixed floor is crucial for the first order-2 closure sweep. The
+separate, bounded headroom permits a saturated *final* MPS bond to add
+temporary trial directions (they are truncated to `maxdim` afterwards).
+
+`maxdim` is the final MPS rank, not the width of the intermediate
+Galerkin frames. This allocation is a *resource ceiling*, not an
+acceptance test: callers must still inspect `ledger.tolerance_met`.
+The existing `:bond` rule remains the unchanged default.
+"""
+function bulk_work_ceilings(
+    bond_ranks::AbstractVector{<:Integer},
+    site_dim::Int,
+    maxdim::Int;
+    factor::Real = 1.2,
+    min_width::Int = 8,
+    headroom::Real = 0.25,
+)
+    site_dim >= 1 || throw(ArgumentError("site_dim must be >= 1"))
+    maxdim >= 1 || throw(ArgumentError("maxdim must be >= 1"))
+    factor > 1 || throw(ArgumentError("bulk factor must exceed 1"))
+    min_width >= 1 || throw(ArgumentError("bulk min_width must be >= 1"))
+    0 <= headroom <= 1 || throw(ArgumentError("bulk headroom must be in [0,1]"))
+    return [
+        min(
+            site_dim * maxdim,
+            max(
+                min_width,
+                min(maxdim, ceil(Int, round(factor * site_dim * r; digits = 9))),
+                r + min(32, ceil(Int, headroom * r)),
+            ),
+        ) for r in bond_ranks
+    ]
+end
+
+"""
     bond_work_ceilings_strict(bond_ranks, maxdim; factor=1.2)
 
 Use EXACTLY `ceil(1.2*D_b)` per bond at the START of the timestep. No extra local
