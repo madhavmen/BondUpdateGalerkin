@@ -36,7 +36,8 @@ jobs:
           BUG_HIGHER_MAXDIM: '64'
         run: julia --project benchmarks/XXT5/xx_T5_order_walltime.jl results/order-smoke-${{ matrix.order }}
       - name: Check output and timer consistency
-        run: python3 - <<'PY'
+        run: |
+          python3 - <<'PY'
           import csv, os
           p = "results/order-smoke-${{ matrix.order }}/phase_times.csv"
           with open(p) as f: rows=list(csv.DictReader(f))
