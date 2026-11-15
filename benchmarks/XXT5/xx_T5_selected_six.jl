@@ -1,0 +1,628 @@
+# T=5 time-evolution benchmark derived from the previously validated U(1) XX test.
+# All BUG variants use BUG_XX_ORDER=1..4 and closure_checks=true; TDVP2 is the reference baseline.
+# Per-bond working-frame limit is min(maxdim,ceil(1.2*d*chi_old)).
+# Counters separate 1-site, 0-site and MPO sketch actions; never add unweighted.
+# Spin-S U(1) XX benchmark: fixed vs adaptive CBE and local Arnoldi/Lanczos,
+# equal-achieved-error comparison with independent exact diagonalization.
+# d=twoS+1; default 2:6 = spin 1, 3:6 = spin 3/2, both S^z_total = 0.
+#
+# Julia 1.11 from repository root:
+#   julia --project benchmarks/QMB/ClosedSystem/xx_matched_accuracy_higher_d.jl OUTPUT_DIR
+# Environment controls:
+# BUG_HIGHER_CASES="2:6,3:6"   BUG_HIGHER_INTERACTIONS="short,long"
+# BUG_HIGHER_TOLS="1e-2,1e-3"  BUG_HIGHER_STEPS="6"
+# BUG_HIGHER_SEEDS="2"        BUG_HIGHER_DT="0.08"
+# BUG_HIGHER_POLICIES="fixed4_depth8,adaptive_lanczos,..."
+# BUG_HIGHER_SAMPLE_EVERY="2"
+using BondUpdateGalerkin.BUG, BondUpdateGalerkin.QMB, BondUpdateGalerkin.Baselines
+using LinearAlgebra, Random, Statistics, Telum
+include(joinpath(@__DIR__, "..", "..", "test", "common", "dense_reference.jl"))
+
+outdir = isempty(ARGS) ? "results/xx-T5" : ARGS[1]
+mkpath(outdir)
+set_symmetry!(:U1)
+parse_list(name, default) = filter(!isempty, strip.(split(get(ENV, name, default), ',')))
+cases = [
+    (parse(Int, split(s, ':')[1]), parse(Int, split(s, ':')[2])) for
+    s in parse_list("BUG_HIGHER_CASES", "1:10,2:6,3:6")
+]
+interactions = parse_list("BUG_HIGHER_INTERACTIONS", "short,long")
+tolerances = parse.(Float64, parse_list("BUG_HIGHER_TOLS", "1e-2,1e-3"))
+nsteps = parse(Int, get(ENV, "BUG_HIGHER_STEPS", "50"))
+nseeds = parse(Int, get(ENV, "BUG_HIGHER_SEEDS", "2"))
+dt = parse(Float64, get(ENV, "BUG_HIGHER_DT", "0.1"))
+bug_order = parse(Int, get(ENV, "BUG_XX_ORDER", "2"))
+bug_order in 1:4 || error("BUG_XX_ORDER must be in 1:4")
+warm_jit = get(ENV, "BUG_XX_WARM_JIT", "1") == "1"
+sample_every = parse(Int, get(ENV, "BUG_HIGHER_SAMPLE_EVERY", "5"))
+maxdim = parse(Int, get(ENV, "BUG_HIGHER_MAXDIM", "128"))
+selected = parse_list("BUG_HIGHER_POLICIES", "")
+initial_kind = get(ENV, "BUG_XX_INITIAL", "domain_wall")
+initial_kind in ("domain_wall", "neel") || error("BUG_XX_INITIAL must be domain_wall or neel")
+cap_override = get(ENV, "BUG_XX_CAP", "")
+cap_override in ("", "bond", "bulk", "maxdim") ||
+    error("BUG_XX_CAP must be empty, bond, bulk, or maxdim")
+bulk_min_width = parse(Int, get(ENV, "BUG_BULK_MIN_WIDTH", "8"))
+bulk_headroom = parse(Float64, get(ENV, "BUG_BULK_HEADROOM", "0.25"))
+make_initial(L, twoS) =
+    initial_kind == "domain_wall" ? spin_domain_wall_state(L, twoS) :
+    sector_product_state(spin_space(twoS),
+        [((isodd(i) ? twoS : -twoS),) for i=1:L])
+sample_steps = Set(vcat(1, [k for k = 1:nsteps if k % sample_every == 0], nsteps))
+(get(ENV, "BUG_T5_SMOKE", "0") == "1" || isapprox(dt * nsteps, 5.0; atol = 1e-10)) ||
+    throw(ArgumentError("T=5 benchmark requires nsteps*dt=5, got $(nsteps*dt)"))
+
+
+# Site digit a=0..twoS means |m=s-a>, so the basis is ordered from spin up down.
+function sector_basis(L::Int, twoS::Int)
+    d = twoS + 1
+    target = div(L * twoS, 2)
+    B = Vector{Vector{Int}}()
+    for raw = 0:(d^L-1)
+        x = raw
+        digits = zeros(Int, L)
+        for j = L:-1:1
+            digits[j] = x % d
+            x = div(x, d)
+        end
+        sum(digits) == target && push!(B, digits)
+    end
+    return B
+end
+
+function couplings(L, kind)
+    J = zeros(Float64, L, L)
+    for i = 1:L-1, j = i+1:L
+        r = j - i
+        J[i, j] =
+            kind == "short" ? (r == 1 ? 1.0 : 0.0) :
+            kind == "long" ? float(r)^(-3.0) : throw(ArgumentError("unknown interaction $kind"))
+    end
+    return J
+end
+
+function xx_mpo(L, twoS, J)
+    q = spin_space(twoS)
+    vertices = [PairVertex(q.Sp, TLArray(q.Sp'), 1.0), PairVertex(q.Sm, TLArray(q.Sm'), 1.0)]
+    return pair_mpo(L, J, vertices; Iloc = q.I)
+end
+
+# Independent sector ED: no MPO builder or tensor routines are used here.
+# H_ij=(J_ij/2)(S_i^+ S_j^- + S_i^- S_j^+).
+function sector_hamiltonian(B, twoS, J)
+    n = length(B)
+    L = length(B[1])
+    d = twoS + 1
+    s = twoS / 2
+    index = Dict(Tuple(b) => k for (k, b) in enumerate(B))
+    H = zeros(Float64, n, n)
+    for (k, b) in enumerate(B), i = 1:L-1, j = i+1:L
+        iszero(J[i, j]) && continue
+        ai, aj = b[i], b[j]
+        mi, mj = s - ai, s - aj
+        if ai > 0 && aj < d - 1
+            # S_i^+ S_j^- turns (a_i,a_j) -> (a_i-1,a_j+1).
+            next = copy(b)
+            next[i] -= 1
+            next[j] += 1
+            fi = sqrt((s - mi) * (s + mi + 1))
+            fj = sqrt((s + mj) * (s - mj + 1))
+            H[index[Tuple(next)], k] += (J[i, j] / 2) * fi * fj
+        end
+        if ai < d - 1 && aj > 0
+            next = copy(b)
+            next[i] += 1
+            next[j] -= 1
+            fi = sqrt((s + mi) * (s - mi + 1))
+            fj = sqrt((s - mj) * (s + mj + 1))
+            H[index[Tuple(next)], k] += (J[i, j] / 2) * fi * fj
+        end
+    end
+    norm(H - H', Inf) < 1e-12 || error("ED Hamiltonian not Hermitian")
+    return H
+end
+
+# Pre-compute the physical product bras once per sector. Each object contains
+# exactly one U(1)-allowed computational configuration (all charge labels).
+function sector_bras(B, twoS)
+    q = spin_space(twoS)
+    return [_full_tensor(sector_product_state(q, [((twoS - 2 * a,),) for a in b])) for b in B]
+end
+function sector_state(psi, bras)
+    T = _full_tensor(psi)
+    return ComplexF64[tensor_inner(bra, T) for bra in bras]
+end
+function exact_profiles(v, B, twoS)
+    nrm2 = real(dot(v, v))
+    return [
+        sum((twoS / 2 - b[j]) * abs2(v[k]) for (k, b) in enumerate(B)) / nrm2 for j = 1:length(B[1])
+    ]
+end
+state_fidelity_error(a, b) =
+    sqrt(max(0.0, 1 - min(1.0, abs2(dot(a, b)) / real(dot(a, a) * dot(b, b)))))
+fmt(x) = string(x)
+function write_row(io, args...)
+    println(io, join(fmt.(args), ','))
+    flush(io)
+end
+
+include(joinpath(@__DIR__, "xx_policy_specs.jl"))
+
+# The six focused study arms: two DD discovery policies x three Krylov
+# frame-enrichment policies. Ranked Lanczos uses a real, positive
+# krylov_rank_tol; it is NOT synonymous with ordinary adaptive Lanczos.
+function selected_specs(tol)
+    specs = [
+        ("fixed", (mode=:fixed, fixed_width=8, fixed_rank=4)),
+        ("holdout", (mode=:adaptive, holdout_width=2,
+                     acceptance_factor=0.6, batch_blocks=1)),
+    ]
+    arms = Tuple{String,DDQRExpansion,NamedTuple}[]
+    for (rname, dd) in specs
+        for (kname, depth, extra) in [
+            ("fixed8", 8, NamedTuple()),
+            ("ranked", 0, (krylov_rank_tol=0.5 * tol,)),
+            ("interleaved", 0, (extra_dd_mode=:interleaved,
+                    extra_dd_width=8, extra_dd_holdout=4,
+                    extra_dd_max_checks=2,)),
+        ]
+            pol = DDQRExpansion(; merge(dd, (
+                krylov_mode=:lanczos,
+                krylov_fixed_depth=depth,
+            ))...)
+            kw = merge((work_ceiling_rule=:bond,bond_ceiling_factor=1.2),extra)
+            push!(arms, ("$(rname)__$(kname)",pol,kw))
+        end
+    end
+    return arms
+end
+
+phasefile = open(joinpath(outdir, "phase_times.csv"), "w")
+write_row(phasefile, "order", "d", "L", "interaction", "basis_tol", "method",
+          "seed", "step", "t", "t_wall", "t_step_internal", "t_cbe", "t_kry",
+          "t_closure", "t_root", "t_trunc", "t_frame", "t_env", "t_split",
+          "n_closure_passes", "n_closure_sweeps", "h1", "h1_closure",
+          "root_h", "root_frontier", "h2_leak", "stream_columns",
+          "dd_probes", "dd_holdout", "D_before", "D_final", "D_work",
+          "D_root_left", "D_root_right", "root_core_elements",
+          "budget_status", "unmet")
+closurefile = open(joinpath(outdir, "closure_sweeps.csv"), "w")
+write_row(closurefile, "order", "d", "L", "interaction", "basis_tol", "method",
+          "seed", "step", "t", "pass", "frontier_degree", "enrich", 
+          "leak", "met", "added", "width_before", "width_after",
+          "n_h1", "n_h2", "n_probes", "time_sec", "capped")
+rowfile = open(joinpath(outdir, "trajectories.csv"), "w")
+write_row(
+    rowfile,
+    "d",
+    "twoS",
+    "L",
+    "interaction",
+    "basis_tol",
+    "method",
+    "seed",
+    "step",
+    "t",
+    "state_error",
+    "profile_error",
+    "norm_error",
+    "D_stage",
+    "D_final",
+    "D_root_left",
+    "D_root_right",
+    "root_core_elements",
+    "D_root_svd",
+    "h1",
+    "h1_closure",
+    "root",
+    "root_frontier",
+    "h2_leak",
+    "dd_probes",
+    "dd_holdout",
+    "mpo_stream_cols",
+    "mpo_stream_calls",
+    "n_krylov",
+    "n_dd",
+    "step_sec",
+    "budget_status",
+    "unmet",
+)
+bondfile = open(joinpath(outdir, "bond_frames.csv"), "w")
+write_row(
+    bondfile,
+    "d",
+    "L",
+    "interaction",
+    "basis_tol",
+    "method",
+    "seed",
+    "step",
+    "t",
+    "bond",
+    "side",
+    "D_frame",
+    "D_final",
+    "n_dd",
+    "n_krylov",
+    "n_h1",
+)
+refft = open(joinpath(outdir, "reference.csv"), "w")
+write_row(refft, "d", "L", "interaction", "step", "t", "site", "sz_exact")
+lightfile = open(joinpath(outdir, "lightcones.csv"), "w")
+write_row(
+    lightfile,
+    "d",
+    "L",
+    "interaction",
+    "basis_tol",
+    "method",
+    "seed",
+    "step",
+    "t",
+    "site",
+    "sz_approx",
+    "sz_exact",
+)
+reftest = open(joinpath(outdir, "reference_checks.csv"), "w")
+write_row(
+    reftest,
+    "d",
+    "L",
+    "interaction",
+    "sector_dim",
+    "ed_hermitian_defect",
+    "init_vector_error",
+    "variance_ED",
+    "variance_MPO",
+)
+for (twoS, L) in cases
+    iseven(L) || throw(ArgumentError("Need even L for S_z=0 domain wall"))
+    d = twoS + 1
+    B = sector_basis(L, twoS)
+    bras = sector_bras(B, twoS)
+    wall = initial_kind == "domain_wall" ?
+        [j <= div(L, 2) ? 0 : twoS for j = 1:L] :
+        [isodd(j) ? 0 : twoS for j=1:L]
+    index0 = findfirst(b -> b == wall, B)
+    index0 === nothing && error("Domain wall absent from S_z=0 basis")
+    v0 = zeros(ComplexF64, length(B))
+    v0[index0] = 1
+    for interaction in interactions
+        J = couplings(L, interaction)
+        mpo = xx_mpo(L, twoS, J)
+        H = sector_hamiltonian(B, twoS, J)
+        psi0 = make_initial(L, twoS)
+        initial = sector_state(psi0, bras)
+        init_error = norm(initial - v0)
+        init_error <= 1e-10 || error("U1 basis/configuration ordering mismatch: $init_error")
+        E = eigen(Hermitian(H))
+        c0 = E.vectors' * v0
+        ref = [E.vectors * (exp.(-im * dt * k .* E.values) .* c0) for k = 1:nsteps]
+        variance_ed = real(dot(v0, H * H * v0))
+        variance_mpo = mpo_variance(psi0, mpo)
+        var_error = abs(variance_ed - variance_mpo)
+        var_error <= 1e-9 * max(1.0, abs(variance_ed)) ||
+            error("Mismatch ED vs MPO action: ED=$variance_ed MPO=$variance_mpo")
+        write_row(
+            reftest,
+            d,
+            L,
+            interaction,
+            length(B),
+            norm(H - H', Inf),
+            init_error,
+            variance_ed,
+            variance_mpo,
+        )
+        for k in sample_steps
+            p = exact_profiles(ref[k], B, twoS)
+            for j = 1:L
+                write_row(refft, d, L, interaction, k, k * dt, j, p[j])
+            end
+        end
+        println("REFERENCE_OK d=$d L=$L kind=$interaction sector=$(length(B)) var=$variance_ed")
+        for basis_tol in tolerances
+            trunc_tol = basis_tol * 1e-3
+            for (method, policy, extra) in selected_specs(basis_tol)
+                (!isempty(selected) && !(method in selected)) && continue
+                for seed = 0:nseeds-1
+                    # Warm every specialization on a sacrificial copy; restart the
+                    # initial MPS and the random generator before timed evolution.
+                    # This avoids charging Julia compilation to the first physical step.
+                    if warm_jit
+                        psi_warm = make_initial(L, twoS)
+                        warmkw = merge((order = bug_order, closure_checks = true), extra)
+                        if cap_override != ""
+                            warmkw = merge(warmkw, (
+                                work_ceiling_rule = Symbol(cap_override),
+                                bond_ceiling_factor = cap_override == "maxdim" ? 0.0 : 1.2,
+                            ))
+                            if cap_override == "bulk"
+                                warmkw = merge(warmkw, (
+                                    bulk_min_width = bulk_min_width,
+                                    bulk_headroom = bulk_headroom,
+                                ))
+                            end
+                        end
+                        cbe_bug_step!(
+                            psi_warm, mpo, ComplexF64(-im * dt);
+                            maxdim = maxdim, tol_basis = basis_tol,
+                            tol_trunc = trunc_tol, tol_root = 1e-10,
+                            expansion = policy, rng = MersenneTwister(17), warmkw...,
+                        )
+                    end
+                    psi = make_initial(L, twoS)
+                    rng = MersenneTwister(seed + 71)
+                    for k = 1:nsteps
+                        start_bonds = bond_dims(psi)
+                        start_ns = time_ns()
+                        kw = merge((order = bug_order, closure_checks = true), extra)
+                        if cap_override != ""
+                            kw = merge(kw, (
+                                work_ceiling_rule = Symbol(cap_override),
+                                bond_ceiling_factor = cap_override == "maxdim" ? 0.0 : 1.2,
+                            ))
+                            if cap_override == "bulk"
+                                kw = merge(kw, (
+                                    bulk_min_width = bulk_min_width,
+                                    bulk_headroom = bulk_headroom,
+                                ))
+                            end
+                        end
+                        info = cbe_bug_step!(
+                            psi,
+                            mpo,
+                            ComplexF64(-im * dt);
+                            maxdim = maxdim,
+                            tol_basis = basis_tol,
+                            tol_trunc = trunc_tol,
+                            tol_root = 1e-10,
+                            expansion = policy,
+                            rng = rng,
+                            kw...,
+                        )
+                        elapsed = (time_ns() - start_ns) / 1e9
+                        ledger = info.ledger
+                        if haskey(kw, :bond_ceiling_factor)
+                            ceilings =
+                                kw.work_ceiling_rule === :bulk ?
+                                bulk_work_ceilings(start_bonds, d, maxdim;
+                                    factor = kw.bond_ceiling_factor,
+                                    min_width = bulk_min_width, headroom = bulk_headroom) :
+                                kw.work_ceiling_rule === :maxdim ?
+                                fill(work_ceiling(maxdim, maximum(start_bonds), d), length(start_bonds)) :
+                                kw.work_ceiling_rule === :frame_root ?
+                                bond_frame_root_ceilings(
+                                    start_bonds,
+                                    maxdim,
+                                    info.root;
+                                    frame_factor = kw.bond_ceiling_factor,
+                                    root_factor = kw.root_ceiling_factor,
+                                ) :
+                                kw.work_ceiling_rule === :bond_strict ?
+                                bond_work_ceilings_strict(
+                                    start_bonds,
+                                    maxdim;
+                                    factor = kw.bond_ceiling_factor,
+                                ) :
+                                bond_work_ceilings(
+                                    start_bonds,
+                                    d,
+                                    maxdim;
+                                    factor = kw.bond_ceiling_factor,
+                                )
+                            all(info.expanded .<= ceilings) || error(
+                                "Left frame exceeded bond working cap for d=$d, method=$method",
+                            )
+                            all(bond_dims(psi) .<= ceilings) ||
+                                error("Final bond exceeded per-bond working cap for d=$d")
+                            for bondentry in ledger.bond_log
+                                bondentry.width <= ceilings[bondentry.bond] || error(
+                                    "Augmented K/L frame exceeded cap, d=$d, bond=$(bondentry.bond)",
+                                )
+                            end
+                            info.root_right <= ceilings[info.root] ||
+                                error("Right root frame exceeded cap")
+                        end
+                        cnt = info.record.counters
+                        D = maximum(bond_dims(psi))
+                        Dstage = info.record.D_stage
+                        state_err, profile_err, norm_err = NaN, NaN, NaN
+                        if k in sample_steps
+                            v = sector_state(psi, bras)
+                            state_err = state_fidelity_error(v, ref[k])
+                            local_exact = exact_profiles(ref[k], B, twoS)
+                            local_approx = spin_sz_profile(psi, twoS) ./ real(dot(v, v))
+                            profile_err = maximum(abs.(local_approx - local_exact))
+                            norm_err = abs(norm(v) - 1)
+                            for j = 1:L
+                                write_row(
+                                    lightfile,
+                                    d,
+                                    L,
+                                    interaction,
+                                    basis_tol,
+                                    method,
+                                    seed,
+                                    k,
+                                    k * dt,
+                                    j,
+                                    local_approx[j],
+                                    local_exact[j],
+                                )
+                            end
+                        end
+                        write_row(
+                            rowfile,
+                            d,
+                            twoS,
+                            L,
+                            interaction,
+                            basis_tol,
+                            method,
+                            seed,
+                            k,
+                            k * dt,
+                            state_err,
+                            profile_err,
+                            norm_err,
+                            Dstage,
+                            D,
+                            info.expanded[info.root],
+                            info.root_right,
+                            info.expanded[info.root] * info.root_right,
+                            info.root_rank,
+                            cnt.n_one_site,
+                            ledger.n_h1_closure,
+                            cnt.n_root,
+                            ledger.n_root_frontier,
+                            ledger.n_h2_leak,
+                            ledger.n_probes,
+                            ledger.n_holdout,
+                            cnt.n_stream_cols,
+                            cnt.n_stream,
+                            ledger.n_krylov,
+                            ledger.n_selected,
+                            elapsed,
+                            budget_status(ledger),
+                            join(string.(ledger.unmet), ";"),
+                        )
+                        write_row(
+                            phasefile, bug_order, d, L, interaction, basis_tol,
+                            method, seed, k, k*dt, elapsed, info.t_step,
+                            info.t_cbe, info.t_kry, ledger.t_closure,
+                            info.t_root, info.t_trunc, info.t_frame, info.t_env,
+                            info.t_split, ledger.n_passes, ledger.n_closure_sweeps,
+                            cnt.n_one_site, ledger.n_h1_closure, cnt.n_root,
+                            ledger.n_root_frontier, ledger.n_h2_leak,
+                            cnt.n_stream_cols, ledger.n_probes, ledger.n_holdout,
+                            maximum(start_bonds), D, Dstage,
+                            info.expanded[info.root], info.root_right,
+                            info.expanded[info.root] * info.root_right,
+                            budget_status(ledger), join(string.(ledger.unmet), ";"),
+                        )
+                        for c in ledger.closure_log
+                            write_row(
+                                closurefile, bug_order, d, L, interaction, basis_tol,
+                                method, seed, k, k*dt, 
+                                get(c, :pass, -1), get(c, :frontier, -1),
+                                get(c, :enrich, false), get(c, :leak, NaN),
+                                get(c, :met, false), get(c, :added, 0),
+                                get(c, :width_before, 0), get(c, :width_after, 0),
+                                get(c, :n_h1, 0), get(c, :n_h2, 0),
+                                get(c, :n_probes, 0), get(c, :t, 0.0),
+                                get(c, :capped, false),
+                            )
+                        end
+                        # Keep left/right separate: this resolves actual root widths
+                        # and distinguishes pre-root augmentation from SVD/compression.
+                        for log in ledger.bond_log
+                            write_row(
+                                bondfile,
+                                d,
+                                L,
+                                interaction,
+                                basis_tol,
+                                method,
+                                seed,
+                                k,
+                                k * dt,
+                                log.bond,
+                                log.side,
+                                log.width,
+                                bond_dims(psi)[log.bond],
+                                log.n_selected,
+                                log.n_krylov,
+                                log.n_h1,
+                            )
+                        end
+                        println(
+                            "RUN d=$d L=$L $interaction tol=$basis_tol method=$method seed=$seed step=$k err=$state_err frame=$Dstage final=$D",
+                        )
+                    end
+                end
+            end
+            if isempty(selected) || "tdvp2" in selected
+                psi = make_initial(L, twoS)
+                for k = 1:nsteps
+                    start_ns = time_ns()
+                    tdvp2_step!(
+                        psi,
+                        mpo,
+                        ComplexF64(-im * dt);
+                        maxdim = maxdim,
+                        weight_tol = trunc_tol,
+                    )
+                    elapsed = (time_ns() - start_ns) / 1e9
+                    v = sector_state(psi, bras)
+                    err = state_fidelity_error(v, ref[k])
+                    local_exact = exact_profiles(ref[k], B, twoS)
+                    local_approx = spin_sz_profile(psi, twoS) ./ real(dot(v, v))
+                    prof_err = maximum(abs.(local_approx - local_exact))
+                    if k in sample_steps
+                        for j = 1:L
+                            write_row(
+                                lightfile,
+                                d,
+                                L,
+                                interaction,
+                                basis_tol,
+                                "tdvp2",
+                                0,
+                                k,
+                                k * dt,
+                                j,
+                                local_approx[j],
+                                local_exact[j],
+                            )
+                        end
+                    end
+                    write_row(
+                        rowfile,
+                        d,
+                        twoS,
+                        L,
+                        interaction,
+                        basis_tol,
+                        "tdvp2",
+                        0,
+                        k,
+                        k * dt,
+                        err,
+                        prof_err,
+                        abs(norm(v) - 1),
+                        0,
+                        maximum(bond_dims(psi)),
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        elapsed,
+                        "reference",
+                        "",
+                    )
+                    println("TDVP d=$d L=$L $interaction step=$k err=$err")
+                end
+            end
+        end
+    end
+end
+close(rowfile);
+close(phasefile);
+close(closurefile);
+close(bondfile);
+close(refft);
+close(reftest);
+close(lightfile);
+println("XX_T5_ORDER_BENCHMARK_COMPLETE p=$bug_order T=$(dt*nsteps) output=$outdir")

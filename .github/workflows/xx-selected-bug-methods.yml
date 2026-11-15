@@ -1,0 +1,69 @@
+name: BUG selected RSVD CBE and Krylov six-arm T5 cross
+on:
+  pull_request:
+    paths:
+      - 'benchmarks/XXT5/xx_T5_selected_six.jl'
+      - '.github/workflows/xx-selected-bug-methods.yml'
+  workflow_dispatch:
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with: {version: '1.11'}
+      - uses: julia-actions/cache@v2
+      - run: julia --project -e 'using Pkg; Pkg.instantiate()'
+      - name: Validate all six methods in the exact U1 L6 sector
+        env:
+          BUG_T5_SMOKE: '1'
+          BUG_XX_ORDER: '2'
+          BUG_XX_WARM_JIT: '1'
+          BUG_HIGHER_CASES: '1:6'
+          BUG_HIGHER_INTERACTIONS: 'short'
+          BUG_HIGHER_STEPS: '2'
+          BUG_HIGHER_DT: '0.1'
+          BUG_HIGHER_SEEDS: '1'
+          BUG_HIGHER_TOLS: '1e-3'
+          BUG_HIGHER_SAMPLE_EVERY: '1'
+          BUG_HIGHER_MAXDIM: '64'
+        run: julia --project benchmarks/XXT5/xx_T5_selected_six.jl results/selected-smoke
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: selected-six-smoke
+          path: results/selected-smoke/
+  full-T5:
+    needs: smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        order: [1,2,3,4]
+        interaction: [short,long]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with: {version: '1.11'}
+      - uses: julia-actions/cache@v2
+      - run: julia --project -e 'using Pkg; Pkg.instantiate()'
+      - name: Matched numerical comparison six selected combinations p1-p4
+        env:
+          BUG_XX_ORDER: ${{ matrix.order }}
+          BUG_XX_WARM_JIT: '1'
+          BUG_HIGHER_CASES: '1:10'
+          BUG_HIGHER_INTERACTIONS: ${{ matrix.interaction }}
+          BUG_HIGHER_STEPS: '50'
+          BUG_HIGHER_DT: '0.1'
+          BUG_HIGHER_SEEDS: '2'
+          BUG_HIGHER_TOLS: '1e-3'
+          BUG_HIGHER_SAMPLE_EVERY: '5'
+          BUG_HIGHER_MAXDIM: '128'
+        run: julia --project benchmarks/XXT5/xx_T5_selected_six.jl results/selected-p${{ matrix.order }}-${{ matrix.interaction }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: selected-p${{ matrix.order }}-${{ matrix.interaction }}
+          path: results/selected-p${{ matrix.order }}-${{ matrix.interaction }}/
