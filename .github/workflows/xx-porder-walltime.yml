@@ -1,0 +1,94 @@
+name: XX BUG higher-order p1-p4 wall-time and bond-growth benchmarks
+on:
+  pull_request:
+    paths:
+      - 'benchmarks/XXT5/xx_T5_order_walltime.jl'
+      - '.github/workflows/xx-porder-walltime.yml'
+  workflow_dispatch:
+jobs:
+  order-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        order: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.11'
+      - uses: julia-actions/cache@v2
+      - run: julia --project -e 'using Pkg; Pkg.instantiate()'
+      - name: Verify p-order U1 L6 exact-state smoke and phase instrumentation
+        env:
+          BUG_T5_SMOKE: '1'
+          BUG_XX_ORDER: ${{ matrix.order }}
+          BUG_XX_WARM_JIT: '1'
+          BUG_HIGHER_CASES: '1:6'
+          BUG_HIGHER_INTERACTIONS: 'short'
+          BUG_HIGHER_STEPS: '2'
+          BUG_HIGHER_DT: '0.1'
+          BUG_HIGHER_SEEDS: '1'
+          BUG_HIGHER_TOLS: '1e-3'
+          BUG_HIGHER_SAMPLE_EVERY: '1'
+          BUG_HIGHER_POLICIES: 'T5_fixed4_adaptK'
+          BUG_HIGHER_MAXDIM: '64'
+        run: julia --project benchmarks/XXT5/xx_T5_order_walltime.jl results/order-smoke-${{ matrix.order }}
+      - name: Check output and timer consistency
+        run: python3 - <<'PY'
+          import csv, os
+          p = "results/order-smoke-${{ matrix.order }}/phase_times.csv"
+          with open(p) as f: rows=list(csv.DictReader(f))
+          assert len(rows)==2, (p,len(rows))
+          for row in rows:
+              assert int(row["order"])==${{ matrix.order }}
+              assert float(row["t_wall"])>0
+              for field in ("t_cbe","t_kry","t_closure","t_root","t_trunc","t_frame","t_env"):
+                  assert float(row[field])>=0, (field,row[field])
+              assert int(row["D_final"])<=64
+          print("ORDER_SMOKE_OK order=${{ matrix.order }}")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: xx-order-smoke-${{ matrix.order }}
+          path: results/order-smoke-${{ matrix.order }}/
+          if-no-files-found: warn
+  order-T5:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    needs: order-smoke
+    strategy:
+      fail-fast: false
+      matrix:
+        order: [1, 2, 3, 4]
+        interaction: ['short', 'long']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.11'
+      - uses: julia-actions/cache@v2
+      - run: julia --project -e 'using Pkg; Pkg.instantiate()'
+      - name: Exact ED L10 T5 phase timings, retained ranks and transient frame growth
+        env:
+          BUG_XX_ORDER: ${{ matrix.order }}
+          BUG_XX_WARM_JIT: '1'
+          BUG_D2_FACTORIAL: '1'
+          BUG_HIGHER_CASES: '1:10'
+          BUG_HIGHER_INTERACTIONS: ${{ matrix.interaction }}
+          BUG_HIGHER_STEPS: '50'
+          BUG_HIGHER_DT: '0.1'
+          BUG_HIGHER_SEEDS: '2'
+          BUG_HIGHER_TOLS: '1e-3'
+          BUG_HIGHER_SAMPLE_EVERY: '5'
+          BUG_HIGHER_MAXDIM: '128'
+          BUG_HIGHER_POLICIES: 'fixed__adaptive,rank_tail__adaptive,rank_tail__fixed8,rank_tail__interleaved,rank_tail__post'
+        run: julia --project benchmarks/XXT5/xx_T5_order_walltime.jl results/order-${{ matrix.order }}-${{ matrix.interaction }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: xx-order-${{ matrix.order }}-${{ matrix.interaction }}
+          path: results/order-${{ matrix.order }}-${{ matrix.interaction }}/
+          if-no-files-found: warn
